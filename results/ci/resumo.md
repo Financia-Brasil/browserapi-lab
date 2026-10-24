@@ -1,8 +1,8 @@
 # Evidencias de CI — browserapi-lab
 
-- run: `40120729155`
-- commit: `57a27cf948ec98d1a975186a000dc00e94d3e7dd`
-- gerado em: 2026-10-24T18:27:49Z
+- run: `40121383446`
+- commit: `aaa54738d8bd935c34520e7839ebdf63ad667e3a`
+- gerado em: 2026-10-24T18:35:39Z
 
 ## `results/ci/browser-tests.log`
 
