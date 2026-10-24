@@ -3,11 +3,15 @@ name: lab
 on:
   push:
     branches: ["**"]
+    paths-ignore:
+      - "results/**"
+      - "docs/**"
+      - "**.md"
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: lab-${{ github.ref }}
@@ -32,17 +36,17 @@ jobs:
           pip install -r requirements.txt
 
       - name: Auditoria do ambiente
-        run: python -m browserapi_lab.cli doctor --json results/samples/doctor-ci.json
+        run: python -m browserapi_lab.cli doctor --json results/ci/doctor-unit.json
 
       - name: Testes do nucleo (unittest)
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -v 2>&1 | tee results/ci/unit-tests.log
 
-      - name: Publicar relatorios
+      - name: Publicar artefato
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: resultados-${{ github.run_id }}
-          path: results/
+          name: resultados-nucleo-${{ github.run_id }}
+          path: results/ci/
           if-no-files-found: ignore
 
   browser:
@@ -63,16 +67,79 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
-      - name: Auditoria do ambiente
-        run: python -m browserapi_lab.cli doctor --json results/samples/doctor-ci-browser.json
+      - name: Auditoria do ambiente (com navegador)
+        run: python -m browserapi_lab.cli doctor --json results/ci/doctor-browser.json
 
       - name: Bateria de integracao com navegador
-        run: python -m unittest discover -s tests -v
+        id: testes
+        run: python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
 
-      - name: Publicar evidencias
+      - name: Resumo das execucoes
+        if: always()
+        run: |
+          mkdir -p results/ci
+          python - <<'PY'
+          import json, os, glob, time
+          from pathlib import Path
+
+          linhas = [
+              "# Evidencias de CI — browserapi-lab",
+              "",
+              f"- run: `{os.environ.get('GITHUB_RUN_ID', 'local')}`",
+              f"- commit: `{os.environ.get('GITHUB_SHA', 'local')}`",
+              f"- gerado em: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
+              "",
+          ]
+          for log in sorted(glob.glob("results/ci/*.log")):
+              texto = Path(log).read_text(encoding="utf-8", errors="replace")
+              resumo = [l for l in texto.splitlines() if l.startswith(("OK", "FAILED", "Ran ", "Skipped"))]
+              linhas.append(f"## `{log}`")
+              linhas.append("")
+              linhas.append("```")
+              linhas.extend(resumo[-6:] or ["(sem resumo)"])
+              linhas.append("```")
+              linhas.append("")
+          linhas.append("## Testes ignorados (motivo)")
+          linhas.append("")
+          for log in sorted(glob.glob("results/ci/*.log")):
+              texto = Path(log).read_text(encoding="utf-8", errors="replace")
+              for linha in texto.splitlines():
+                  if "skipped" in linha and "navegador indisponivel" in linha:
+                      linhas.append(f"- {linha.strip()}")
+          Path("results/ci/resumo.md").write_text("\n".join(linhas) + "\n", encoding="utf-8")
+          print("\n".join(linhas))
+          PY
+
+      - name: Publicar artefato
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evidencias-navegador-${{ github.run_id }}
           path: results/
           if-no-files-found: ignore
+
+      # Logs e artefatos do Actions nao sao legiveis por ferramentas externas a
+      # esta organizacao; por isso as evidencias sao gravadas no proprio
+      # repositorio (resultados sanitizados apenas — ADR-009).
+      - name: Registrar evidencias no repositorio
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/ci
+          if git diff --cached --quiet; then
+            echo "nenhuma evidencia nova; nada a commitar"
+            exit 0
+          fi
+          git commit -m "ci: evidencias da execucao ${GITHUB_RUN_ID} [skip ci]"
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "evidencias publicadas"
+              exit 0
+            fi
+            echo "tentativa ${tentativa} falhou; repetindo"
+            sleep $((tentativa * 5))
+          done
+          echo "falha ao publicar evidencias"
+          exit 1

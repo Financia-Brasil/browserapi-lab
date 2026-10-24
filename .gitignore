@@ -12,8 +12,11 @@ profiles/*
 # Resultados de execução (podem conter diagnóstico de sessões reais)
 results/*
 !results/.gitkeep
+!results/samples/
 !results/samples/**
-!results/samples/.gitkeep
+# evidencias de CI (sanitizadas) sao versionadas de proposito
+!results/ci/
+!results/ci/**
 
 # Navegadores baixados gerenciados
 .ms-playwright/

@@ -1,0 +1,65 @@
+{
+  "generated_at_utc": "2026-10-24T18:08:14Z",
+  "environment_kind": "local-linux",
+  "os_name": "Debian GNU/Linux",
+  "os_version": "12 (bookworm)",
+  "kernel": "6.1.158+",
+  "arch": "x86_64",
+  "python_version": "3.11.2",
+  "python_executable": "/home/user/.venv/bin/python",
+  "cpu_count": 2,
+  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+  "ram_total_mb": 3939,
+  "disk_free_gb": 19.0,
+  "playwright_installed": true,
+  "playwright_version": "1.64.1",
+  "playwright_browsers": [],
+  "system_browsers": [],
+  "missing_required_libs": [
+    "libnss3.so",
+    "libnspr4.so",
+    "libatk-1.0.so.0",
+    "libatk-bridge-2.0.so.0",
+    "libatspi.so.0",
+    "libcups.so.2",
+    "libdrm.so.2",
+    "libgbm.so.1",
+    "libxkbcommon.so.0",
+    "libXcomposite.so.1",
+    "libXdamage.so.1",
+    "libXfixes.so.3",
+    "libXrandr.so.2",
+    "libpango-1.0.so.0",
+    "libcairo.so.2",
+    "libasound.so.2",
+    "libdbus-1.so.3",
+    "libharfbuzz.so.0",
+    "libepoxy.so.0"
+  ],
+  "present_required_libs": [
+    "libX11.so.6",
+    "libXext.so.6",
+    "libxcb.so.1",
+    "libexpat.so.1",
+    "libglib-2.0.so.0",
+    "libgio-2.0.so.0",
+    "libfontconfig.so.1"
+  ],
+  "missing_optional_libs": [
+    "libgtk-3.so.0",
+    "libwayland-client.so.0",
+    "libgdk_pixbuf-2.0.so.0"
+  ],
+  "browser_ready": false,
+  "can_headed": false,
+  "display_server": null,
+  "notes": [
+    "RAM de 3939 MB: manter concorrencia 1 e aba unica (briefing).",
+    "playwright instalado, mas nenhum navegador baixado (cache vazio ou ausente).",
+    "faltam 19 bibliotecas obrigatorias do Chromium: libnss3.so, libnspr4.so, libatk-1.0.so.0, libatk-bridge-2.0.so.0, libatspi.so.0, libcups.so.2, libdrm.so.2, libgbm.so.1, libxkbcommon.so.0, libXcomposite.so.1, libXdamage.so.1, libXfixes.so.3, libXrandr.so.2, libpango-1.0.so.0, libcairo.so.2, libasound.so.2, libdbus-1.so.3, libharfbuzz.so.0, libepoxy.so.0"
+  ],
+  "recommendations": [
+    "python3 -m playwright install chromium",
+    "# dependencias do Chromium (executar manualmente, requer sudo):\n  sudo python3 -m playwright install-deps chromium\n# ou, em Debian/Ubuntu:\n  sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \\\n    libatspi2.0-0 libcups2 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 \\\n    libxdamage1 libxrandr2 libxfixes3 libpango-1.0-0 libcairo2 libasound2 \\\n    libdbus-1-3 libharfbuzz0b libepoxy0"
+  ]
+}

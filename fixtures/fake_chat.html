@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Fake Chat — browserapi-lab fixture</title>
+<style>
+  :root { --bg:#0f1115; --fg:#e6e6e6; --mut:#8b93a7; --card:#171a21; --line:#262b36; --acc:#4c8dff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background:var(--bg); color:var(--fg); }
+  #app { display:flex; gap:16px; padding:16px; max-width:1100px; margin:0 auto; }
+  main { flex:1; min-width:0; }
+  aside { width:230px; flex:0 0 230px; background:var(--card); border:1px solid var(--line);
+          border-radius:10px; padding:12px; height:max-content; }
+  aside h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0 0 8px; }
+  aside label { display:block; margin:6px 0; color:var(--mut); font-size:12px; }
+  aside select, aside input { width:100%; margin-top:2px; }
+  #conversation { border:1px solid var(--line); border-radius:10px; background:var(--card);
+                  padding:12px; min-height:280px; }
+  .message { border-radius:8px; padding:8px 10px; margin:8px 0; white-space:normal; }
+  .message[data-role="user"] { background:#1d2a44; margin-left:15%; }
+  .message[data-role="assistant"] { background:#15171d; margin-right:15%; border:1px solid var(--line); }
+  .message .role { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); }
+  .message .body { margin-top:4px; }
+  .message.streaming .body::after { content:"▌"; color:var(--acc); }
+  .md h3 { margin:10px 0 4px; font-size:15px; }
+  .md p { margin:6px 0; }
+  .md pre { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:8px; overflow:auto; }
+  .md code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12.5px; }
+  .md p > code, .md li > code { background:#0b0d12; padding:1px 4px; border-radius:4px; }
+  .md blockquote { margin:6px 0; padding:2px 10px; border-left:3px solid var(--acc); color:var(--mut); }
+  .md table { border-collapse:collapse; margin:6px 0; }
+  .md th, .md td { border:1px solid var(--line); padding:4px 8px; }
+  .md a { color:var(--acc); }
+  .feedback { margin-top:8px; display:flex; gap:6px; }
+  .feedback button { background:#20242e; color:var(--fg); border:1px solid var(--line);
+                     border-radius:6px; padding:2px 8px; cursor:pointer; font-size:12px; }
+  .error { background:#3a1d1d; border:1px solid #7a2e2e; border-radius:8px; padding:8px 10px; margin:8px 0; }
+  #composer-host { margin-top:12px; }
+  #composer { width:100%; min-height:44px; padding:10px 12px; border-radius:10px; border:1px solid var(--line);
+              background:#0b0d12; color:var(--fg); font:inherit; resize:vertical; }
+  textarea#composer, input#composer { display:block; }
+  #send, #stop { margin-top:8px; padding:8px 16px; border-radius:8px; border:0; cursor:pointer;
+                 background:var(--acc); color:#fff; font-weight:600; }
+  #stop { background:#5a2119; display:none; }
+  #composer-host.streaming #stop { display:inline-block; }
+  #composer-host.streaming #send { display:none; }
+  #search { width:100%; margin-bottom:10px; padding:6px 8px; border-radius:8px; border:1px solid var(--line);
+            background:#0b0d12; color:var(--fg); }
+  .login-required { background:#3a321d; border:1px solid #7a632e; border-radius:8px; padding:10px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="controls">
+    <h2>Cenário (fixture)</h2>
+    <label>Composer
+      <select id="ctl-composer">
+        <option value="textarea">textarea</option>
+        <option value="input">input</option>
+        <option value="contenteditable">contenteditable</option>
+      </select>
+    </label>
+    <label>Modo da resposta
+      <select id="ctl-mode">
+        <option value="normal">normal</option>
+        <option value="pause">pausa artificial (3 s)</option>
+        <option value="empty">resposta vazia</option>
+        <option value="error">erro genérico</option>
+        <option value="ratelimit">rate limit</option>
+        <option value="login">login expirado</option>
+      </select>
+    </label>
+    <label>Atraso por caractere (ms) <input id="ctl-delay" type="number" value="4" min="0" max="200"></label>
+    <label><input id="ctl-shadow" type="checkbox"> composer em open Shadow DOM</label>
+    <label><input id="ctl-iframe" type="checkbox"> composer em iframe (srcdoc)</label>
+    <label><input id="ctl-copy" type="checkbox" checked> botão Copy ao final</label>
+    <label><input id="ctl-copyearly" type="checkbox"> Copy antes da estabilidade</label>
+    <label><input id="ctl-closed" type="checkbox"> closed Shadow DOM (limitação)</label>
+    <h2>Estado (ground truth)</h2>
+    <pre id="state-view" style="font-size:11px;color:var(--mut);white-space:pre-wrap"></pre>
+  </aside>
+
+  <main>
+    <input id="search" type="search" placeholder="Buscar nas conversas" aria-label="Buscar nas conversas">
+    <div id="conversation" aria-live="polite" aria-busy="false">
+      <div class="message" data-role="assistant" data-index="0">
+        <div class="role">assistante</div>
+        <div class="body"><p>Olá! Esta é a fixture do browserapi-lab. Envie uma mensagem.</p></div>
+      </div>
+    </div>
+    <div id="composer-host" class="ng-tns-c4187558392 css-1x5jdmq">
+      <!-- composer injetado por JS (ou shadow root / iframe, conforme o cenário) -->
+    </div>
+  </main>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------------
+ * Fixture determinística do browserapi-lab (Marco 1).
+ *
+ * Contrato exposto em window.FakeChat (usado pelos testes como ground truth):
+ *   state()            -> {status, chars, chunks, first_token_ms, last_mutation_ms,
+ *                          ended_ms, paused, pause_count, error, mode, composer}
+ *   setComposer(kind)  -> 'textarea' | 'input' | 'contenteditable'
+ *   setMode(mode)      -> 'normal' | 'pause' | 'empty' | 'error' | 'ratelimit' | 'login'
+ *   config(partial)    -> aplica {composer, mode, delay, shadow, iframe, copy,
+ *                                 copyEarly, closed}
+ *   send(text)         -> envio programático (fallback de estratégias de envio)
+ *   reset()            -> limpa a conversa
+ *   lastUserMessage()  -> texto da última mensagem do usuário
+ *   assistantHtml()    -> HTML da última resposta do assistente
+ *
+ * Nada aqui depende de rede, relógio externo ou aleatoriedade.
+ * ------------------------------------------------------------------------ */
+(function () {
+  "use strict";
+
+  var RESPONSE_HTML =
+    '<p>Com certeza! Aqui está um resumo estruturado do plano:</p>' +
+    '<h3>Passos</h3>' +
+    '<ol><li>Instale o <code>playwright</code></li>' +
+    '<li>Rode o <code>doctor</code> para auditar</li>' +
+    '<li>Meça antes de decidir</li></ol>' +
+    '<h3>Exemplo</h3>' +
+    '<pre><code class="language-python">def hello():\n    print("olá, laboratório")\n</code></pre>' +
+    '<p>Veja a <a href="https://example.com/doc">documentação</a> para detalhes.</p>' +
+    '<blockquote>Atenção: mantenha a concorrência em 1 e a aba única.</blockquote>' +
+    '<table><thead><tr><th>Estratégia</th><th>Custo</th></tr></thead>' +
+    '<tbody><tr><td>fill</td><td>baixo</td></tr><tr><td>keyboard</td><td>médio</td></tr></tbody></table>' +
+    '<p style="display:none">texto oculto que não deve aparecer na extração</p>' +
+    '<div class="feedback">' +
+    '<button class="thumb" aria-label="Boa resposta" type="button">👍</button>' +
+    '<button class="thumb" aria-label="Má resposta" type="button">👎</button>' +
+    '<button class="copy" aria-label="Copiar resposta" type="button">Copiar</button>' +
+    '</div>';
+
+  var ERRORS = {
+    error: "Algo deu errado ao gerar a resposta. Tente novamente.",
+    ratelimit: "Limite de requisições excedido. Aguarde alguns minutos.",
+    login: "Sessão expirada. Faça login novamente para continuar."
+  };
+
+  var conv = document.getElementById("conversation");
+  var host = document.getElementById("composer-host");
+  var view = document.getElementById("state-view");
+
+  var cfg = {
+    composer: "textarea",
+    mode: "normal",
+    delay: 4,
+    shadow: false,
+    iframe: false,
+    copy: true,
+    copyEarly: false,
+    closed: false
+  };
+
+  var st = {
+    status: "idle",          // idle | streaming | paused | done | error
+    chars: 0,
+    chunks: 0,
+    first_token_ms: null,
+    last_mutation_ms: null,
+    ended_ms: null,
+    pause_count: 0,
+    error: null,
+    messages: 0
+  };
+
+  var timer = null;
+  var pending = [];          // pedaços (tokens) restantes da resposta
+  var resumeAt = 0;          // performance.now() para retomar após a pausa
+  var currentMsg = null;
+  var userCount = 0;
+
+  /* ---------- tokenização: mantém o HTML válido em qualquer prefixo ---------- */
+  function tokenize(html) {
+    var out = [], i = 0;
+    while (i < html.length) {
+      if (html[i] === "<") {
+        var end = html.indexOf(">", i);
+        if (end === -1) { out.push(html.slice(i)); break; }
+        out.push(html.slice(i, end + 1));
+        i = end + 1;
+      } else {
+        out.push(html[i]);
+        i += 1;
+      }
+    }
+    return out;
+  }
+
+  function now() { return performance.now(); }
+
+  function render() {
+    view.textContent = JSON.stringify(state(), null, 1);
+  }
+
+  function state() {
+    return {
+      status: st.status,
+      mode: cfg.mode,
+      composer: cfg.composer,
+      chars: st.chars,
+      chunks: st.chunks,
+      first_token_ms: st.first_token_ms,
+      last_mutation_ms: st.last_mutation_ms,
+      ended_ms: st.ended_ms,
+      pause_count: st.pause_count,
+      error: st.error,
+      user_messages: userCount,
+      has_copy_button: !!document.querySelector(".message[data-role='assistant'] .copy"),
+      aria_busy: conv.getAttribute("aria-busy"),
+      stop_visible: isStopVisible()
+    };
+  }
+
+  function stopButton() {
+    var root = composerRoot();
+    return root ? root.getElementById("stop") : null;
+  }
+
+  function sendButton() {
+    var root = composerRoot();
+    return root ? root.getElementById("send") : null;
+  }
+
+  function isStopVisible() {
+    var btn = stopButton();
+    if (!btn) return false;
+    if (btn.style.display === "none") return false;
+    return btn.getClientRects().length > 0 || btn.offsetParent !== null;
+  }
+
+  /* Sinalização de UI alternada por JS (não por CSS): precisa funcionar
+     igualmente dentro de shadow root e de iframe srcdoc, onde o CSS do
+     documento principal não alcança. */
+  function setStreamingUi(on) {
+    var stop = stopButton(), send = sendButton();
+    if (stop) stop.style.display = on ? "inline-block" : "none";
+    if (send) send.style.display = on ? "none" : "inline-block";
+    if (host) {
+      if (on) host.classList.add("streaming");
+      else host.classList.remove("streaming");
+      host.setAttribute("data-streaming", on ? "true" : "false");
+    }
+    conv.setAttribute("aria-busy", on ? "true" : "false");
+  }
+
+  /* ------------------------------- composer -------------------------------- */
+  function composerMarkup() {
+    if (cfg.composer === "input") {
+      return '<input id="composer" type="text" placeholder="Digite sua mensagem" ' +
+             'aria-label="Mensagem para o chat" autocomplete="off">' +
+             '<button id="send" type="button" aria-label="Enviar mensagem">Enviar</button>' +
+             '<button id="stop" type="button" aria-label="Parar geração">Stop</button>';
+    }
+    if (cfg.composer === "contenteditable") {
+      return '<div id="composer" contenteditable="true" role="textbox" aria-multiline="true" ' +
+             'aria-label="Mensagem para o chat" data-placeholder="Digite sua mensagem"></div>' +
+             '<button id="send" type="button" aria-label="Enviar mensagem">Enviar</button>' +
+             '<button id="stop" type="button" aria-label="Parar geração">Stop</button>';
+    }
+    return '<textarea id="composer" rows="1" placeholder="Digite sua mensagem" ' +
+           'aria-label="Mensagem para o chat"></textarea>' +
+           '<button id="send" type="button" aria-label="Enviar mensagem">Enviar</button>' +
+           '<button id="stop" type="button" aria-label="Parar geração">Stop</button>';
+  }
+
+  function clearHost() {
+    // Troca o elemento inteiro: shadow roots (open ou closed) não podem ser
+    // removidos de um host, então recriar o host é a única forma limpa de
+    // alternar entre cenários sem erro de attachShadow.
+    var fresh = document.createElement("div");
+    fresh.id = "composer-host";
+    fresh.className = "ng-tns-c4187558392 css-1x5jdmq";
+    if (host && host.parentNode) host.parentNode.replaceChild(fresh, host);
+    host = fresh;
+    host.addEventListener("click", stopBtnHandler, true);
+  }
+
+  function buildComposer() {
+    stopStream();
+    clearHost();
+
+    if (cfg.closed) {
+      // Limitação deliberada: closed shadow root é inacessível por automação.
+      var closedRoot = host.attachShadow({ mode: "closed" });
+      closedRoot.innerHTML = composerMarkup();
+      wireComposer(closedRoot);
+      render();
+      return;
+    }
+    if (cfg.iframe) {
+      var frame = document.createElement("iframe");
+      frame.id = "composer-frame";
+      frame.title = "Composer";
+      frame.srcdoc =
+        '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><style>' +
+        'body{margin:0;font:14px system-ui;background:#0b0d12;color:#e6e6e6}' +
+        '#composer{width:100%;min-height:44px;padding:10px;border-radius:10px;border:1px solid #262b36;' +
+        'background:#0b0d12;color:inherit;font:inherit}' +
+        '#send{margin-top:8px;padding:8px 16px;border:0;border-radius:8px;background:#4c8dff;color:#fff}' +
+        '#stop{display:none;margin-top:8px;padding:8px 16px;border:0;border-radius:8px;background:#5a2119;color:#fff}' +
+        '</style></head><body>' + composerMarkup() + '</body></html>';
+      host.appendChild(frame);
+      frame.addEventListener("load", function () {
+        try {
+          wireComposer(frame.contentDocument);
+        } catch (err) {
+          /* origem opaca (file://) — documentado como limitação do cenário */
+        }
+      });
+      render();
+      return;
+    }
+    if (cfg.shadow) {
+      var root = host.attachShadow({ mode: "open" });
+      root.innerHTML = composerMarkup();
+      wireComposer(root);
+      render();
+      return;
+    }
+    host.innerHTML = composerMarkup();
+    wireComposer(document);
+    render();
+  }
+
+  function composerRoot() {
+    if (cfg.closed) return null;             // inacessível por design
+    if (cfg.iframe) {
+      var frame = document.getElementById("composer-frame");
+      return frame ? frame.contentDocument : null;
+    }
+    if (cfg.shadow) return host.shadowRoot;
+    return document;
+  }
+
+  function wireComposer(root) {
+    if (!root) return;
+    var composer = root.getElementById("composer");
+    var send = root.getElementById("send");
+    if (send) {
+      send.addEventListener("click", function () {
+        submit(readComposer());
+      });
+    }
+    if (composer) {
+      composer.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" && !ev.shiftKey && composer.tagName !== "TEXTAREA") {
+          ev.preventDefault();
+          submit(readComposer());
+        }
+      });
+      // fallback: alguns sites só respondem a 'input' disparado por JS
+      composer.addEventListener("input", function () { /* observado pelos testes */ });
+    }
+  }
+
+  function readComposer() {
+    var root = composerRoot();
+    var el = root && root.getElementById("composer");
+    if (!el) return "";
+    if (el.tagName === "DIV") return el.textContent || "";
+    return el.value || "";
+  }
+
+  function clearComposer() {
+    var root = composerRoot();
+    var el = root && root.getElementById("composer");
+    if (!el) return;
+    if (el.tagName === "DIV") { el.textContent = ""; }
+    else { el.value = ""; }
+  }
+
+  /* -------------------------------- fluxo --------------------------------- */
+  function appendUserMessage(text) {
+    userCount += 1;
+    var msg = document.createElement("div");
+    msg.className = "message";
+    msg.setAttribute("data-role", "user");
+    msg.setAttribute("data-index", String(conv.children.length));
+    msg.innerHTML = '<div class="role">usuário</div><div class="body"></div>';
+    msg.querySelector(".body").textContent = text;
+    conv.appendChild(msg);
+    return msg;
+  }
+
+  function appendAssistantMessage() {
+    var msg = document.createElement("div");
+    msg.className = "message streaming";
+    msg.setAttribute("data-role", "assistant");
+    msg.setAttribute("data-index", String(conv.children.length));
+    msg.setAttribute("data-status", "streaming");
+    msg.innerHTML = '<div class="role">assistente</div><div class="body md"></div>';
+    conv.appendChild(msg);
+    return msg;
+  }
+
+  function appendError(text) {
+    var box = document.createElement("div");
+    box.className = "error";
+    box.setAttribute("role", "alert");
+    box.textContent = text;
+    conv.appendChild(box);
+    return box;
+  }
+
+  function submit(text) {
+    text = (text || "").trim();
+    if (!text || st.status === "streaming" || st.status === "paused") return false;
+
+    appendUserMessage(text);
+    clearComposer();
+
+    if (cfg.mode === "login") {
+      st.status = "error";
+      st.error = "login";
+      st.ended_ms = now();
+      appendError(ERRORS.login);
+      setStreamingUi(false);
+      render();
+      return true;
+    }
+
+    if (cfg.mode === "error" || cfg.mode === "ratelimit") {
+      st.status = "error";
+      st.error = cfg.mode;
+      st.ended_ms = now();
+      appendError(ERRORS[cfg.mode]);
+      setStreamingUi(false);
+      render();
+      return true;
+    }
+
+    if (cfg.mode === "empty") {
+      currentMsg = appendAssistantMessage();
+      currentMsg.classList.remove("streaming");
+      currentMsg.setAttribute("data-status", "done");
+      st.status = "done";
+      st.ended_ms = now();
+      st.last_mutation_ms = now();
+      if (cfg.copy) addCopyButton(currentMsg);
+      setStreamingUi(false);
+      render();
+      return true;
+    }
+
+    // streaming normal (ou com pausa artificial)
+    st.status = "streaming";
+    st.chars = 0;
+    st.chunks = 0;
+    st.first_token_ms = null;
+    st.last_mutation_ms = null;
+    st.ended_ms = null;
+    st.pause_count = 0;
+    st.error = null;
+    currentMsg = appendAssistantMessage();
+    setStreamingUi(true);
+    pending = tokenize(RESPONSE_HTML);
+    if (cfg.copyEarly) {
+      // Copy aparece ANTES da estabilidade: cenário que engana quem só olha sinais de UI
+      addCopyButton(currentMsg);
+    }
+    resumeAt = 0;
+    timer = setInterval(tick, Math.max(1, Math.floor(cfg.delay)));
+    render();
+    return true;
+  }
+
+  function pauseAt() {
+    // pausa artificial no meio do fluxo (metade dos tokens)
+    return Math.floor(RESPONSE_HTML.length / 2);
+  }
+
+  function tick() {
+    if (st.status === "paused") {
+      if (now() < resumeAt) return;
+      st.status = "streaming";
+      render();
+    }
+    if (!pending.length) { finish(); return; }
+
+    var chunk = pending.shift();
+    var body = currentMsg.querySelector(".body");
+    body.insertAdjacentHTML("beforeend", chunk);
+    st.chunks += 1;
+    if (chunk.length === 1) st.chars += 1;
+    st.last_mutation_ms = now();
+    if (st.first_token_ms === null) st.first_token_ms = now();
+
+    if (cfg.mode === "pause" && st.chars >= pauseAt() && st.pause_count === 0) {
+      st.pause_count += 1;
+      st.status = "paused";
+      resumeAt = now() + 3000;      // pausa artificial de 3 s
+      render();
+    }
+  }
+
+  function finish() {
+    if (timer) { clearInterval(timer); timer = null; }
+    st.status = "done";
+    st.ended_ms = now();
+    if (currentMsg) {
+      currentMsg.classList.remove("streaming");
+      currentMsg.setAttribute("data-status", "done");
+      if (cfg.copy && !cfg.copyEarly) addCopyButton(currentMsg);
+    }
+    setStreamingUi(false);
+    render();
+  }
+
+  function addCopyButton(msg) {
+    if (msg.querySelector(".copy")) return;
+    var box = document.createElement("div");
+    box.className = "feedback";
+    var btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.setAttribute("aria-label", "Copiar resposta");
+    btn.textContent = "Copiar";
+    box.appendChild(btn);
+    msg.appendChild(box);
+  }
+
+  function stopStream() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (currentMsg) {
+      currentMsg.classList.remove("streaming");
+      if (currentMsg.getAttribute("data-status") === "streaming") {
+        currentMsg.setAttribute("data-status", "stopped");
+      }
+    }
+    setStreamingUi(false);
+    if (st.status === "streaming" || st.status === "paused") {
+      st.status = "done";
+      st.ended_ms = now();
+    }
+    pending = [];
+  }
+
+  function reset() {
+    stopStream();
+    conv.innerHTML = "";
+    setStreamingUi(false);
+    st = { status: "idle", chars: 0, chunks: 0, first_token_ms: null, last_mutation_ms: null,
+           ended_ms: null, pause_count: 0, error: null, messages: 0 };
+    userCount = 0;
+    currentMsg = null;
+    render();
+  }
+
+  /* --------------------------------- API ---------------------------------- */
+  function configFromQuery() {
+    var q = new URLSearchParams(location.search);
+    var partial = {};
+    ["composer", "mode"].forEach(function (k) { if (q.has(k)) partial[k] = q.get(k); });
+    ["delay"].forEach(function (k) { if (q.has(k)) partial[k] = parseInt(q.get(k), 10); });
+    ["shadow", "iframe", "copy", "copyEarly", "closed"].forEach(function (k) {
+      if (q.has(k)) partial[k] = q.get(k) === "1" || q.get(k) === "true";
+    });
+    return partial;
+  }
+
+  function config(partial) {
+    Object.keys(partial || {}).forEach(function (k) { cfg[k] = partial[k]; });
+    syncControls();
+    buildComposer();
+    return cfg;
+  }
+
+  function syncControls() {
+    var map = { "ctl-composer": "composer", "ctl-mode": "mode", "ctl-delay": "delay",
+                "ctl-shadow": "shadow", "ctl-iframe": "iframe", "ctl-copy": "copy",
+                "ctl-copyearly": "copyEarly", "ctl-closed": "closed" };
+    Object.keys(map).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === "checkbox") el.checked = !!cfg[map[id]];
+      else el.value = String(cfg[map[id]]);
+    });
+  }
+
+  function lastUserMessage() {
+    var nodes = conv.querySelectorAll(".message[data-role='user'] .body");
+    return nodes.length ? nodes[nodes.length - 1].textContent : null;
+  }
+
+  function assistantHtml() {
+    var nodes = conv.querySelectorAll(".message[data-role='assistant'] .body");
+    return nodes.length ? nodes[nodes.length - 1].innerHTML : null;
+  }
+
+  window.FakeChat = {
+    state: state,
+    config: config,
+    reset: reset,
+    send: submit,
+    stop: stopStream,
+    lastUserMessage: lastUserMessage,
+    assistantHtml: assistantHtml,
+    getConfig: function () { return cfg; },
+    RESPONSE_HTML: RESPONSE_HTML
+  };
+
+  Object.keys(cfg).forEach(function (id) {
+    var el = document.getElementById("ctl-" + id);
+    if (!el) return;
+    el.addEventListener("change", function () {
+      var value = el.type === "checkbox" ? el.checked
+                : el.type === "number" ? parseInt(el.value, 10) : el.value;
+      var patch = {}; patch[id] = value;
+      config(patch);
+    });
+  });
+  var stopBtnHandler = function (ev) {
+    if (ev.target && ev.target.id === "stop") stopStream();
+  };
+  document.addEventListener("click", stopBtnHandler, true);
+  host.addEventListener("click", stopBtnHandler, true);
+
+  config(configFromQuery());
+  render();
+})();
+</script>
+</body>
+</html>
