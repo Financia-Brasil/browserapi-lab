@@ -194,7 +194,9 @@ def _render_list(node: _Node, depth: int) -> str:
                 linhas.append(("  " * depth) + texto)
             continue
         marcador = f"{indice}. " if ordered else "- "
-        conteudo = _inline(child, depth + 1).strip()
+        inline_child = _Node(child.tag, child.attrs, [c for c in child.children
+                            if isinstance(c, str) or c.tag not in ("ul", "ol")])
+        conteudo = _inline(inline_child, depth + 1).strip()
         aninhadas = [c for c in child.children if not isinstance(c, str) and c.tag in ("ul", "ol")]
         linhas.append(("  " * depth) + marcador + conteudo.replace("\n", " "))
         for lista in aninhadas:

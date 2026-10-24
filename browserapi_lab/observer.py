@@ -157,6 +157,8 @@ def decide(state: StreamState, ui: Optional[UiSignals], config: WatchConfig) -> 
         return Decision(False, "sinais de UI ainda indicam atividade", "running")
 
     if config.policy == "hybrid":
+        if ui is not None and (ui.aria_busy == "true" or ui.pending_indicators > 0):
+            return Decision(False, "UI ocupada", "running")
         if ui is None:
             ui = UiSignals()
         janela_curta = max(200.0, config.stability_window_ms * config.early_accept_factor)
