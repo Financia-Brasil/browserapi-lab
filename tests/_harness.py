@@ -9,6 +9,7 @@ Nada aqui é dependência de execução: só é usado por ``tests/``.
 
 from __future__ import annotations
 
+import os
 import http.server
 import socket
 import tempfile
@@ -71,6 +72,8 @@ def no_browser_reason() -> Optional[str]:
     que é mais confiável do que tentar resolver o executável do Playwright a
     cada classe de teste.
     """
+    if os.environ.get("BROWSERAPI_SKIP_BROWSER") == "1":
+        return "execução explícita apenas do núcleo Python"
     from browserapi_lab.doctor import build_report
 
     report = build_report(results_path=tempfile.gettempdir())

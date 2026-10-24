@@ -24,6 +24,8 @@ concurrency:
 jobs:
   unit:
     name: "Nucleo Python (sem navegador)"
+    env:
+      BROWSERAPI_SKIP_BROWSER: "1"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

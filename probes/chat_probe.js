@@ -370,7 +370,11 @@
 
   function textFlags() {
     var text = "";
-    try { text = (document.body && document.body.innerText) || document.body.textContent || ""; } catch (e) { text = ""; }
+    // Não classificar opções, instruções nem o conteúdo da resposta como erros.
+    var alerts = document.querySelectorAll('[role="alert"], [aria-live="assertive"], .error, .login-required');
+    for (var i = 0; i < alerts.length; i++) {
+      if (isVisible(alerts[i])) text += " " + (alerts[i].innerText || "");
+    }
     if (text.length > 20000) text = text.slice(0, 20000);
     var flags = {};
     Object.keys(TEXT_PATTERNS).forEach(function (key) {
