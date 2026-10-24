@@ -1,6 +1,6 @@
 # Plano de Experimentos — browserapi-lab
 
-Status: **Marco 0 (auditoria e especificação)** — documento vivo, atualizado a cada marco.
+Status: **validação dos Marcos 1–6 em andamento** — documento vivo, atualizado a cada marco.
 
 ## 1. Objetivo do laboratório
 
@@ -51,7 +51,7 @@ Auditado em 2026-10-24 pelo `doctor` (comando: `python -m browserapi_lab.cli doc
 **Achado crítico (limitação do ambiente, não do projeto):** o sandbox não possui as bibliotecas de
 runtime do Chromium (`libnss3`, `libnspr4`, `libatk-1.0`, `libatk-bridge-2.0`, `libatspi`,
 `libcups`, `libdrm`, `libgbm`, `libxkbcommon`, `libXcomposite`, `libXdamage`, `libXrandr`,
-`libXfixes`, `libpango`, `libcairo`, `libasound`, `libharfbuzz`, `libepoxy`) e não há `apt`
+`libXfixes`, `libpango`, `libcairo`, `libasound`, `libharfbuzz`, `libepoxy`) e não há acesso utilizável aos repositórios `apt`
 nem acesso ao CDN do Playwright. Portanto:
 
 * **nenhuma execução de navegador é possível dentro deste sandbox**;

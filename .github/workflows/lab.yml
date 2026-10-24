@@ -104,7 +104,7 @@ jobs:
           for log in sorted(glob.glob("results/ci/*.log")):
               texto = Path(log).read_text(encoding="utf-8", errors="replace")
               for linha in texto.splitlines():
-                  if "skipped" in linha and "navegador indisponivel" in linha:
+                  if "skipped" in linha:
                       linhas.append(f"- {linha.strip()}")
           Path("results/ci/resumo.md").write_text("\n".join(linhas) + "\n", encoding="utf-8")
           print("\n".join(linhas))
@@ -122,11 +122,14 @@ jobs:
       # esta organizacao; por isso as evidencias sao gravadas no proprio
       # repositorio (resultados sanitizados apenas — ADR-009).
       - name: Registrar evidencias no repositorio
-        if: always()
+        if: always() && github.event_name == 'push' && github.ref_name == 'arena/ff33c6e6-browserapi-lab'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add results/ci
+          mkdir -p "results/ci/${GITHUB_RUN_ID}"
+          cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
+          git restore results/ci/resumo.md results/ci/doctor-browser.json
+          git add -f "results/ci/${GITHUB_RUN_ID}"
           if git diff --cached --quiet; then
             echo "nenhuma evidencia nova; nada a commitar"
             exit 0

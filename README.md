@@ -11,14 +11,14 @@ em interfaces web de chats de IA **antes** da construção de uma API local comp
 | Marco | Entrega | Status |
 |-------|---------|--------|
 | M0 | Auditoria, plano de experimentos, decisões, esquema de resultados | concluído |
-| M1 | `fixtures/fake_chat.html` determinística | pendente |
-| M2 | Navegador e sessão persistentes com perfil exclusivo e lock | pendente |
-| M3 | Descoberta de elementos por pontuação | pendente |
-| M4 | Estratégias de envio | pendente |
-| M5 | Observação de streaming e detecção de término | pendente |
-| M6 | Extração de texto limpo e Markdown | pendente |
-| M7 | Benchmark de consumo | pendente |
-| M8 | Adaptadores assistidos de Gemini e LMArena | pendente |
+| M1 | `fixtures/fake_chat.html` determinística | em desenvolvimento / validação |
+| M2 | Navegador e sessão persistentes com perfil exclusivo e lock | em desenvolvimento / validação |
+| M3 | Descoberta de elementos por pontuação | em desenvolvimento / validação |
+| M4 | Estratégias de envio | em desenvolvimento / validação |
+| M5 | Observação de streaming e detecção de término | em desenvolvimento / validação |
+| M6 | Extração de texto limpo e Markdown | em desenvolvimento / validação |
+| M7 | Benchmark de consumo | em desenvolvimento / validação |
+| M8 | Adaptadores assistidos de Gemini e LMArena | em desenvolvimento / validação |
 
 ## Dependências
 
@@ -71,3 +71,16 @@ O `doctor` **não instala nada** e nunca executa `sudo`: ele apenas diagnostica 
 
 Interface de configuração, adaptadores por chat, navegador/página quente, fila com concorrência 1,
 `/v1/models`, `/v1/chat/completions`, SSE e erros no formato OpenAI.
+
+## Validação atual (2026-10-24)
+
+O núcleo possui 130 testes executados localmente. As classes que exigem Chromium
+são explicitamente ignoradas neste sandbox por falta de bibliotecas do navegador.
+O GitHub Actions instala Chromium e executa a suíte completa. Consulte os resultados
+mais recentes em `results/ci/browser-tests.log` e `results/ci/resumo.md`: um job verde
+com testes ignorados **não** equivale à aprovação ponta a ponta.
+
+O pipeline de integração cobre descoberta, envio com evidência, streaming, Markdown,
+DOM intacto, dez repetições, pausa, input/contenteditable, Shadow DOM e iframe.
+Benchmark completo (M7) e execuções assistidas de Gemini/LMArena (M8) ainda pendentes.
+Não há validação de consumo no laptop de 4 GB.
