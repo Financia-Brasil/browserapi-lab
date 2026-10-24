@@ -91,3 +91,17 @@ class TestResilience(BrowserTestCase):
           document.querySelector('#conversation').appendChild(alert);
         }''')
         self.assertEqual(read_ui(self.page).blocking, 'rate_limit')
+
+    def test_old_feedback_buttons_do_not_hide_send_candidate(self):
+        self.setup_chat()
+        self.page.evaluate('''() => {
+          for (let i = 0; i < 150; i++) {
+            const el = document.createElement('button');
+            el.textContent = 'Copiar';
+            document.querySelector('#conversation').appendChild(el);
+          }
+        }''')
+        buttons = rank_candidates(collect(self.page, 'send_button')['candidates'], 'send_button')
+        self.assertEqual(buttons[0].selector, '#send')
+        composer = rank_candidates(collect(self.page, 'composer')['candidates'], 'composer')[0]
+        self.assertTrue(send_message(self.page, composer, buttons[0], 'Conversa longa').success)

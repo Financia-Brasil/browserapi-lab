@@ -51,6 +51,7 @@ def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, en
               iteration=iteration, env=env or {})
     started = time.perf_counter()
     cpu_start = time.process_time()
+    phase = "navigation"
     try:
         if not reuse_page:
             page.goto(url + '?delay=1', wait_until='load')
@@ -68,6 +69,7 @@ def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, en
         page.evaluate('patch => FakeChat.config(patch)', patch)
         if scenario == 'iframe':
             page.frame_locator('#composer-frame').locator('#composer').wait_for()
+        phase = 'discovery'
         t = time.perf_counter()
         composers = rank_candidates(collect(page, 'composer')['candidates'], 'composer')
         buttons = rank_candidates(collect(page, 'send_button')['candidates'], 'send_button')
@@ -76,12 +78,14 @@ def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, en
         run.metric('discovery_ms', (time.perf_counter() - t) * 1000)
         install(page, message_selector='[data-role="assistant"] .body')
         mark_sent(page)
+        phase = 'send'
         sent = send_message(page, composers[0], buttons[0], 'Teste sintético público',
                             verify_timeout_ms=1000)
         if not sent.success:
             raise ValueError('envio não confirmado')
         run.metric('fill_ms', sent.fill_ms).metric('send_ms', sent.send_ms)
         run.metric('composer_confirmed', sent.attempts[-1].composer_confirmed)
+        phase = 'observation'
         observed = wait_for_completion(page, config)
         truth = page.evaluate('FakeChat.state()')
         expected = 'blocked' if scenario in ('error', 'ratelimit', 'login') else (
@@ -91,6 +95,7 @@ def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, en
         if expected == 'success' and truth['status'] != 'done':
             raise ValueError('término prematuro')
         if expected == 'success':
+            phase = 'extraction'
             selector = '[data-role="assistant"]:last-child .body'
             before = dom_fingerprint(page, selector)
             t = time.perf_counter()
@@ -112,6 +117,7 @@ def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, en
     except Exception as exc:
         # Não serializar exceções Playwright com snapshots ou texto de página.
         run.finish('failure', type(exc).__name__)
+        run.event(0, 'failure_phase', phase)
         run.metric('success', False)
     finally:
         run.metric('total_ms', (time.perf_counter() - started) * 1000)

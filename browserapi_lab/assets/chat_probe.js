@@ -345,8 +345,10 @@
     var prefilter = PREFILTER[role] || function () { return true; };
     var found = [];
     var result = walk(opts, function (el, root, inside, framePath, shadowPath) {
-      if (found.length >= MAX_CANDIDATES) return;
       if (!prefilter(el)) return;
+      // Prioriza a cauda recente do documento. Botões de feedback históricos
+      // não podem impedir a coleta do composer/Send ao final de conversas longas.
+      if (found.length >= MAX_CANDIDATES) found.shift();
       found.push(describe(el, root, inside, framePath, shadowPath));
     });
 
