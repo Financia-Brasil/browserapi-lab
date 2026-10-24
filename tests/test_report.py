@@ -160,3 +160,23 @@ class TestResultWriter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+class TestReportSafety(unittest.TestCase):
+    def test_reject_nonfinite_metrics_and_invalid_shape(self):
+        for value in (float('nan'), float('inf'), 'not numeric', []):
+            run = Run(experiment='E-X')
+            run.metric('total_ms', value)
+            self.assertTrue(validate_envelope(run.to_dict()))
+
+    def test_path_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            writer = ResultWriter(root)
+            run = Run(experiment='E-X', run_id='../escape')
+            with self.assertRaises(ValueError):
+                writer.write(run)
+            with self.assertRaises(ValueError):
+                writer.write_candidates('../escape', {})
+
+    def test_invalid_iteration(self):
+        for value in (True, 0, -1, '1'):
+            self.assertTrue(validate_envelope(Run(experiment='E-X', iteration=value).to_dict()))

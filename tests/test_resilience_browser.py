@@ -69,3 +69,25 @@ class TestResilience(BrowserTestCase):
         }''')
         candidates = self.page.locator('[data-role="assistant"]').all_text_contents()
         self.assertEqual(select_output(candidates[1:], request_id).status, 'ambiguous')
+
+    def test_watcher_reinstall_disconnects_previous_observer(self):
+        self.setup_chat()
+        install(self.page, message_selector='[data-role="assistant"] .body')
+        self.page.evaluate('window.oldWatcher = window.__balStream')
+        install(self.page, message_selector='[data-role="assistant"] .body')
+        self.page.evaluate("document.querySelector('#conversation').appendChild(document.createElement('p'))")
+        self.page.wait_for_timeout(50)
+        self.assertEqual(self.page.evaluate('window.oldWatcher.mutation_count'), 0)
+        self.assertGreater(self.page.evaluate('window.__balStream.mutation_count'), 0)
+
+    def test_alerts_not_options_detect_blocking(self):
+        self.setup_chat()
+        from browserapi_lab.observer import read_ui
+        install(self.page)
+        self.assertIsNone(read_ui(self.page).blocking)
+        self.page.evaluate('''() => {
+          const alert = document.createElement('div');
+          alert.setAttribute('role', 'alert'); alert.textContent = 'Too many requests';
+          document.querySelector('#conversation').appendChild(alert);
+        }''')
+        self.assertEqual(read_ui(self.page).blocking, 'rate_limit')

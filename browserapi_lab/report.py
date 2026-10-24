@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import csv
 import json
+import math
+import re
 import os
 import platform
 import secrets
@@ -196,6 +198,19 @@ def validate_envelope(envelope: Dict[str, Any]) -> List[str]:
             for i, ev in enumerate(events):
                 if not isinstance(ev, dict) or "t_ms" not in ev or "type" not in ev:
                     problems.append(f"evento {i} invalido: {ev!r}")
+    run_id = envelope.get("run_id")
+    if run_id is not None and (not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", run_id)):
+        problems.append("run_id inválido")
+    iteration = envelope.get("iteration")
+    if iteration is not None and (type(iteration) is not int or iteration < 1):
+        problems.append("iteration deve ser inteiro positivo")
+    if "env" in envelope and not isinstance(envelope["env"], dict):
+        problems.append("env deve ser objeto")
+    if isinstance(metrics, dict):
+        for name, value in metrics.items():
+            if value is not None and (not isinstance(value, (int, float, bool)) or
+                                      isinstance(value, float) and not math.isfinite(value)):
+                problems.append(f"métrica inválida: {name}")
     return problems
 
 
@@ -292,6 +307,8 @@ class ResultWriter:
 
     def write_candidates(self, run_id: str, payload: Dict[str, Any]) -> Path:
         """Arquivo auxiliar de candidatos (RESULTS_SCHEMA secao 5)."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", run_id):
+            raise ValueError("run_id inválido")
         path = self.json_dir / f"{run_id}.candidates.json"
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)

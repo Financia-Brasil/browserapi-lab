@@ -446,6 +446,8 @@
 
   /* --------------------------- observação de stream ------------------------ */
   function installWatcher(opts) {
+    // Reinstalação na aba quente não pode acumular MutationObservers.
+    resetWatcher();
     opts = opts || {};
     var rootSelector = opts.rootSelector || "body";
     var root = document.querySelector(rootSelector) || document.body;

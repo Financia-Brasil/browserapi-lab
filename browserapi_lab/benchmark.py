@@ -45,14 +45,15 @@ def percentile(values, fraction=.95):
     return sorted(values)[max(0, math.ceil(len(values) * fraction) - 1)]
 
 
-def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, env=None):
+def one_trial(page, url, config, scenario='normal', iteration=1, writer=None, env=None, reuse_page=False):
     """Retorna apenas métricas/sinais sintéticos, sem conteúdo de mensagens."""
     run = Run('E-BENCH-1', target='fixture', milestone='M7', strategy=config.policy,
               iteration=iteration, env=env or {})
     started = time.perf_counter()
     cpu_start = time.process_time()
     try:
-        page.goto(url + '?delay=1', wait_until='load')
+        if not reuse_page:
+            page.goto(url + '?delay=1', wait_until='load')
         patch = {'mode': 'normal', 'composer': 'textarea'}
         if scenario in ('pause', 'empty', 'error', 'ratelimit', 'login'):
             patch['mode'] = scenario
@@ -138,7 +139,6 @@ def verify(iterations=10, results='results/verify', channel=None, headed=False):
             for i in range(iterations):
                 run = one_trial(page, url, WatchConfig(stability_window_ms=600, timeout_ms=15000),
                                 iteration=i + 1, writer=writer, env=env)
-                run.metrics['browser_rss_kb'] = browser_tree_rss_kb(session)
                 runs.append(run)
             for scenario in ('pause', 'input', 'contenteditable', 'shadow', 'iframe', 'no_copy',
                              'copy_early', 'empty', 'error', 'ratelimit', 'login'):
@@ -149,6 +149,15 @@ def verify(iterations=10, results='results/verify', channel=None, headed=False):
             for policy in ('stability_only', 'ui_signals'):
                 runs.append(one_trial(page, url, WatchConfig(policy=policy, stability_window_ms=600,
                                                             timeout_ms=15000), writer=writer, env=env))
+            # Soak curto: 20 mensagens sequenciais na MESMA conversa/aba,
+            # sem navegação entre mensagens. Não equivale a endurance de 24h.
+            soak = []
+            rss_before_soak = browser_tree_rss_kb(session)
+            for i in range(20):
+                item = one_trial(page, url, WatchConfig(stability_window_ms=600, timeout_ms=15000),
+                                 scenario='soak', iteration=i + 1, writer=writer, env=env, reuse_page=True)
+                soak.append(item)
+                runs.append(item)
             warm_page = session.page()
             warm_reused = warm_page is page and len(session.context.pages) == 1
             browser_rss = browser_tree_rss_kb(session)
@@ -160,6 +169,9 @@ def verify(iterations=10, results='results/verify', channel=None, headed=False):
     summary = {
         'schema_version': '1.0', 'env': env, 'iterations': iterations,
         'trials': len(runs), 'failures': sum(r.status != 'success' for r in runs),
+        'soak_messages': len(soak),
+        'soak_failures': sum(r.status != 'success' for r in soak),
+        'rss_before_soak_kb_approx': rss_before_soak,
         'cold_start_ms': startup_ms, 'profile_restart_ms': restart_ms,
         'one_hot_page_reused': warm_reused, 'browser_tree_rss_kb_approx': browser_rss,
         'total_p50_ms': statistics.median([r.metrics['total_ms'] for r in baseline]),

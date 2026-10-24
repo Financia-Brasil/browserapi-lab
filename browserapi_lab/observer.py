@@ -290,6 +290,8 @@ def wait_for_completion(
         observacao.text_len = state.text_len
 
         decisao = decide(state, ui, config)
+        if len(observacao.timeline) >= 400:
+            del observacao.timeline[0]
         observacao.timeline.append(
             {
                 "t_ms": round((time.perf_counter() - started) * 1000.0, 1),
