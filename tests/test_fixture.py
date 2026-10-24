@@ -174,7 +174,7 @@ class TestSinaisDeUi(FixtureTestCase):
 
     def test_copy_antes_da_estabilidade(self):
         """Cenário que engana quem decide o fim só por sinais de UI."""
-        self.abre("?composer=textarea&delay=60&copy=1&copyEarly=1")
+        self.abre("?composer=textarea&delay=4&copy=1&copyEarly=1")
         self.envia("Copy cedo")
         self.page.wait_for_function("() => window.FakeChat.state().status === 'streaming'", timeout=30_000)
         self.assertTrue(self.estado()["has_copy_button"], "Copy deveria aparecer antes do fim")

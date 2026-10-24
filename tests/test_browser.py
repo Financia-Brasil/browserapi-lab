@@ -71,11 +71,11 @@ class TestSessao(BrowserTestCase):
             reaberta.close()
 
         # sessão da classe foi fechada no teste: recria para o tearDownClass
-        self.session = BrowserSession(
+        type(self).session = BrowserSession(
             BrowserConfig(profile=perfil, profiles_root=REPO_ROOT / "profiles", headless=True)
         )
         self.session.start()
-        self.page = self.session.new_page()
+        type(self).page = self.session.page()
 
     def test_segundo_processo_e_recusado(self):
         """E-SESS-3: nunca dois processos no mesmo user_data_dir."""

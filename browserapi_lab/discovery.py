@@ -398,6 +398,7 @@ def drift_report(previous: Dict[str, Any], current: Dict[str, Any]) -> Dict[str,
         "appeared": sorted(set(depois) - set(antes)),
         "score_drops": quedas,
         "winner_changed": vencedor_antes != vencedor_depois,
+        "structure_changed": (previous.get("winner") or {}).get("inside") != (current.get("winner") or {}).get("inside"),
         "winner_before": vencedor_antes,
         "winner_after": vencedor_depois,
     }

@@ -253,8 +253,6 @@ def export_state(context: Any, path: Optional[Path] = None, indexed_db: bool = T
         raw = context.storage_state(
             path=str(path) if path else None,
             indexed_db=indexed_db,
-            opfs=True,
-            credentials=False,  # nunca persistir credenciais em disco
         )
     return sanitize_storage_state(raw)
 

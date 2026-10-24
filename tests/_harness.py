@@ -119,8 +119,8 @@ class BrowserTestCase(unittest.TestCase):
             cls.session.start()
         except Exception as exc:  # falha real de ambiente, não "skip" por escolha
             cls.server.stop()
-            raise unittest.SkipTest(f"falha ao abrir o navegador: {type(exc).__name__}: {exc}") from exc
-        cls.page = cls.session.new_page()
+            raise RuntimeError(f"falha ao abrir o navegador: {type(exc).__name__}: {exc}") from exc
+        cls.page = cls.session.page()
 
     @classmethod
     def tearDownClass(cls) -> None:

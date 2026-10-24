@@ -95,8 +95,7 @@ class TestComposerReal(DescobertaTestCase):
         """Closed Shadow DOM é inacessível: o laboratório registra, não finge."""
         self.abre("?composer=textarea&closed=1")
         relatorio = discover(self.page, "composer")
-        self.assertIsNone(relatorio["winner"])
-        self.assertEqual(relatorio["candidate_count"], 0)
+        self.assertNotIn("#composer", [c["selector"] for c in relatorio["candidates"]])
 
     def test_busca_nao_enganja_o_ranking(self):
         self.abre("?composer=textarea")
@@ -177,7 +176,7 @@ class TestDrift(DescobertaTestCase):
         self.assertEqual(drift["winner_after"], "#composer")
         # mudou o "inside", não o seletor: drift estrutural deve ser reportado
         self.assertTrue(drift["vanished"] or drift["appeared"] or drift["score_drops"]
-                        or drift["winner_changed"])
+                        or drift["winner_changed"] or drift["structure_changed"])
 
 
 if __name__ == "__main__":

@@ -132,7 +132,6 @@
     '<div class="feedback">' +
     '<button class="thumb" aria-label="Boa resposta" type="button">👍</button>' +
     '<button class="thumb" aria-label="Má resposta" type="button">👎</button>' +
-    '<button class="copy" aria-label="Copiar resposta" type="button">Copiar</button>' +
     '</div>';
 
   var ERRORS = {
@@ -172,6 +171,7 @@
   var pending = [];          // pedaços (tokens) restantes da resposta
   var resumeAt = 0;          // performance.now() para retomar após a pausa
   var currentMsg = null;
+  var renderedHtml = "";
   var userCount = 0;
 
   /* ---------- tokenização: mantém o HTML válido em qualquer prefixo ---------- */
@@ -459,6 +459,7 @@
     currentMsg = appendAssistantMessage();
     setStreamingUi(true);
     pending = tokenize(RESPONSE_HTML);
+    renderedHtml = "";
     if (cfg.copyEarly) {
       // Copy aparece ANTES da estabilidade: cenário que engana quem só olha sinais de UI
       addCopyButton(currentMsg);
@@ -471,7 +472,7 @@
 
   function pauseAt() {
     // pausa artificial no meio do fluxo (metade dos tokens)
-    return Math.floor(RESPONSE_HTML.length / 2);
+    return 80;
   }
 
   function tick() {
@@ -484,7 +485,8 @@
 
     var chunk = pending.shift();
     var body = currentMsg.querySelector(".body");
-    body.insertAdjacentHTML("beforeend", chunk);
+    renderedHtml += chunk;
+    body.innerHTML = renderedHtml;
     st.chunks += 1;
     if (chunk.length === 1) st.chars += 1;
     st.last_mutation_ms = now();
@@ -605,7 +607,7 @@
   };
 
   Object.keys(cfg).forEach(function (id) {
-    var el = document.getElementById("ctl-" + id);
+    var el = document.getElementById(id === "copyEarly" ? "ctl-copyearly" : "ctl-" + id);
     if (!el) return;
     el.addEventListener("change", function () {
       var value = el.type === "checkbox" ? el.checked

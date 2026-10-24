@@ -113,20 +113,24 @@ class BrowserSession:
 
         started = time.perf_counter()
         self._lock.acquire()
-        self._pw = sync_playwright().start()
-        launch_kwargs: Dict[str, Any] = dict(
-            user_data_dir=str(self.config.profile_dir),
-            headless=self.config.headless,
-            slow_mo=self.config.slow_mo_ms or 0,
-            args=list(DEFAULT_ARGS) + list(self.config.extra_args),
-            viewport=self.config.viewport,
-            locale=self.config.locale,
-        )
-        if self.config.channel:
-            launch_kwargs["channel"] = self.config.channel
-        browser_type = getattr(self._pw, "chromium")
-        self._context = browser_type.launch_persistent_context(**launch_kwargs)
-        self._context.set_default_timeout(self.config.timeout_ms)
+        try:
+            self._pw = sync_playwright().start()
+            launch_kwargs: Dict[str, Any] = dict(
+                user_data_dir=str(self.config.profile_dir),
+                headless=self.config.headless,
+                slow_mo=self.config.slow_mo_ms or 0,
+                args=list(DEFAULT_ARGS) + list(self.config.extra_args),
+                viewport=self.config.viewport,
+                locale=self.config.locale,
+            )
+            if self.config.channel:
+                launch_kwargs["channel"] = self.config.channel
+            browser_type = getattr(self._pw, "chromium")
+            self._context = browser_type.launch_persistent_context(**launch_kwargs)
+            self._context.set_default_timeout(self.config.timeout_ms)
+        except BaseException:
+            self.close()
+            raise
         self._started_at = time.perf_counter()
         self._cold_start_ms = (self._started_at - started) * 1000.0
         return self
