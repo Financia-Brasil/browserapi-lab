@@ -20,7 +20,8 @@ from browserapi_lab.browser import (
     chromium_available,
     tree_rss_kb,
 )
-from browserapi_lab.session import ProfileBusyError, set_marker, read_marker
+from browserapi_lab.session import (ProfileBusyError, set_marker, read_marker,
+                                    set_marker_indexeddb, read_marker_indexeddb, export_state)
 
 from _harness import BrowserTestCase, FixtureServer, REPO_ROOT, file_url, no_browser_reason
 
@@ -56,6 +57,10 @@ class TestSessao(BrowserTestCase):
         page = self.session.page(url)
         marcador = set_marker(page, "marker-persistencia-001")
         self.assertEqual(read_marker(page), marcador)
+        set_marker_indexeddb(page, marcador)
+        self.assertEqual(read_marker_indexeddb(page), marcador)
+        import json
+        self.assertNotIn(marcador, json.dumps(export_state(self.session.context)))
 
         perfil = self.session.config.profile
         self.session.close()
@@ -67,6 +72,7 @@ class TestSessao(BrowserTestCase):
             reaberta.start()
             page2 = reaberta.page(url)
             self.assertEqual(read_marker(page2), marcador, "marcador não sobreviveu ao reinício")
+            self.assertEqual(read_marker_indexeddb(page2), marcador, "IndexedDB não persistiu")
         finally:
             reaberta.close()
 
