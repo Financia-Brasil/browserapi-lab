@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Perfis de navegador (nunca versionar: contêm sessão/login)
+profiles/*
+!profiles/.gitkeep
+
+# Resultados de execução (podem conter diagnóstico de sessões reais)
+results/*
+!results/.gitkeep
+!results/samples/**
+!results/samples/.gitkeep
+
+# Navegadores baixados gerenciados
+.ms-playwright/
+
+# Artefatos de diagnóstico
+*.png
+*.zip
+traces/
+screenshots/
+
+# Sistema
+.DS_Store
+*.swp

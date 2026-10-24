@@ -1,0 +1,3 @@
+# Dependencias do laboratorio.
+# Regra do projeto (ADR-008): apenas playwright. Todo o resto e biblioteca padrao do Python.
+playwright>=1.44
