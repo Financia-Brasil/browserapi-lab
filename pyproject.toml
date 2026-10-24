@@ -17,4 +17,4 @@ browserapi-lab = "browserapi_lab.cli:main"
 packages = ["browserapi_lab"]
 
 [tool.setuptools.package-data]
-browserapi_lab = ["../probes/*.js"]
+browserapi_lab = ["assets/*.js", "assets/*.html"]

@@ -57,6 +57,8 @@ jobs:
 
   browser:
     name: "Integracao real com Chromium"
+    env:
+      BROWSERAPI_REQUIRE_BROWSER: "1"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -79,6 +81,22 @@ jobs:
       - name: Bateria de integracao com navegador
         id: testes
         run: python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
+
+      - name: Instalar pacote e verificar fora do checkout
+        run: |
+          pip install .
+          mkdir -p results/ci/benchmark
+          DEST="$PWD/results/ci/benchmark"
+          cd /tmp
+          browserapi-lab --help
+          browserapi-lab verify --iterations 10 --results "$DEST/chromium" | tee "$DEST/chromium.log"
+          browserapi-lab verify --iterations 3 --channel chrome --results "$DEST/chrome" | tee "$DEST/chrome.log"
+
+      - name: Navegador visivel com display virtual
+        run: |
+          DEST="$PWD/results/ci/benchmark"
+          cd /tmp
+          xvfb-run -a browserapi-lab verify --headed --iterations 1 --results "$DEST/headed" | tee "$DEST/headed.log"
 
       - name: Resumo das execucoes
         if: always()
@@ -134,6 +152,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p "results/ci/${GITHUB_RUN_ID}"
           cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
+          if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
           git restore results/ci/resumo.md results/ci/doctor-browser.json
           git add -f "results/ci/${GITHUB_RUN_ID}"
           if git diff --cached --quiet; then

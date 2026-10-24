@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="results",
         help="diretorio de resultados usado para medir disco (padrao: results)",
     )
+    verify = sub.add_parser("verify", help="testa ponta a ponta a fixture e mede latência (sem sites reais)")
+    verify.add_argument("--iterations", type=int, default=10)
+    verify.add_argument("--results", default="results/verify")
+    verify.add_argument("--channel", choices=("chromium", "chrome"), default="chromium")
+    verify.add_argument("--headed", action="store_true", help="abre navegador visível; requer display")
     return parser
 
 
@@ -57,6 +62,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "doctor":
         return cmd_doctor(args)
+    if args.command == "verify":
+        if not 1 <= args.iterations <= 1000:
+            parser.error("--iterations deve estar entre 1 e 1000")
+        from .benchmark import verify
+        try:
+            summary = verify(args.iterations, args.results,
+                             None if args.channel == "chromium" else args.channel, args.headed)
+        except KeyboardInterrupt:
+            print("Verificação interrompida; navegador e perfil liberados.", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            print(f"Verificação indisponível ({type(exc).__name__}). Execute doctor; "
+                  "instale Chromium e suas dependências se necessário.", file=sys.stderr)
+            return 2
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return 0 if summary["passed"] else 1
     parser.error(f"comando desconhecido: {args.command}")
     return 2
 

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .discovery import ScoredCandidate
+from .validation import composer_evidence
 
 ALL_STRATEGIES: Tuple[str, ...] = (
     "fill",
@@ -42,6 +43,7 @@ class SendAttempt:
     verify_ms: float = 0.0
     evidence: str = ""
     error: Optional[str] = None
+    composer_confirmed: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +53,7 @@ class SendAttempt:
             "send_ms": round(self.send_ms, 2),
             "verify_ms": round(self.verify_ms, 2),
             "evidence": self.evidence,
+            "composer_confirmed": self.composer_confirmed,
             "error": self.error,
         }
 
@@ -140,12 +143,19 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
         return True, "nova mensagem do usuário com o texto esperado"
     if wanted and wanted in last:
         return True, "nova mensagem do usuário contendo o texto esperado"
-    return False, f"mensagem nova, mas texto divergente: {last[:60]!r}"
+    return False, "mensagem nova, mas texto divergente"
 
 
 # --------------------------------------------------------------------------
 # Preenchimento e ativação
 # --------------------------------------------------------------------------
+
+def read_composer(locator: Any) -> Optional[str]:
+    try:
+        return locator.evaluate("el => el.isContentEditable ? el.textContent : el.value")
+    except Exception:
+        return None
+
 
 def _clear(locator: Any, kind: str) -> None:
     try:
@@ -248,13 +258,17 @@ def send_message(
             continue
         for activation_strategy in activation:
             attempt = SendAttempt(strategy=f"{fill_strategy}+{activation_strategy}", success=False)
+            activated = False
             try:
                 _clear(locator, kind)
                 t0 = time.perf_counter()
                 _fill(locator, kind, text, fill_strategy, delay_ms)
                 attempt.fill_ms = (time.perf_counter() - t0) * 1000.0
 
+                filled_value = read_composer(locator)
                 t1 = time.perf_counter()
+                # Daqui em diante qualquer falha é ambígua: nunca reenviar.
+                activated = True
                 _activate(page, locator, send_button, kind, activation_strategy)
                 attempt.send_ms = (time.perf_counter() - t1) * 1000.0
 
@@ -262,6 +276,8 @@ def send_message(
                 ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms)
                 attempt.verify_ms = (time.perf_counter() - t2) * 1000.0
                 attempt.evidence = evidence
+                attempt.composer_confirmed = composer_evidence(
+                    text, filled_value or "", read_composer(locator), ok).confirmed
                 if ok:
                     attempt.success = True
                     attempts.append(attempt)
@@ -275,9 +291,14 @@ def send_message(
                         total_ms=(time.perf_counter() - started) * 1000.0,
                     )
             except Exception as exc:
-                attempt.error = f"{type(exc).__name__}: {exc}"
+                attempt.error = type(exc).__name__
                 attempt.evidence = "exceção durante a tentativa"
             attempts.append(attempt)
+            if activated:
+                # Ausência de confirmação NÃO prova que o site recusou o envio.
+                return SendResult(False, text, attempts=attempts,
+                                  error="envio sem confirmação; repetição automática bloqueada",
+                                  total_ms=(time.perf_counter() - started) * 1000.0)
 
     return SendResult(
         success=False,

@@ -106,6 +106,8 @@ class BrowserTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         reason = no_browser_reason()
+        if reason and os.environ.get("BROWSERAPI_REQUIRE_BROWSER") == "1":
+            raise RuntimeError(f"CI exige navegador real: {reason}")
         if reason:
             raise unittest.SkipTest(f"navegador indisponível: {reason}")
         from browserapi_lab.browser import BrowserConfig, BrowserSession

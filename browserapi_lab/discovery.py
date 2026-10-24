@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-PROBE_PATH = Path(__file__).resolve().parent.parent / "probes" / "chat_probe.js"
+PROBE_PATH = Path(__file__).resolve().parent / "assets" / "chat_probe.js"
 
 # Papéis que o laboratório sabe procurar.
 ROLES = ("composer", "send_button", "stop_button", "copy_button", "assistant_message",

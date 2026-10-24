@@ -166,12 +166,14 @@ class BrowserSession:
                 self._context.close()
         finally:
             self._context = None
-            if self._pw is not None:
-                try:
-                    self._pw.stop()
-                finally:
-                    self._pw = None
-            self._lock.release()
+            try:
+                if self._pw is not None:
+                    try:
+                        self._pw.stop()
+                    finally:
+                        self._pw = None
+            finally:
+                self._lock.release()
 
     def __enter__(self) -> "BrowserSession":
         return self.start()

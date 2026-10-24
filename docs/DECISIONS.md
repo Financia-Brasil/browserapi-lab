@@ -129,3 +129,39 @@ o experimento que a valida ou refuta.
 | Canal do navegador (gerenciado vs sistema) | após E-BENCH-1 nos canais disponíveis |
 | `pytest` | se `unittest` se mostrar insuficiente (fixtures complexas/parametrização) |
 | Modelo de adaptadores por site | no Marco 8, após medir drift real de Gemini e LMArena |
+
+## ADR-011 — Confirmação comportamental e contrato de resposta opt-in
+
+Sugestão do usuário: usar o esvaziamento do composer após envio e a sintaxe de
+resposta solicitada para desambiguar os elementos encontrados.
+
+- O esvaziamento é evidência adicional, não contrato universal. É necessário
+  observar o valor correto antes, campo vazio depois e nova mensagem do usuário.
+  Campo removido do DOM não é considerado vazio. Não experimentar Enter em vários
+  candidatos: isso pode enviar mensagens duplicadas ou agir em outro formulário.
+- A saída pode usar um contrato JSON opt-in com identificador aleatório novo por
+  tentativa e `answer` string. Não alterar o prompt sem consentimento. Sintaxe
+  inválida não prova campo errado: o modelo pode simplesmente desobedecer.
+- Validar somente mensagens novas do assistente, nunca o prompt ecoado ou um
+  ancestral que agregue a conversa inteira. Esperar fim do streaming em separado.
+- Se houver mais de uma candidata válida, registrar ambiguidade; não escolher a
+  primeira silenciosamente nem enviar outra mensagem automaticamente.
+- O contrato não prova veracidade, autoria nem segurança do conteúdo.
+
+Implementação experimental: `validation.py`, com dez testes puros executados.
+Ainda **não integrada ao sender/observer nem validada em navegador real**. Próximo
+experimento: fixture com decoys, resposta incompleta, resposta antiga, eco do prompt,
+recriação do composer e duas mensagens válidas. Comparar taxa de acerto e latência.
+
+## ADR-012 — Navegador escolhido pelo usuário, modelo manual
+
+Usar navegador visível escolhido pelo usuário (primeiro Chromium gerenciado ou
+Chrome/Chromium instalado, configurável via `BrowserConfig.channel`). Não há
+necessidade de descobrir ou trocar modelos automaticamente: usuário faz login,
+seleciona o modelo, confirma prontidão e autoriza o teste real.
+
+"Navegador do usuário" significa o produto/binário escolhido, não reutilizar o
+perfil pessoal padrão. Manter perfil exclusivo, lock e processo iniciado pelo
+laboratório. Conectar a uma instância pessoal arbitrária não está implementado.
+Suporte a outros produtos depende de experimentos de compatibilidade, não é
+prometido. Sem varredura de modelos e sem tentativas de contornar autenticação.
