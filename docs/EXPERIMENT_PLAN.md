@@ -1,6 +1,6 @@
 # Plano de Experimentos — browserapi-lab
 
-Status: **validação dos Marcos 1–6 em andamento** — documento vivo, atualizado a cada marco.
+Status: **laboratório local consolidado e validado; homologação real (M8) pendente** — documento vivo, atualizado a cada marco.
 
 ## 1. Objetivo do laboratório
 
@@ -69,15 +69,15 @@ Ubuntu/Debian, ~4 GB RAM, Python ≥ 3.11, navegador visível, login e seleção
 
 | Marco | Entrega | Status |
 |-------|---------|--------|
-| M0 | Auditoria, `docs/EXPERIMENT_PLAN.md`, `docs/DECISIONS.md`, esquema de resultados | em andamento |
-| M1 | `fixtures/fake_chat.html` determinística | pendente |
-| M2 | `browser.py` + `session.py`: perfil exclusivo, lock, fechamento limpo, persistência | pendente |
-| M3 | `discovery.py` + `probes/chat_probe.js`: candidatos pontuados | pendente |
-| M4 | `sender.py`: comparação de estratégias de envio | pendente |
-| M5 | `observer.py`: MutationObserver + sinais de UI + híbrido | pendente |
-| M6 | `extractor.py`: texto limpo e Markdown mínimo | pendente |
-| M7 | `benchmark.py` + `report.py`: medições | pendente |
-| M8 | Adaptadores assistidos de Gemini e LMArena (execução pelo usuário) | pendente |
+| M0 | Auditoria, `docs/EXPERIMENT_PLAN.md`, `docs/DECISIONS.md`, esquema de resultados | concluído |
+| M1 | `fixtures/fake_chat.html` determinística | validado em CI |
+| M2 | `browser.py` + `session.py`: perfil exclusivo, lock, fechamento limpo, persistência | componentes implementados; ver limites no relatório |
+| M3 | `discovery.py` + `probes/chat_probe.js`: candidatos pontuados | componentes implementados; ver limites no relatório |
+| M4 | `sender.py`: comparação de estratégias de envio | componentes implementados; ver limites no relatório |
+| M5 | `observer.py`: MutationObserver + sinais de UI + híbrido | componentes implementados; ver limites no relatório |
+| M6 | `extractor.py`: texto limpo e Markdown mínimo | componentes implementados; ver limites no relatório |
+| M7 | `benchmark.py` + `report.py`: medições | componentes implementados; ver limites no relatório |
+| M8 | Adaptadores assistidos de Gemini e LMArena (execução pelo usuário) | componentes implementados; ver limites no relatório |
 
 Cada marco é fechado com: arquivos alterados, comandos executados, saída real dos testes,
 limitações e próximo passo.
@@ -154,3 +154,11 @@ execução (`run_id`, `timestamp`, `env`, `experiment`, `strategy`, `target`, `m
 Nenhum resultado é considerado verdadeiro sem execução real. Todo relatório registra o comando
 executado e a saída obtida. Testes que não puderam rodar são marcados como `SKIPPED` com o motivo —
 nunca como sucesso.
+
+## Consolidação mais recente
+
+O relatório em [VALIDATION_REPORT.md](VALIDATION_REPORT.md) é a fonte atual de
+aprovação e limites: execução `40135895580`, 208 testes, 113 experimentos instalados,
+três modos de navegador e 20 mensagens sequenciais por modo. A matriz acima é um
+plano de pesquisa, não uma declaração de que todos os experimentos foram concluídos.
+M7 é parcial (CPU do navegador e comparação polling ainda pendentes); M8 não homologado.

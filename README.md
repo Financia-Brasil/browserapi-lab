@@ -1,94 +1,116 @@
 # browserapi-lab
 
-Laboratório Linux leve para pesquisar, testar e medir automação, streaming e extração de respostas
-em interfaces web de chats de IA **antes** da construção de uma API local compatível com OpenAI.
+Laboratório Python/Linux para validar automação de chats por navegador real.
+**Não é ainda uma API para agentes nem um serviço 24/7.** O aplicativo final
+OpenAI-compatible continua fora do escopo desta etapa.
 
-> **Este repositório não é o aplicativo final.** Não há FastAPI, `/v1/chat/completions`, SSE ou fila
-> aqui — apenas componentes medidos que sustentarão o aplicativo futuro.
+## O que já é executável
 
-## Status
-
-| Marco | Entrega | Status |
-|-------|---------|--------|
-| M0 | Auditoria, plano de experimentos, decisões, esquema de resultados | concluído |
-| M1 | `fixtures/fake_chat.html` determinística | em desenvolvimento / validação |
-| M2 | Navegador e sessão persistentes com perfil exclusivo e lock | em desenvolvimento / validação |
-| M3 | Descoberta de elementos por pontuação | em desenvolvimento / validação |
-| M4 | Estratégias de envio | em desenvolvimento / validação |
-| M5 | Observação de streaming e detecção de término | em desenvolvimento / validação |
-| M6 | Extração de texto limpo e Markdown | em desenvolvimento / validação |
-| M7 | Benchmark de consumo | em desenvolvimento / validação |
-| M8 | Adaptadores assistidos de Gemini e LMArena | em desenvolvimento / validação |
-
-## Dependências
-
-Apenas `playwright` (ADR-008). Todo o resto é biblioteca padrão do Python 3.11+.
-Testes usam `unittest` — sem pytest, sem Docker, sem banco, sem Selenium, sem Node.
-
-## Instalação
+Um comando abre um Chromium real, serve uma fixture HTTP local, descobre os
+controles, envia com confirmação, observa streaming, extrai Markdown e gera
+JSON/CSV com métricas. Não abre sites externos, não faz login e não usa seu perfil
+pessoal. Usa uma instância de navegador e uma aba quente, com concorrência 1.
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m playwright install chromium      # baixa o Chromium gerenciado
-# em Debian/Ubuntu, se faltarem bibliotecas do sistema:
-sudo python3 -m playwright install-deps chromium
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .
+python -m playwright install chromium
+# Somente se faltarem bibliotecas no Debian/Ubuntu; requer autorização administrativa:
+python -m playwright install-deps chromium
+
+browserapi-lab doctor
+browserapi-lab verify --iterations 10
 ```
 
-## Uso (Marco 0)
+Para usar o Google Chrome instalado ou uma janela visível:
 
 ```bash
-python -m browserapi_lab.cli doctor                       # audita o ambiente
-python -m browserapi_lab.cli doctor --json results/doctor.json
-python -m unittest discover -s tests                      # testes do núcleo
+browserapi-lab verify --channel chrome --iterations 10 --results results/chrome
+browserapi-lab verify --headed --results results/headed
 ```
 
-O `doctor` **não instala nada** e nunca executa `sudo`: ele apenas diagnostica e sugere comandos.
+`--headed` requer sessão gráfica. No CI é testado com display virtual (Xvfb);
+isso não equivale a uma avaliação humana de usabilidade no laptop.
+Também funciona a partir do checkout: `python -m browserapi_lab.cli verify`.
+
+## Como interpretar o resultado
+
+O comando `verify` imprime um resumo JSON e retorna:
+
+| Código | Significado |
+|---|---|
+| `0` | Todos os cenários e o orçamento de latência passaram |
+| `1` | Falhou algum cenário ou orçamento de latência |
+| `2` | Argumentos inválidos, ambiente/navegador indisponível ou falha de inicialização |
+| `130` | Interrompido pelo usuário |
+
+Resultados em `results/verify/`:
+
+- `summary.json`: ambiente, falhas, P50/P95, startup/reinício e RSS aproximado.
+- `json/`: métricas por execução, sem conteúdo privado.
+- `csv/metrics.csv` e `csv/runs.csv`: dados para análise.
+
+**Uma resposta vazia que termina por timeout é um cenário negativo esperado**;
+se o comportamento observado for o esperado, o experimento passa. Isso não
+transforma timeout em uma resposta válida para um agente.
+
+### Cenários do verificador
+
+- Dez fluxos completos por padrão (configurável de 1 a 1000).
+- Pausa de três segundos, Copy prematuro, ausência de Copy, campo input e contenteditable.
+- Open Shadow DOM e iframe same-origin.
+- Resposta vazia, erro, login expirado e rate limit simulados.
+- Comparação `hybrid`, `stability_only` e `ui_signals` na resposta normal.
+- Vinte mensagens adicionais na mesma aba/conversa, sem navegar entre mensagens.
+- Reinício do perfil e verificação de reúso da aba.
+- Preservação de estrutura Markdown e DOM intacto.
+
+O orçamento conservador é **P95 < 2500 ms do último conteúdo até a conclusão da
+verificação** na fixture. O tempo total inclui o streaming artificial: não é a
+latência de Gemini/LMArena, nem um SLA de produção.
+
+## Desenvolvimento e testes
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Sem Chromium, as classes de integração são ignoradas com motivo explícito. No job
+de navegador do GitHub Actions, o navegador é obrigatório: indisponibilidade gera
+falha. O CI executa testes reais e testa o pacote instalado fora do checkout,
+Chromium, Chrome do sistema e Chromium headed com Xvfb. Os logs e benchmarks
+sanitizados ficam em `results/ci/<run_id>/`.
+
+## Segurança e confiabilidade
+
+- Nunca usa o perfil pessoal padrão; perfis persistentes possuem lock cooperativo.
+- Não repete automaticamente um envio cuja aceitação seja ambígua.
+- Campo esvaziado é evidência adicional, não prova isolada de envio.
+- Contrato JSON opt-in rejeita saídas antigas e sinaliza múltiplas saídas válidas.
+  A validação estrutural é um componente experimental; ainda não é adaptador de site.
+- CAPTCHA, login e seleção de modelo são manuais. Não há descoberta automática de modelos.
+- Não registra mensagens privadas, cookies ou tokens nos relatórios.
+- O estado bruto exportado de sessão é sensível: deve ficar somente em `profiles/`,
+  nunca ser anexado a relatórios ou versionado.
+
+## Limites da entrega
+
+**Pronto para uso como laboratório de validação local e CI. Não homologado para
+agentes 24/7 ou automação genérica de sites reais.** Ainda é necessário:
+
+1. Executar Gemini e LMArena com autenticação e autorização assistidas.
+2. Medir compatibilidade e consumo no laptop de aproximadamente 4 GB.
+3. Executar endurance prolongado (horas/dias), com recuperação de rede e sessão.
+4. Validar adaptadores contra mudanças reais de DOM; seletores não são contratos.
+5. Closed Shadow DOM, iframes cross-origin e CSS externo ocultando conteúdo têm
+   limitações: a fixture não demonstra cobertura universal.
+
+Não há FastAPI, SSE, fila, `/v1/models` ou `/v1/chat/completions` neste laboratório.
 
 ## Documentação
 
-* [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_PLAN.md) — perguntas, matriz de experimentos e critérios.
-* [`docs/DECISIONS.md`](docs/DECISIONS.md) — ADRs (decisões técnicas) e quando reabri-las.
-* [`docs/RESULTS_SCHEMA.md`](docs/RESULTS_SCHEMA.md) — formato JSON/CSV dos resultados.
-
-## Onde cada parte roda
-
-| Parte | Onde roda | Por quê |
-|-------|-----------|---------|
-| Núcleo Python (pontuação, decisão, extração, lock, relatório) | qualquer lugar, inclusive sem navegador | ADR-002 |
-| Integração real com Chromium | GitHub Actions (`ubuntu-latest`) | ambiente com bibliotecas e download do navegador |
-| Testes headed com login real | laptop do usuário | exige login manual e seleção de modelo |
-
-## Limitações declaradas
-
-1. Closed Shadow DOM é inacessível por design do navegador.
-2. Seletores de sites reais mudam; nenhum seletor é tratado como contrato (há detecção de drift).
-3. O ambiente de desenvolvimento remoto usado neste repositório não possui bibliotecas de runtime
-   do Chromium nem `apt`; o navegador roda apenas no CI e no laptop.
-4. Nada de cookies, tokens ou conteúdo de mensagens é gravado (ADR-009).
-
-## Escopo futuro (fora daqui)
-
-Interface de configuração, adaptadores por chat, navegador/página quente, fila com concorrência 1,
-`/v1/models`, `/v1/chat/completions`, SSE e erros no formato OpenAI.
-
-## Validação atual (2026-10-24)
-
-O núcleo possui 130 testes executados localmente. As classes que exigem Chromium
-são explicitamente ignoradas neste sandbox por falta de bibliotecas do navegador.
-O GitHub Actions instala Chromium e executa a suíte completa. Consulte os resultados
-mais recentes em `results/ci/browser-tests.log` e `results/ci/resumo.md`: um job verde
-com testes ignorados **não** equivale à aprovação ponta a ponta.
-
-O pipeline de integração cobre descoberta, envio com evidência, streaming, Markdown,
-DOM intacto, dez repetições, pausa, input/contenteditable, Shadow DOM e iframe.
-Benchmark completo (M7) e execuções assistidas de Gemini/LMArena (M8) ainda pendentes.
-Não há validação de consumo no laptop de 4 GB.
-
-### Resultado comprovado em Chromium
-
-[Execução 40121924859](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40121924859):
-**176 testes em 74,532 s — OK, um teste ignorado por condição de ambiente**.
-As dez repetições do pipeline e a pausa longa passaram. Consulte
-[`docs/VALIDATION_REPORT.md`](docs/VALIDATION_REPORT.md) para evidências, correções e
-pendências. Isso valida a fixture local, não os sites reais nem o consumo no laptop.
+- [Relatório de validação](docs/VALIDATION_REPORT.md)
+- [Plano de experimentos](docs/EXPERIMENT_PLAN.md)
+- [Decisões técnicas](docs/DECISIONS.md)
+- [Esquema dos resultados](docs/RESULTS_SCHEMA.md)

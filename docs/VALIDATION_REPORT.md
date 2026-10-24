@@ -1,73 +1,162 @@
-# Relatório de validação — 2026-10-24
+# Consolidação e validação — 2026-10-24
 
-## Evidência real
+## Veredito
 
-Execução GitHub Actions: https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40121924859
+**Aprovado para uso como laboratório local/CI com fixture sintética.**
+**Não aprovado como serviço para agentes 24/7 ou integração pronta com Gemini/LMArena.**
+Não há garantia de ausência de defeitos; os limites comprovados estão descritos abaixo.
 
-Commit testado: `bc34f3c` (ver metadados em `results/ci/40121924859/resumo.md`).
-Comando: `python -m unittest discover -s tests -v`.
-Saída real, obtida do runner:
+Código testado: `1d4bb718fdf2aafca1bcab874dadfb0912ae59bd`.
 
-```
-Ran 176 tests in 74.532s
+[Execução final 40135895580](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40135895580)
+— ambos os jobs aprovados; integração em 6 min 8 s.
+
+## Testes executados de verdade
+
+Comando no runner: `python -m unittest discover -s tests -v`.
+
+```text
+Ran 208 tests in 81.019s
 
 OK (skipped=1)
 ```
 
-Log integral: `results/ci/40121924859/browser-tests.log`.
-Ambiente: `results/ci/40121924859/doctor-browser.json`.
-O único teste ignorado verifica comportamento **sem navegador**, condição que não
-se aplica ao runner com Chromium instalado. Nenhuma classe de integração foi ignorada.
+O único teste ignorado verifica a situação de **navegador ausente**, não aplicável
+a esse runner. Nenhuma classe de integração foi ignorada. O job exige navegador
+real e falha se ele estiver indisponível.
 
-## Fluxo ponta a ponta comprovado na fixture
+Log integral: `results/ci/40135895580/browser-tests.log`.
 
-- Descoberta e ranking do composer e botão de envio.
-- Preenchimento e clique com evidência de nova mensagem do usuário.
-- MutationObserver, sinais de UI e decisão híbrida.
-- Dez execuções consecutivas bem-sucedidas.
+### Instalação e usabilidade operacional
+
+O CI executou `pip install .`, mudou para `/tmp` e invocou o console script
+instalado, sem depender do diretório do repositório:
+
+```text
+browserapi-lab --help
+browserapi-lab verify --iterations 10 --results <destino>/chromium
+browserapi-lab verify --iterations 3 --channel chrome --results <destino>/chrome
+xvfb-run -a browserapi-lab verify --headed --iterations 1 --results <destino>/headed
+```
+
+Os três comandos `verify` retornaram código zero. Assets JS/HTML são incluídos
+no pacote. Help, argumentos inválidos e códigos de falha também têm testes.
+Isso comprova a usabilidade operacional da CLI, **não uma avaliação humana de UX**.
+
+## Fluxo ponta a ponta
+
+Descoberta → preenchimento → envio com mensagem nova como evidência → observação
+por MutationObserver → decisão híbrida → extração de Markdown → comparação do DOM
+original → JSON/CSV e resumo de desempenho.
+
+| Execução do verificador instalado | Experimentos | Falhas | Mensagens sequenciais sem navegar |
+|---|---:|---:|---:|
+| Chromium headless | 43 | 0 | 20 |
+| Chrome do sistema headless | 36 | 0 | 20 |
+| Chromium headed em Xvfb | 34 | 0 | 20 |
+| **Total** | **113** | **0** | **60** |
+
+Experimentos negativos passam somente se o comportamento de bloqueio/timeout for
+o esperado. Uma resposta vazia que produz timeout não é uma resposta válida para
+um agente; é uma verificação bem-sucedida da lógica de falha.
+
+### Cobertura importante
+
+- Dez fluxos consecutivos na suíte e no baseline Chromium do verificador.
 - Pausa artificial de três segundos sem término prematuro.
 - textarea, input, contenteditable, open Shadow DOM e iframe same-origin.
-- Extração com títulos, listas, código com linguagem, link e tabela.
-- Impressão digital do DOM idêntica antes/depois da extração.
-- Persistência de localStorage após reinício e recusa de segundo processo no perfil.
+- Fill, teclado, Enter em input e fallback JS em testes reais.
+- Stop, Copy antecipado e estabilidade sem Copy.
+- Resposta vazia e recuperação na mesma página após timeout.
+- Erro, login expirado e rate limit simulados; opções da UI não causam falso bloqueio.
+- JSON com identificação de tentativa, saída antiga, eco do usuário excluído do
+  conjunto candidato e duas saídas válidas tratadas como ambiguidade. Essa parte é
+  teste de componente em DOM controlado, não adaptação de formato em sites reais.
+- HTML com código, listas, link, tabela, ocultos e feedback; DOM intacto.
+- localStorage e IndexedDB persistem após fechar/reabrir; exportação sanitizada.
+- Lock entre processos, limpeza quando driver falha e bloqueio de reenvio ambíguo.
+- Conversa com 150 controles antigos e histórico com mais de 7000 nós.
+- Relatórios rejeitam path traversal, métricas não finitas e iteração inválida.
 
-## Correções descobertas durante testes reais
+## Velocidade medida
 
-1. Sessão deixada aberta pelo teste de persistência bloqueava as classes seguintes.
-2. Falhas de inicialização eram indevidamente tratadas como testes ignorados.
-3. Streaming por insertAdjacentHTML em fragmentos não preservava a estrutura HTML.
-4. Texto de opções do painel era confundido com mensagem real de rate limit.
-5. Logs eram ignorados pelo Git e resultados simultâneos causavam conflito de publicação.
-6. Pipeline de shell precisava de `pipefail` explícito para não mascarar falhas de unittest.
+Runner: Linux, 4 vCPU, aproximadamente 15,6 GiB RAM, Python 3.11.17,
+Playwright 1.64.1. Chromium 156.0.8078.4; Chrome 155.0.8059.39.
+A fixture usa streaming artificial com `delay=1`; o navegador impõe seu próprio
+agendamento de timers. Estes números **não são latência de modelos reais**.
 
-As execuções com falha também estão preservadas em `results/ci/40121661386/`.
-Os logs antigos diretamente em `results/ci/` são históricos, **não** a validação mais recente.
+| Métrica | Chromium headless (n=10 baseline) | Chrome headless (n=3 baseline) |
+|---|---:|---:|
+| Fluxo total, mediana | 2056 ms | 2101 ms |
+| Fluxo total, P95 | 2175 ms | 2446 ms |
+| Último conteúdo → conclusão da verificação, P95 | 338 ms | 331 ms |
+| Startup de perfil novo | 432 ms | 1282 ms |
+| Reinício do perfil | 446 ms | 645 ms |
 
-## Validação local adicional
+P95 é nearest-rank. Amostra Chrome é pequena e exploratória; não demonstra
+superioridade estatística de um canal. O orçamento automatizado é P95 < 2500 ms
+**após a última mutação**, não para o fluxo total.
 
-Após adicionar quatro testes puros de evidência de envio:
+**Advertência headed:** o único baseline de janela virtual levou **8771 ms**,
+com aproximadamente **6655 ms na ativação do clique inicial**. Os cenários
+subsequentes seguiram funcionando, mas não há base para prometer primeiro envio
+rápido em ambiente gráfico. O tempo pós-mutação desse baseline foi 241 ms. A
+latência inicial headed merece investigação adicional no laptop real; não foi
+ocultada nem "corrigida" com cliques forçados.
 
-```
-/home/user/.venv/bin/python -m unittest discover -s tests
-Ran 134 tests in 6.368s
-OK (skipped=10)
-```
+### Recursos
 
-Dez entradas ignoradas correspondem a gates/classes de navegador indisponível no
-sandbox; não são evidência de aprovação dessas integrações localmente.
+RSS aproximado da árvore do navegador + driver, somado por processo (memória
+compartilhada pode ser contada mais de uma vez):
 
-## Pendências — não afirmar aprovação final
+| Canal | Antes das 20 mensagens | Depois |
+|---|---:|---:|
+| Chromium headless | 832516 KB | 884992 KB |
+| Chrome headless | 1434076 KB | 1463012 KB |
+| Chromium headed | 1487936 KB | 1509804 KB |
 
-- M4: matriz comparativa completa de todas as estratégias de teclado/Enter/JS.
-- M5: comparação medida MutationObserver vs polling e cenários adicionais integrados
-  de timeout/resposta vazia/bloqueios (há testes puros e fixture, mas não toda a matriz).
-- M7: benchmark frio/quente, CPU e consumo comparativo dos canais Chromium/Chrome.
-- M8: Gemini e LMArena reais, em navegador visível, login e seleção manual de modelo,
-  uma mensagem somente após confirmação do usuário.
-- Validar consumo no laptop de 4 GB: o runner de CI tem aproximadamente 16 GB;
-  resultados nele não demonstram adequação ao laptop.
-- O doctor não distingue sandbox remoto genérico de Linux local sem marcadores Codespaces.
-- Empacotamento/distribuição instalada ainda precisa de teste; execução validada é a
-  partir do checkout do repositório.
+Essas amostras não são pico nem comprovam ausência de vazamentos. O histórico do
+DOM cresce deliberadamente. CPU registrada nos envelopes é somente do Python,
+não da árvore do navegador. Não há homologação de consumo no laptop de 4 GB.
 
-Nenhuma API OpenAI-compatible foi criada. Nenhum login, CAPTCHA ou limite foi contornado.
+## Defeitos encontrados e corrigidos nesta consolidação
+
+1. Assets fora do pacote impediam uso instalado: agora JS/HTML viajam no pacote.
+2. CLI só tinha diagnóstico: `verify` executa fluxo, cenários e métricas.
+3. Falta de confirmação podia provocar reenvio: ativação ambígua não é repetida.
+4. Falha ao encerrar driver podia deixar lock preso: limpeza usa `finally` aninhado.
+5. Reinstalar observador em aba quente acumulava MutationObservers: o anterior é desligado.
+6. Conversas longas esgotavam candidatos antes de alcançar Send: varredura limitada
+   prioriza os nós recentes; regressão também cobre histórico acima do teto de nós.
+7. Diagnóstico de mensagem divergente podia incluir texto privado: conteúdo foi removido.
+8. Relatórios aceitavam métricas inválidas e identificador com path traversal: agora rejeitam.
+
+A rodada `40135546456` ficou **vermelha** ao detectar a falha na 20ª mensagem.
+Sua evidência está preservada; a aprovação final só veio após corrigir e repetir.
+
+## Pendências que bloqueiam uma entrega de produção para agentes
+
+- Gemini e LMArena reais não foram executados: rede/autenticação e participação
+  manual do usuário são necessárias. Não automatizar CAPTCHA ou escolha de modelo.
+- Não existe API OpenAI-compatible, fila de agentes, SSE nem serviço supervisionado;
+  essa parte foi explicitamente excluída do briefing inicial.
+- Endurance de horas/dias, quedas de rede, expiração real de login e deriva real de
+  DOM não foram homologados. Vinte mensagens por canal não equivalem a 24/7.
+- Acessibilidade humana, laptop de 4 GB e latência inicial headed precisam de teste.
+- Seletores e sinais não são universais. Closed Shadow DOM, iframes cross-origin,
+  layout/CSS externo e respostas fora do contrato têm limitações.
+- Polling como baseline completo e CPU do navegador ainda não estão medidos.
+
+Nenhum login real, limite ou autenticação foi contornado. Nenhum conteúdo privado
+foi usado nesses experimentos. A aprovação é estritamente a do laboratório descrito.
+
+## Onde estão as evidências
+
+`results/ci/40135895580/benchmark/{chromium,chrome,headed}/` contém:
+
+- `summary.json`;
+- envelopes JSON de cada experimento;
+- CSV longo e largo;
+- logs das invocações instaladas, no diretório pai.
+
+Resultados mais antigos diretamente em `results/ci/` são históricos, não o estado final.

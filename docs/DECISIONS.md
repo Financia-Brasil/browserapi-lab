@@ -165,3 +165,21 @@ perfil pessoal padrão. Manter perfil exclusivo, lock e processo iniciado pelo
 laboratório. Conectar a uma instância pessoal arbitrária não está implementado.
 Suporte a outros produtos depende de experimentos de compatibilidade, não é
 prometido. Sem varredura de modelos e sem tentativas de contornar autenticação.
+
+## ADR-013 — Consolidação executável e segurança de retry
+
+`verify` roda somente contra fixture local com perfil temporário e uma aba.
+Os assets são dados do pacote instalado. O CI testa o console script fora do checkout.
+Não ampliar isso para um serviço de produção ou API antecipadamente.
+
+Após tentar ativar envio, falha de confirmação é ambígua: parar sem retry automático,
+mesmo se o campo permanecer preenchido. Não existe garantia de exatamente uma entrega
+em um site externo sem suporte do próprio site. Esvaziamento do composer é sinal
+adicional, não obrigatório para sucesso quando já há nova mensagem comprovada.
+
+Reinstalar o probe de streaming desconecta o observador anterior. Descoberta prioriza
+DOM recente com teto de nós/candidatos. Não se considera uma estratégia universal:
+composers fora da região recente ainda podem exigir adaptação.
+
+Pin de Playwright 1.64.1 para reproduzir esta rodada. Mudança de versão exige novo CI.
+A aprovação final é a do relatório `VALIDATION_REPORT.md`, não uso contínuo 24/7.
