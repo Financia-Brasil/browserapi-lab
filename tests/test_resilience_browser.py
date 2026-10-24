@@ -105,3 +105,15 @@ class TestResilience(BrowserTestCase):
         self.assertEqual(buttons[0].selector, '#send')
         composer = rank_candidates(collect(self.page, 'composer')['candidates'], 'composer')[0]
         self.assertTrue(send_message(self.page, composer, buttons[0], 'Conversa longa').success)
+
+    def test_large_history_does_not_exhaust_scan_before_composer(self):
+        self.setup_chat()
+        self.page.evaluate('''() => {
+          const history = document.createElement('div');
+          history.innerHTML = '<span>synthetic history</span>'.repeat(7000);
+          document.querySelector('#conversation').appendChild(history);
+        }''')
+        composers = rank_candidates(collect(self.page, 'composer')['candidates'], 'composer')
+        buttons = rank_candidates(collect(self.page, 'send_button')['candidates'], 'send_button')
+        self.assertEqual(composers[0].selector, '#composer')
+        self.assertEqual(buttons[0].selector, '#send')

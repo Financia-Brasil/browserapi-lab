@@ -201,8 +201,10 @@
         notes.push("falha ao varrer " + inside + ": " + e.message);
         return;
       }
-      for (var i = 0; i < nodes.length; i++) {
-        if (visited > MAX_ELEMENTS) return;
+      // Começar pela cauda mantém composer e mensagens novas acessíveis mesmo
+      // quando o histórico ultrapassa o teto de nós visitados.
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        if (visited >= MAX_ELEMENTS) return;
         var el = nodes[i];
         visited += 1;
         visit(el, root, inside, framePath, shadowPath, depth);
@@ -346,9 +348,8 @@
     var found = [];
     var result = walk(opts, function (el, root, inside, framePath, shadowPath) {
       if (!prefilter(el)) return;
-      // Prioriza a cauda recente do documento. Botões de feedback históricos
-      // não podem impedir a coleta do composer/Send ao final de conversas longas.
-      if (found.length >= MAX_CANDIDATES) found.shift();
+      // A travessia já é newest-first; retenha os primeiros candidatos recentes.
+      if (found.length >= MAX_CANDIDATES) return;
       found.push(describe(el, root, inside, framePath, shadowPath));
     });
 
@@ -358,7 +359,8 @@
       url: location.href,
       visited_elements: result.visited,
       notes: result.notes,
-      candidates: found
+      // Preserva ordem de documento esperada pelo ranking Python.
+      candidates: found.reverse()
     };
   }
 
