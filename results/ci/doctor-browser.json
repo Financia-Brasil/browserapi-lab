@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-10-24T18:19:16Z",
+  "generated_at_utc": "2026-10-24T18:27:33Z",
   "environment_kind": "ci",
   "os_name": "Ubuntu",
   "os_version": "26.04.1 LTS (Resolute Raccoon)",
@@ -8,7 +8,7 @@
   "python_version": "3.11.17",
   "python_executable": "/opt/hostedtoolcache/Python/3.11.17/x64/bin/python",
   "cpu_count": 4,
-  "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+  "cpu_model": "AMD EPYC 7763 64-Core Processor",
   "ram_total_mb": 15983,
   "disk_free_gb": 86.4,
   "playwright_installed": true,
