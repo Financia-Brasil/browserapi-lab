@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import http.server
 import socket
+import tempfile
 import threading
 import unittest
 from functools import partial
@@ -33,7 +34,7 @@ class FixtureServer:
     """Servidor HTTP de arquivos estáticos só para a fixture (stdlib)."""
 
     def __init__(self, root: Path = FIXTURES_DIR) -> None:
-        handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
+        handler = partial(_QuietHandler, directory=str(root))
         # porta 0 -> escolhida pelo SO; evita conflito entre execuções
         self._httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self._httpd.daemon_threads = True
@@ -56,16 +57,36 @@ class FixtureServer:
         self._thread.join(timeout=5)
 
 
-def no_browser_reason() -> Optional[str]:
-    """``None`` se um Chromium real pode ser aberto aqui; senão, o motivo."""
-    from browserapi_lab.browser import browser_environment_error, chromium_available
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    """Mesmo handler, sem poluir a saída dos testes."""
 
-    if not chromium_available():
-        return browser_environment_error() or "Chromium indisponível neste ambiente"
-    reason = browser_environment_error()
-    if reason:
-        return reason
-    return None
+    def log_message(self, fmt: str, *args) -> None:  # noqa: D102
+        pass
+
+
+def no_browser_reason() -> Optional[str]:
+    """``None`` se o ambiente pode abrir um navegador; senão, o motivo.
+
+    O veredito vem do ``doctor`` (bibliotecas de runtime + navegador presente),
+    que é mais confiável do que tentar resolver o executável do Playwright a
+    cada classe de teste.
+    """
+    from browserapi_lab.doctor import build_report
+
+    report = build_report(results_path=tempfile.gettempdir())
+    if report.browser_ready:
+        return None
+    if not report.playwright_installed:
+        return "playwright não instalado"
+    if report.missing_required_libs:
+        return (
+            "faltam bibliotecas de runtime do Chromium: "
+            + ", ".join(report.missing_required_libs[:4])
+            + ("..." if len(report.missing_required_libs) > 4 else "")
+        )
+    if not report.playwright_browsers and not report.system_browsers:
+        return "nenhum navegador baixado (execute: python -m playwright install chromium)"
+    return "ambiente sem navegador utilizável"
 
 
 class BrowserTestCase(unittest.TestCase):
@@ -96,16 +117,19 @@ class BrowserTestCase(unittest.TestCase):
         )
         try:
             cls.session.start()
-        except Exception as exc:  # falha real de ambiente, não "skip"
+        except Exception as exc:  # falha real de ambiente, não "skip" por escolha
             cls.server.stop()
-            raise unittest.SkipTest(f"falha ao abrir o navegador: {exc}") from exc
+            raise unittest.SkipTest(f"falha ao abrir o navegador: {type(exc).__name__}: {exc}") from exc
         cls.page = cls.session.new_page()
 
     @classmethod
     def tearDownClass(cls) -> None:
         session = getattr(cls, "session", None)
         if session is not None:
-            session.close()
+            try:
+                session.close()
+            except Exception:
+                pass
         server = getattr(cls, "server", None)
         if server is not None:
             server.stop()
