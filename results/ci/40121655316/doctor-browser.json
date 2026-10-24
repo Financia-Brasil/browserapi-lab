@@ -1,0 +1,104 @@
+{
+  "generated_at_utc": "2026-10-24T18:39:29Z",
+  "environment_kind": "ci",
+  "os_name": "Ubuntu",
+  "os_version": "26.04.1 LTS (Resolute Raccoon)",
+  "kernel": "7.0.0-1017-azure",
+  "arch": "x86_64",
+  "python_version": "3.11.17",
+  "python_executable": "/opt/hostedtoolcache/Python/3.11.17/x64/bin/python",
+  "cpu_count": 4,
+  "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+  "ram_total_mb": 15983,
+  "disk_free_gb": 86.4,
+  "playwright_installed": true,
+  "playwright_version": "1.64.1",
+  "playwright_browsers": [
+    ".links",
+    "chromium-1248",
+    "chromium_headless_shell-1248",
+    "ffmpeg-1013"
+  ],
+  "system_browsers": [
+    {
+      "name": "google-chrome",
+      "path": "/usr/bin/google-chrome",
+      "version": "Google Chrome 155.0.8059.39",
+      "source": "PATH"
+    },
+    {
+      "name": "google-chrome-stable",
+      "path": "/usr/bin/google-chrome-stable",
+      "version": "Google Chrome 155.0.8059.39",
+      "source": "PATH"
+    },
+    {
+      "name": "chromium",
+      "path": "/usr/bin/chromium",
+      "version": "Chromium 155.0.8059.0",
+      "source": "PATH"
+    },
+    {
+      "name": "chromium-browser",
+      "path": "/usr/bin/chromium-browser",
+      "version": "Chromium 155.0.8059.0",
+      "source": "PATH"
+    },
+    {
+      "name": "microsoft-edge",
+      "path": "/usr/bin/microsoft-edge",
+      "version": "Microsoft Edge 155.0.4283.45",
+      "source": "PATH"
+    },
+    {
+      "name": "firefox",
+      "path": "/usr/bin/firefox",
+      "version": "Mozilla Firefox 157.0",
+      "source": "PATH"
+    },
+    {
+      "name": "chrome",
+      "path": "/opt/google/chrome/chrome",
+      "version": "Google Chrome 155.0.8059.39",
+      "source": "path"
+    }
+  ],
+  "missing_required_libs": [],
+  "present_required_libs": [
+    "libnss3.so",
+    "libnspr4.so",
+    "libatk-1.0.so.0",
+    "libatk-bridge-2.0.so.0",
+    "libatspi.so.0",
+    "libcups.so.2",
+    "libdrm.so.2",
+    "libgbm.so.1",
+    "libxkbcommon.so.0",
+    "libX11.so.6",
+    "libXcomposite.so.1",
+    "libXdamage.so.1",
+    "libXext.so.6",
+    "libXfixes.so.3",
+    "libXrandr.so.2",
+    "libxcb.so.1",
+    "libpango-1.0.so.0",
+    "libcairo.so.2",
+    "libasound.so.2",
+    "libdbus-1.so.3",
+    "libexpat.so.1",
+    "libglib-2.0.so.0",
+    "libgio-2.0.so.0",
+    "libharfbuzz.so.0",
+    "libfontconfig.so.1",
+    "libepoxy.so.0"
+  ],
+  "missing_optional_libs": [],
+  "browser_ready": true,
+  "can_headed": false,
+  "display_server": null,
+  "notes": [
+    "ambiente remoto: login e testes headed reais devem ocorrer no laptop do usuario.",
+    "sem DISPLAY/WAYLAND_DISPLAY: apenas headless e possivel aqui."
+  ],
+  "recommendations": []
+}
