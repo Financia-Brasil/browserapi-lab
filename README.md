@@ -84,3 +84,11 @@ O pipeline de integração cobre descoberta, envio com evidência, streaming, Ma
 DOM intacto, dez repetições, pausa, input/contenteditable, Shadow DOM e iframe.
 Benchmark completo (M7) e execuções assistidas de Gemini/LMArena (M8) ainda pendentes.
 Não há validação de consumo no laptop de 4 GB.
+
+### Resultado comprovado em Chromium
+
+[Execução 40121924859](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40121924859):
+**176 testes em 74,532 s — OK, um teste ignorado por condição de ambiente**.
+As dez repetições do pipeline e a pausa longa passaram. Consulte
+[`docs/VALIDATION_REPORT.md`](docs/VALIDATION_REPORT.md) para evidências, correções e
+pendências. Isso valida a fixture local, não os sites reais nem o consumo no laptop.
