@@ -5,7 +5,7 @@ import tempfile
 import threading
 from unittest.mock import patch
 
-from _harness import BrowserTestCase, REPO_ROOT
+from _harness import BrowserTestCase, FixtureServer, REPO_ROOT
 from browserapi_lab.config import ChatConfig, ConfigStore
 from browserapi_lab.gui import LocalServer, Panel
 from browserapi_lab.setup import HYPOTHESES
@@ -14,6 +14,12 @@ from browserapi_lab.setup import HYPOTHESES
 class TestGraphicalJourney(BrowserTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        fixture_dir = Path(self.temp.name) / 'fixture'
+        fixture_dir.mkdir()
+        source = (REPO_ROOT/'fixtures/fake_chat.html').read_text()
+        source = source.replace('</body>', '<script>FakeChat.config({mode:"contract",delay:1});</script></body>')
+        (fixture_dir/'fake_chat.html').write_text(source)
+        self.chat_server = FixtureServer(fixture_dir).start()
         self.store = ConfigStore(Path(self.temp.name) / 'config')
         self.panel = Panel(self.store, Path(self.temp.name) / 'data')
         self.http = LocalServer(self.panel)
@@ -25,6 +31,7 @@ class TestGraphicalJourney(BrowserTestCase):
         self.http.shutdown()
         self.http.server_close()
         self.http_thread.join(2)
+        self.chat_server.stop()
         self.temp.cleanup()
 
     def open_panel(self):
@@ -39,7 +46,7 @@ class TestGraphicalJourney(BrowserTestCase):
         self.page.wait_for_function("text => document.querySelector('#phase').textContent === text", arg=phase, timeout=45000)
 
     def seed(self, mode='contract'):
-        config = ChatConfig('saved', self.server.url(query='?mode='+mode+'&delay=1'), provider='fixture',
+        config = ChatConfig('saved', self.chat_server.url(), provider='fixture',
                             timeout_ms=4000, stability_ms=400, **HYPOTHESES['fixture'])
         self.store.save(config)
         return config
@@ -51,7 +58,7 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.select_option('#browser','chromium')
             self.page.select_option('#provider','custom')
             self.page.fill('#name','graphical')
-            self.page.fill('#url', self.server.url(query='?mode=contract&delay=1'))
+            self.page.fill('#url', self.chat_server.url())
             self.page.click('#configure')
             self.wait_question('Quando o chat')
             self.assertFalse((self.store.root/'graphical.status.json').exists())
