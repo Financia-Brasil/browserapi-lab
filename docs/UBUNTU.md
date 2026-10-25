@@ -177,3 +177,72 @@ endpoint local/UID/symlink e montagem/extração do `.deb` com simulação de
 dependências Ubuntu 24.04. O pacote publicado contém o mesmo código de execução
 do commit validado; mudanças posteriores desta publicação são documentação e
 artefato de instalação.
+
+
+## Versão 0.1.0+ubuntu4 — ensino explícito de voz e Enviar
+
+Este fluxo substitui o rascunho automático da GUI descrito na versão ubuntu3.
+
+### No chat que já está salvo
+
+1. Se quer seu Chrome pessoal, deixe o chat aberto na conta/modelo desejados e
+   clique em **Usar Chrome já aberto** no cartão desse chat. Confirme a mudança.
+   Mudar o formulário de um chat novo não alterava chats antigos; esse botão
+   agora muda explicitamente o modo salvo. Ele apenas salva o modo e não abre
+   navegador. A próxima conexão ainda requer permissão no painel e no Chrome.
+2. Com o campo vazio e o microfone visível, clique em **Selecionar botão de voz**.
+   Confirme a aba/conta e selecione o controle de voz. O clique é interceptado;
+   não solicita gravação. Não apague um rascunho importante sem salvá-lo antes.
+3. Clique em **Digitar e selecionar Enviar / Enter**. Quando solicitado, digite
+   algo no chat **sem enviar**, volte ao painel e clique em **Já digitei ·
+   Selecionar Enviar**. Então clique no botão Enviar/Enter que apareceu. Esse
+   clique apenas ensina o controle. Não pressione a tecla Enter para enviar.
+4. O rascunho que você digitou fica preservado. Apague-o manualmente antes de
+   autorizar um teste. O apontamento não comprova funcionamento e não envia
+   mensagem de teste automaticamente.
+
+Durante o ensino manual, os controles de botão e a tecla Enter são bloqueados
+na página para evitar envio no fluxo suportado; a proteção de clique passa ao
+seletor sem remover o bloqueio antes de instalar o seletor. Esc/interrupção
+limpam os observadores sem apagar o texto da pessoa. Páginas com eventos
+incomuns, frames ou Shadow DOM continuam fora da garantia universal do wizard.
+
+O estado de voz selecionado é guardado como seletor mais uma impressão digital
+dos atributos/ícone, sem salvar texto do chat. **Não ignoramos permanentemente o
+mesmo elemento físico:** se ele mudar de microfone para Enviar, o novo estado
+pode ser usado. Um controle que continuar com o estado de voz registrado é
+recusado antes de clicar, mesmo sem um rótulo reconhecido automaticamente.
+
+### Não abrir outro perfil quando a conexão não encontra sua aba
+
+No modo **Chrome já aberto**, BrowserAPI agora exige exatamente uma aba já
+aberta da origem do chat. Se não a enxergar, para com explicação: o código não
+cria uma aba nova, não lança outro Chrome e não volta ao modo separado. Com
+duas abas desse chat, também para sem escolher uma arbitrariamente. O cartão
+mostra **Chrome já aberto (configurado)**, não afirma falsamente que está
+conectado só porque esse modo foi salvo.
+
+Isso elimina um caminho de criação de aba nova e a confusão entre o formulário
+e o chat salvo. **Não identifica automaticamente a conta sincronizada nem
+comprova qual contexto/perfil o Chrome real do usuário está expondo por CDP.**
+Confira a aba e a conta antes de prosseguir. Não copiamos cookies nem acessamos
+perfis por diretório. Se o Chrome expuser outro contexto, não se promete que o
+programa conseguirá entrar no perfil desejado.
+
+
+### Validação da versão ubuntu4
+
+Código `670bd10`, [Actions 40205878425](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40205878425): **SUCCESS, 262 testes em 117,706 s, 1 ignorado**.
+Navegador real com fixture: seleção de voz, digitação humana simulada, bloqueio
+de clique/Enter durante o ensino, seleção posterior de Enviar sem envio,
+preservação do rascunho e envio autorizado posterior. Estado de voz sem rótulo
+reconhecido é bloqueado; cancelamento limpa a proteção sem apagar o texto.
+Também foram exercitados os botões reais do painel, troca consentida do modo
+de chat salvo sem abrir navegador, recusa de aba inexistente sem criar outra e
+reuso de aba já aberta sem recarregá-la/fechar o processo CDP.
+O teste CDP usa um Chromium temporário, não o Chrome sincronizado do usuário.
+O relato de visitante não foi reproduzido no computador real; não se afirma
+identificação/correção universal de perfil pessoal, login Google ou contexto
+que cada versão do Chrome expõe. O `.deb` passou montagem/extração e simulação
+de dependências. Nesta publicação o código do pacote é o mesmo que passou a
+CI; as mudanças posteriores são documentação e instalador gerado.

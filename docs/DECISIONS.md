@@ -254,3 +254,19 @@ Indícios explícitos de voz/microfone impedem selecionar/ativar o controle.
 A integração permanece stdlib + Playwright, sem MCP/Node/extensão. A validação
 sintética CDP não substitui homologar o diálogo de permissão e a sessão real do
 Chrome pessoal. Não prometer login ou compatibilidade autenticada com Gemini.
+
+
+## ADR-017 — Voz como estado negativo ensinado e conexão sem criação de aba
+
+O usuário rejeitou a abertura em visitante e pediu botões separados para
+selecionar voz e, após digitação humana, selecionar Enviar. A GUI passa a esse
+fluxo, sem rascunho automático. O texto da pessoa é preservado e o apontamento
+não dispara teste de saúde. A exclusão de voz combina seletor e fingerprint
+do estado: nunca ignorar cegamente o mesmo nó, pois ele pode virar Enviar.
+
+Chats antigos mantinham session_mode do perfil separado apesar de alterações
+no formulário de novos chats. Acrescentamos mudança explícita consentida no
+chat salvo. O modo CDP só aceita uma aba do chat já aberta. Na ausência dela,
+falha sem new_page, lançamento de Chrome ou fallback de perfil; não presume
+identidade da conta nem lê cookies para deduzi-la. A seleção de contexto/conta
+do Chrome pessoal continua uma limitação externa não homologada.

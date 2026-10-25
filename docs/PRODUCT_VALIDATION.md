@@ -181,3 +181,31 @@ endpoint local/UID/symlink e montagem/extração do `.deb` com simulação de
 dependências Ubuntu 24.04. O pacote publicado contém o mesmo código de execução
 do commit validado; mudanças posteriores desta publicação são documentação e
 artefato de instalação.
+
+
+## Relato de visitante e apontamento voz → Enviar — ubuntu4
+
+O usuário informou que a conexão não chegou ao Chrome sincronizado e pediu
+botões independentes para ensinar o controle de voz e, depois de digitar, o
+controle Enviar. A GUI foi alterada para esse fluxo manual. A mudança de sessão
+para um chat já salvo agora é explícita e consentida; o modo CDP não cria aba
+na ausência de uma aba correspondente já aberta. Isso fecha caminhos internos
+de confusão/fallback, sem deduzir identidade de conta a partir de cookies.
+
+
+### Validação da versão ubuntu4
+
+Código `670bd10`, [Actions 40205878425](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40205878425): **SUCCESS, 262 testes em 117,706 s, 1 ignorado**.
+Navegador real com fixture: seleção de voz, digitação humana simulada, bloqueio
+de clique/Enter durante o ensino, seleção posterior de Enviar sem envio,
+preservação do rascunho e envio autorizado posterior. Estado de voz sem rótulo
+reconhecido é bloqueado; cancelamento limpa a proteção sem apagar o texto.
+Também foram exercitados os botões reais do painel, troca consentida do modo
+de chat salvo sem abrir navegador, recusa de aba inexistente sem criar outra e
+reuso de aba já aberta sem recarregá-la/fechar o processo CDP.
+O teste CDP usa um Chromium temporário, não o Chrome sincronizado do usuário.
+O relato de visitante não foi reproduzido no computador real; não se afirma
+identificação/correção universal de perfil pessoal, login Google ou contexto
+que cada versão do Chrome expõe. O `.deb` passou montagem/extração e simulação
+de dependências. Nesta publicação o código do pacote é o mesmo que passou a
+CI; as mudanças posteriores são documentação e instalador gerado.
