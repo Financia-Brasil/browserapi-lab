@@ -418,6 +418,10 @@ class TestCLIRealBrowser(unittest.TestCase):
             root = Path(root)
             html = (REPO_ROOT / 'browserapi_lab/assets/fake_chat.html').read_text()
             html = html.replace('mode: "normal",', 'mode: "contract",').replace('delay: 4,', 'delay: 1,')
+            # A fixture CLI deve ser explicitamente curta; não aumentar timeout
+            # nem reenviar para mascarar uma execução que não concluiu.
+            self.assertIn('mode: "contract",', html)
+            self.assertIn('delay: 1,', html)
             (root / 'fake_chat.html').write_text(html)
             server = FixtureServer(root).start()
             try:
