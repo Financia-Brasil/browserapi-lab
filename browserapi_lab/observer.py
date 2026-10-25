@@ -222,7 +222,7 @@ class Observation:
 def install(page: Any, root_selector: str = "#conversation",
             message_selector: Optional[str] = ".message",
             assistant_selector: Optional[str] = None,
-            probe_path: Any = None) -> None:
+            probe_path: Any = None, message_count_baseline: Optional[int] = None) -> None:
     """Instala o observador na página (probe injetado automaticamente)."""
     page.evaluate(load_probe_js() if probe_path is None else probe_path)
     page.evaluate(
@@ -231,6 +231,7 @@ def install(page: Any, root_selector: str = "#conversation",
             "rootSelector": root_selector,
             "messageSelector": message_selector,
             "assistantSelector": assistant_selector,
+            "messageCountBaseline": message_count_baseline,
         },
     )
 

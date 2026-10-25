@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Laboratorio de pesquisa para automacao de chats de IA via navegador.",
     )
     parser.add_argument("--version", action="version", version=f"browserapi-lab {__version__}")
+    parser.add_argument("--config-dir", default=None, help="diretório local das configurações e perfis dedicados")
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor", help="audita o ambiente (Marco 0)")
@@ -40,6 +41,14 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--results", default="results/verify")
     verify.add_argument("--channel", choices=("chromium", "chrome"), default="chromium")
     verify.add_argument("--headed", action="store_true", help="abre navegador visível; requer display")
+    for name, help_text in (("configure", "assistente para escolher navegador e chat"),
+                            ("repair", "corrigir campos apontando na página"),
+                            ("check", "testar um chat com uma mensagem autorizada"),
+                            ("status", "mostrar última verificação, sem enviar nada"),
+                            ("ask", "enviar uma mensagem com confirmação manual")):
+        command = sub.add_parser(name, help=help_text)
+        command.add_argument("name", help="nome salvo do chat, por exemplo meu-gemini")
+    sub.add_parser("chats", help="listar chats configurados, sem abrir navegador")
     return parser
 
 
@@ -78,6 +87,41 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         print(json.dumps(summary, indent=2, ensure_ascii=False))
         return 0 if summary["passed"] else 1
+    if args.command in ("configure", "repair", "check", "status", "ask", "chats"):
+        from .config import ConfigStore, DEFAULT_CONFIG_DIR
+        from .setup import configure, check, status
+        from .session import ProfileBusyError
+        store = ConfigStore(args.config_dir or DEFAULT_CONFIG_DIR)
+        try:
+            if args.command == "chats":
+                print(json.dumps(store.names(), ensure_ascii=False))
+                return 0
+            if args.command == "status":
+                receipt = status(store, args.name)
+            elif args.command in ("configure", "repair"):
+                receipt = configure(store, args.name, repairing=args.command == "repair")
+            else:
+                message = input("Sua mensagem (não será gravada em relatório): ") if args.command == "ask" else None
+                if args.command == "ask" and not message.strip():
+                    print("Mensagem vazia; nada enviado.", file=sys.stderr)
+                    return 2
+                receipt = check(store, args.name, message=message)
+            print(json.dumps(receipt, indent=2, ensure_ascii=False))
+            return 0 if receipt.get("compatible_in_this_run") else 1
+        except ProfileBusyError:
+            print("Perfil em uso. Feche a outra execução deste chat e tente novamente.", file=sys.stderr)
+            return 2
+        except (KeyboardInterrupt, EOFError):
+            print("Cancelado; não retomaremos nem reenviaremos automaticamente.", file=sys.stderr)
+            return 130
+        except (OSError, ValueError, TypeError):
+            print("Configuração inválida ou ausente. Execute configure; se já configurou, use repair. "
+                  "Consulte --help para as opções.", file=sys.stderr)
+            return 2
+        except Exception:
+            print("Não foi possível abrir ou acessar o navegador. Execute doctor, confira a rede e "
+                  "selecione um navegador instalado. Nenhum detalhe privado foi registrado.", file=sys.stderr)
+            return 2
     parser.error(f"comando desconhecido: {args.command}")
     return 2
 

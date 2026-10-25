@@ -64,6 +64,7 @@
     <label>Modo da resposta
       <select id="ctl-mode">
         <option value="normal">normal</option>
+        <option value="contract">contrato JSON de teste</option>
         <option value="pause">pausa artificial (3 s)</option>
         <option value="empty">resposta vazia</option>
         <option value="error">erro genérico</option>
@@ -458,7 +459,14 @@
     st.error = null;
     currentMsg = appendAssistantMessage();
     setStreamingUi(true);
-    pending = tokenize(RESPONSE_HTML);
+    var responseHtml = RESPONSE_HTML;
+    if (cfg.mode === "contract") {
+      var match = text.match(/request_id deve ser ("[^"\n]+")/);
+      var requestId = match ? JSON.parse(match[1]) : 'invalid-request';
+      var contractText = JSON.stringify({request_id:requestId, answer:'browserapi-ok'});
+      responseHtml = '<p>' + contractText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>';
+    }
+    pending = tokenize(responseHtml);
     renderedHtml = "";
     if (cfg.copyEarly) {
       // Copy aparece ANTES da estabilidade: cenário que engana quem só olha sinais de UI

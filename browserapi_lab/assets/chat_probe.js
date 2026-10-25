@@ -479,6 +479,9 @@
       if (assistantSelector) target = document.querySelector(assistantSelector);
       else if (messageSelector) {
         var nodes = document.querySelectorAll(messageSelector);
+        if (typeof opts.messageCountBaseline === 'number' && nodes.length <= opts.messageCountBaseline) {
+          return {text: "", len: 0};
+        }
         target = nodes.length ? nodes[nodes.length - 1] : null;
       }
       if (!target) return { text: "", len: 0 };

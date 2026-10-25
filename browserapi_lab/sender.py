@@ -119,7 +119,7 @@ def control_kind(candidate: ScoredCandidate | Dict[str, Any]) -> str:
 # --------------------------------------------------------------------------
 
 COUNT_USER_MESSAGES = """(args) => {
-  const nodes = document.querySelectorAll('[data-role="user"], .message[data-role="user"]');
+  const nodes = document.querySelectorAll(args.selector || '[data-role="user"], .message[data-role="user"]');
   let ultimo = null;
   if (nodes.length) {
     const body = nodes[nodes.length - 1].querySelector('.body') || nodes[nodes.length - 1];
@@ -129,8 +129,8 @@ COUNT_USER_MESSAGES = """(args) => {
 }"""
 
 
-def user_message_state(page: Any) -> Dict[str, Any]:
-    return page.evaluate(COUNT_USER_MESSAGES, {})
+def user_message_state(page: Any, selector: Optional[str] = None) -> Dict[str, Any]:
+    return page.evaluate(COUNT_USER_MESSAGES, {"selector": selector})
 
 
 def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: str) -> Tuple[bool, str]:
@@ -238,6 +238,7 @@ def send_message(
     delay_ms: int = 0,
     verify_timeout_ms: float = 5_000.0,
     settle_poll_ms: float = 50.0,
+    user_selector: Optional[str] = None,
 ) -> SendResult:
     """Tenta enviar ``text`` combinando preenchimento e ativação até haver evidência.
 
@@ -248,7 +249,7 @@ def send_message(
     started = time.perf_counter()
     locator = locator_for(page, composer)
     kind = control_kind(composer)
-    before = user_message_state(page)
+    before = user_message_state(page, user_selector)
     attempts: List[SendAttempt] = []
 
     for fill_strategy in strategies:
@@ -273,7 +274,7 @@ def send_message(
                 attempt.send_ms = (time.perf_counter() - t1) * 1000.0
 
                 t2 = time.perf_counter()
-                ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms)
+                ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms, user_selector)
                 attempt.verify_ms = (time.perf_counter() - t2) * 1000.0
                 attempt.evidence = evidence
                 attempt.composer_confirmed = composer_evidence(
@@ -310,11 +311,11 @@ def send_message(
 
 
 def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
-                   timeout_ms: float, poll_ms: float) -> Tuple[bool, str]:
+                   timeout_ms: float, poll_ms: float, user_selector: Optional[str] = None) -> Tuple[bool, str]:
     deadline = time.perf_counter() + (timeout_ms / 1000.0)
     last_reason = "sem evidência"
     while time.perf_counter() < deadline:
-        after = user_message_state(page)
+        after = user_message_state(page, user_selector)
         ok, reason = evidence_of_send(before, after, text)
         if ok:
             return True, reason

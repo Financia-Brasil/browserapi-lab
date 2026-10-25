@@ -30,3 +30,7 @@ screenshots/
 # Sistema
 .DS_Store
 *.swp
+
+# Configurações e recibos locais (URLs/seletores podem ser privados)
+.browserapi/
+.chat-config/

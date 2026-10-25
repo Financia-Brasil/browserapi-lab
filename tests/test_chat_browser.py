@@ -1,0 +1,113 @@
+"""Metas de produto testadas contra chat controlado, não sites autenticados."""
+from contextlib import contextmanager
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from _harness import BrowserTestCase
+from browserapi_lab.chat import exchange, preflight
+from browserapi_lab.config import ChatConfig, ConfigStore
+from browserapi_lab.setup import HYPOTHESES, configure, repair_fields, status, pick
+
+
+class TestChatWorkflow(BrowserTestCase):
+    def prepare(self, mode='contract'):
+        config = ChatConfig('test-chat', self.server.url(), provider='fixture',
+                            timeout_ms=4000, stability_ms=400, **HYPOTHESES['fixture'])
+        self.page.goto(config.url, wait_until='load')
+        self.page.evaluate('mode => FakeChat.config({mode, delay:1})', mode)
+        return config
+
+    def test_authorized_health_contract(self):
+        config = self.prepare()
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success')
+        self.assertTrue(result.compatible)
+        self.assertEqual(result.answer, 'browserapi-ok')
+        self.assertIsNotNone(result.timings['ttft_dom_ms'])
+        self.assertLess(result.timings['capture_overhead_ms'], 2500)
+
+    def test_no_authorization_no_send(self):
+        config = self.prepare()
+        self.assertEqual(exchange(self.page, config, health_check=True).status, 'not_authorized')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_draft_not_overwritten(self):
+        config = self.prepare()
+        self.page.locator('#composer').fill('private draft')
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'draft_present')
+        self.assertEqual(self.page.locator('#composer').input_value(), 'private draft')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_old_answer_does_not_confirm_new_response(self):
+        config = self.prepare('empty')
+        config.timeout_ms = 500
+        self.page.locator('[data-role=assistant] .body').evaluate("el => el.textContent = 'old answer'")
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'timeout')
+
+    def test_broken_selector_repair_then_success(self):
+        config = self.prepare()
+        config.composer = '#missing'
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'composer_missing')
+        answers = iter(['s', 'n', 'n', 'n'])
+        repair_fields(self.page, config, ask=lambda _: next(answers), tell=lambda *_: None,
+                      picker=lambda *_: '#composer')
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
+
+    def test_blocked_states_and_remedies(self):
+        for mode, expected in (('login', 'login_required'), ('ratelimit', 'rate_limit'), ('error', 'error')):
+            with self.subTest(mode=mode):
+                config = self.prepare(mode)
+                result = exchange(self.page, config, authorized=True, health_check=True)
+                self.assertEqual(result.status, expected)
+                self.assertTrue(result.receipt(config)['action'])
+                self.assertFalse(result.compatible)
+
+    def test_wrong_origin_never_sends(self):
+        config = self.prepare()
+        config.url = 'https://other.example/'
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'wrong_origin')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_ask_returns_markdown_without_health_prompt(self):
+        config = self.prepare('normal')
+        result = exchange(self.page, config, 'Mensagem pública', authorized=True)
+        self.assertEqual(result.status, 'success')
+        self.assertIn('```python', result.answer)
+        self.assertEqual(self.page.evaluate('FakeChat.lastUserMessage()'), 'Mensagem pública')
+
+    def test_configure_wizard_with_explicit_confirmation(self):
+        config = self.prepare()
+        session = self.session
+        page = self.page
+        class WizardSession:
+            def page(self, url):
+                page.goto(url, wait_until='load')
+                page.evaluate("FakeChat.config({mode:'contract',delay:1})")
+                return page
+        @contextmanager
+        def factory(browser):
+            self.assertFalse(browser.headless, 'assistente deve abrir janela visível por padrão')
+            yield WizardSession()
+        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's'])
+        selectors = iter(['#composer', '#send', '[data-role="user"] .body', '[data-role="assistant"] .body'])
+        with tempfile.TemporaryDirectory() as root:
+            store = ConfigStore(root)
+            receipt = configure(store, 'wizard', ask=lambda _: next(answers), tell=lambda *_: None,
+                                session_factory=factory, picker=lambda *_: next(selectors))
+            self.assertTrue(receipt['compatible_in_this_run'], receipt)
+            self.assertEqual(status(store, 'wizard')['status'], 'success')
+            self.assertTrue(store.load('wizard').ready)
+
+    def test_picker_selects_composer_and_prevents_send(self):
+        self.prepare()
+        script = (Path(__file__).parents[1] / 'browserapi_lab/assets/picker.js').read_text()
+        self.page.evaluate(script, 'campo de mensagem')
+        self.page.locator('#composer').click()
+        self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#composer')
+        self.page.evaluate(script, 'botão Enviar')
+        self.page.locator('#send').click()
+        self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#send')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+        self.assertEqual(self.page.locator('#__browserapi_picker').count(), 0)

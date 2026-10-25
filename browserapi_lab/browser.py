@@ -40,6 +40,7 @@ class BrowserConfig:
     profile: str = "default"
     profiles_root: str | Path = "profiles"
     channel: Optional[str] = None          # None = chromium gerenciado; "chrome" = sistema
+    executable_path: Optional[str] = None
     headless: bool = True
     slow_mo_ms: int = 0
     timeout_ms: int = 30_000
@@ -123,6 +124,13 @@ class BrowserSession:
                 viewport=self.config.viewport,
                 locale=self.config.locale,
             )
+            if self.config.channel and self.config.executable_path:
+                raise ValueError("Escolha canal ou executável, não ambos.")
+            if self.config.executable_path:
+                executable = Path(self.config.executable_path).expanduser().resolve()
+                if not executable.is_file() or not os.access(executable, os.X_OK):
+                    raise ValueError("Executável não encontrado ou sem permissão de execução.")
+                launch_kwargs["executable_path"] = str(executable)
             if self.config.channel:
                 launch_kwargs["channel"] = self.config.channel
             browser_type = getattr(self._pw, "chromium")
