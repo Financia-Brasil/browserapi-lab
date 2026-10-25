@@ -270,3 +270,18 @@ chat salvo. O modo CDP só aceita uma aba do chat já aberta. Na ausência dela,
 falha sem new_page, lançamento de Chrome ou fallback de perfil; não presume
 identidade da conta nem lê cookies para deduzi-la. A seleção de contexto/conta
 do Chrome pessoal continua uma limitação externa não homologada.
+
+
+## ADR-018 — Assistente GUI sem salto da etapa de voz e versões explícitas
+
+O usuário reportou ausência da pergunta de voz durante configuração/correção,
+regex HTML inválida no Chrome, favicon 403 e API/task 400. GUI passa sempre pelo
+assistente manual, pergunta presença de voz no campo vazio (Sim/Não), seleciona
+voz só se presente e obrigatoriamente ensina Enviar após digitação humana.
+Não converter isso em envio real nem apagar rascunho da pessoa.
+
+Corrigimos a classe de caracteres HTML para o modo v, favicon público vazio
+com Host validado, mensagens controladas de validação e exibição das versões
+GUI/runtime. Versões diferentes bloqueiam tarefas e consentimentos na GUI,
+sem desativar os mecanismos de segurança do servidor. O diagnóstico não prova
+qual versão o usuário executava nem a causa de cada 400 reportado.

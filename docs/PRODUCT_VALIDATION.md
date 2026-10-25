@@ -209,3 +209,40 @@ identificação/correção universal de perfil pessoal, login Google ou contexto
 que cada versão do Chrome expõe. O `.deb` passou montagem/extração e simulação
 de dependências. Nesta publicação o código do pacote é o mesmo que passou a
 CI; as mudanças posteriores são documentação e instalador gerado.
+
+
+## Pergunta de voz no assistente completo e erros de console — ubuntu5
+
+O relato do usuário levou à remoção do salto da revisão na GUI, à pergunta de
+presença de voz no campo vazio e ao ensino obrigatório de Enviar após digitação
+humana. Corrigiram-se regex HTML moderna e favicon, adicionaram-se mensagens
+seguras de validação e diagnóstico de versões do painel/runtime, sem afrouxar
+autenticação das APIs nem remover 400 de pedidos inválidos.
+
+
+### Evidência ubuntu5
+
+[Actions 40207783784](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40207783784), código `0f2de45`: **SUCCESS, 267 testes em 138,647 s, 1 ignorado**.
+
+O teste de GUI da configuração percorreu presença de voz **Sim**, seleção do
+microfone, digitação simulada pela pessoa e seleção de Enviar antes da
+autorização de uma mensagem. O teste de **Corrigir campos** percorreu presença
+**Não**, remoção de estado de voz antigo, digitação e seleção de Enviar, sem
+enviar mensagem. São janelas/navegadores reais com fixture local e interações
+sintéticas; não uma sessão autenticada do Gemini.
+
+Passaram também validação HTML de nomes válidos/inválidos no Chromium moderno,
+console sem erro de regex/favicons na carga válida, resposta pública vazia do
+favicon com proteção de Host, mensagens controladas dos 400, bloqueio de ações
+quando o runtime é antigo e pacote montado/extraído com simulação de dependências.
+
+A primeira execução, [40207331990](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40207331990), passou pelos novos testes de GUI,
+mas falhou em timeout de um teste legado de CLI. A causa desse timeout não foi
+identificada. Não se aumentou o prazo de produção/teste nem se inseriu reenvio;
+acrescentaram-se verificações do cenário curto da fixture CLI e a bateria
+completa foi executada novamente, com o resultado aprovado acima. Isso não
+prova ausência universal de instabilidade.
+
+O instalador publicado contém o mesmo código de execução validado. As alterações
+seguintes são documentação e o `.deb` gerado. A escolha do perfil pessoal e o
+Google real permanecem fora desta homologação.

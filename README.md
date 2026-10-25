@@ -9,7 +9,8 @@ OpenAI-compatible continua fora do escopo desta etapa.
 Agora há um painel local com botões de configurar, autorizar, testar e corrigir,
 e montagem de instalador `.deb` com entrada no menu. A versão ubuntu4 inclui
 **Selecionar botão de voz**, **Digitar e selecionar Enviar / Enter** e mudança
-explícita de sessão em chats já salvos. Veja o [guia sem terminal](docs/UBUNTU.md).
+explícita de sessão em chats já salvos. A ubuntu5 integra a pergunta de voz
+no assistente completo e mostra as versões da interface e do programa. Veja o [guia sem terminal](docs/UBUNTU.md).
 Alvo inicial: Ubuntu 24.04+ com Python 3.11+. A instalação gráfica no desktop do
 usuário e os sites autenticados ainda não estão homologados; isso não é uma API pronta.
 
