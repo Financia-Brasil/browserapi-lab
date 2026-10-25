@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 import hashlib
 import json
+import re
+from urllib.parse import urlsplit
 import secrets
 import time
 
@@ -10,7 +12,7 @@ from .config import origin
 from .discovery import ScoredCandidate, install_probe
 from .extractor import html_to_markdown, html_to_text
 from .observer import WatchConfig, install, mark_sent, read_ui, wait_for_completion
-from .sender import read_composer, send_message
+from .sender import SendControlUnavailable, read_composer, send_message
 from .validation import response_instruction, select_output
 
 REMEDIES = {
@@ -18,7 +20,8 @@ REMEDIES = {
     'wrong_origin': ('Página diferente da configurada', 'Volte ao chat escolhido; se o site mudou de endereço, refaça configure.'),
     'composer_missing': ('Campo de mensagem não encontrado ou ambíguo', 'Execute repair e clique no campo de mensagem correto.'),
     'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo.'),
-    'send_missing': ('Botão de envio não encontrado ou ambíguo', 'Execute repair e aponte o botão Enviar.'),
+    'send_missing': ('Botão Enviar não ficou disponível com segurança', 'Após preencher, o botão precisa estar visível, habilitado e ser único. Pode ter ficado um rascunho: confira a página antes de tentar de novo. Se necessário, use Corrigir campos.'),
+    'google_login_blocked': ('Google recusou o login neste navegador controlado', 'Não continue o apontamento nem repita o login pelo programa. Não há correção garantida aqui; a proteção do Google não será contornada.'),
     'output_invalid': ('Saída configurada não pôde ser lida', 'Execute repair e aponte uma resposta inteira do assistente.'),
     'send_unconfirmed': ('Envio sem confirmação', 'Confira a conversa manualmente. Não reenviamos para evitar duplicação; repare o campo da mensagem do usuário.'),
     'timeout': ('Resposta não confirmada no prazo', 'Confira a página, conexão e modelo. Se respondeu, repare a seleção de saída; não reenviar automaticamente.'),
@@ -73,7 +76,18 @@ def browser_config(config, root, headless=False):
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
+def google_login_blocked(page):
+    """Reconhece recusa explícita, sem tentar autenticar ou contornar o Google."""
+    if urlsplit(page.url).hostname != 'accounts.google.com':
+        return False
+    notice = page.get_by_text(re.compile(
+        r'(Esse navegador ou app pode não ser seguro|This browser or app may not be secure)', re.I))
+    return any(notice.nth(i).is_visible() for i in range(min(notice.count(), 10)))
+
+
 def preflight(page, config):
+    if google_login_blocked(page):
+        return 'google_login_blocked'
     if not config.ready:
         return 'not_configured'
     if origin(page.url) != origin(config.url):
@@ -82,13 +96,14 @@ def preflight(page, config):
     blocked = read_ui(page, config.root).blocking
     if blocked:
         return blocked
-    for key, failure in (('composer', 'composer_missing'), ('send', 'send_missing')):
-        try:
-            locator = page.locator(getattr(config, key))
-            if locator.count() != 1 or not locator.is_visible():
-                return failure
-        except Exception:
-            return failure
+    try:
+        locator = page.locator(config.composer)
+        if locator.count() != 1 or not locator.is_visible():
+            return 'composer_missing'
+    except Exception:
+        return 'composer_missing'
+    # Em alguns chats, Enviar só existe/aparece depois de digitar.
+    # A validação rigorosa do botão ocorre após preencher, antes de clicar.
     if not page.locator(config.composer).is_editable():
         return 'composer_missing'
     if read_composer(page.locator(config.composer)):
@@ -132,11 +147,24 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         if cancelled and cancelled():
             raise EOFError('Operação interrompida')
         mark_sent(page)
+        def ready_to_activate():
+            deadline = time.monotonic() + min(3, config.timeout_ms / 1000)
+            while True:
+                if cancelled and cancelled():
+                    raise EOFError('Operação interrompida')
+                control = page.locator(config.send)
+                if control.count() == 1 and control.is_visible() and control.is_enabled():
+                    return
+                if time.monotonic() >= deadline:
+                    raise SendControlUnavailable()
+                page.wait_for_timeout(100)
         sent = send_message(page, composer, button, prompt,
                             strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
                             activation=('click_send',), user_selector=config.user,
-                            verify_timeout_ms=min(5000, config.timeout_ms))
+                            verify_timeout_ms=min(5000, config.timeout_ms), before_activate=ready_to_activate)
         if not sent.success:
+            if any(attempt.error == 'SendControlUnavailable' for attempt in sent.attempts):
+                return ChatResult('send_missing')
             return ChatResult('send_unconfirmed')
         def check_cancel(*_):
             if cancelled and cancelled():

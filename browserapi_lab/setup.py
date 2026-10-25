@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 
 from .browser import BrowserSession
-from .chat import ChatResult, browser_config, config_fingerprint, exchange
+from .chat import ChatResult, browser_config, config_fingerprint, exchange, google_login_blocked
 from .config import BROWSERS, ChatConfig, ConfigStore, PROVIDERS, safe_name, safe_url
 from .discovery import collect, rank_candidates
 
@@ -86,6 +86,17 @@ def confirmed(ask, message):
     return ask(message + ' [s/N] ').strip().lower() in ('s', 'sim')
 
 
+def blocked_login_receipt(page, config, store, tell):
+    if not google_login_blocked(page):
+        return None
+    receipt = ChatResult('google_login_blocked').receipt(config)
+    if config.name in store.names():
+        store.save_status(config.name, receipt)
+    tell(receipt['message'])
+    tell(receipt['action'])
+    return receipt
+
+
 def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick,
               initial_config=None, cancelled=None):
     safe_name(name)
@@ -110,9 +121,13 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         url = PROVIDERS[provider] if provider in PROVIDERS else safe_url(ask('URL do chat: ').strip())
         config = ChatConfig(name, url, browser=browser, executable=executable, provider=provider).validate()
     tell('3/5 — Abra o navegador do projeto. Faça login e escolha o modelo manualmente.')
+    tell('Se o Google disser que o navegador não é seguro, interrompa. Não avance ao apontamento; o programa não contorna essa proteção.')
     with session_factory(browser_config(config, store.root)) as session:
         page = session.page(config.url)
         ask('Quando o chat e o modelo estiverem prontos, pressione Enter. ')
+        blocked = blocked_login_receipt(page, config, store, tell)
+        if blocked:
+            return blocked
         suggest(page, config)
         review = repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
         if review:
@@ -138,6 +153,9 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
     with session_factory(browser_config(config, store.root)) as session:
         page = session.page(config.url)
         ask('Faça login e escolha o modelo no navegador; Enter quando estiver pronto. ')
+        blocked = blocked_login_receipt(page, config, store, tell)
+        if blocked:
+            return blocked
         if message is None:
             authorized = confirmed(ask, 'Autoriza UMA mensagem sintética de verificação?')
         else:

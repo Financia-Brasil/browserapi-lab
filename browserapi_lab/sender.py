@@ -228,6 +228,10 @@ def _is_mac(page: Any) -> bool:
 # Orquestração
 # --------------------------------------------------------------------------
 
+class SendControlUnavailable(RuntimeError):
+    """Controle não está pronto após preencher; nenhuma ativação foi feita."""
+
+
 def send_message(
     page: Any,
     composer: ScoredCandidate,
@@ -239,6 +243,7 @@ def send_message(
     verify_timeout_ms: float = 5_000.0,
     settle_poll_ms: float = 50.0,
     user_selector: Optional[str] = None,
+    before_activate: Any = None,
 ) -> SendResult:
     """Tenta enviar ``text`` combinando preenchimento e ativação até haver evidência.
 
@@ -268,6 +273,8 @@ def send_message(
 
                 filled_value = read_composer(locator)
                 t1 = time.perf_counter()
+                if before_activate is not None:
+                    before_activate()
                 # Daqui em diante qualquer falha é ambígua: nunca reenviar.
                 activated = True
                 _activate(page, locator, send_button, kind, activation_strategy)
@@ -291,6 +298,8 @@ def send_message(
                         send_ms=attempt.send_ms,
                         total_ms=(time.perf_counter() - started) * 1000.0,
                     )
+            except EOFError:
+                raise
             except Exception as exc:
                 attempt.error = type(exc).__name__
                 attempt.evidence = "exceção durante a tentativa"

@@ -28,6 +28,68 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertIsNotNone(result.timings['ttft_dom_ms'])
         self.assertLess(result.timings['capture_overhead_ms'], 2500)
 
+    def test_send_hidden_until_composer_input(self):
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const button = document.querySelector('#send');
+            button.style.display = 'none';
+            document.querySelector('#composer').addEventListener('input', () => {
+                button.style.display = '';
+            });
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_send_absent_until_composer_input(self):
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const button = document.querySelector('#send');
+            button.remove();
+            document.querySelector('#composer').addEventListener('input', () => {
+                document.querySelector('#composer-host').append(button);
+            });
+        }""")
+        self.assertIsNone(preflight(self.page, config))
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_ambiguous_send_after_fill_never_clicks_or_retries(self):
+        config = self.prepare()
+        config.timeout_ms = 500
+        self.page.evaluate("""() => {
+            document.querySelector('#composer').addEventListener('input', () => {
+                if (document.querySelectorAll('#send').length === 1)
+                    document.querySelector('#composer-host').append(document.querySelector('#send').cloneNode(true));
+            });
+        }""")
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'send_missing')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+        self.assertTrue(self.page.locator('#composer').input_value())
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'draft_present')
+
+    def test_google_refusal_stops_before_pointing_or_sending(self):
+        config = self.prepare()
+        self.page.route('https://accounts.google.com/**', lambda route: route.fulfill(
+            content_type='text/html', body='<p>Esse navegador ou app pode não ser seguro.</p>'))
+        try:
+            self.page.goto('https://accounts.google.com/fixture')
+            self.assertEqual(preflight(self.page, config), 'google_login_blocked')
+            page = self.page
+            class BlockedSession:
+                def page(self, _url):
+                    return page
+            @contextmanager
+            def factory(_config):
+                yield BlockedSession()
+            with tempfile.TemporaryDirectory() as root, patch('browserapi_lab.setup.repair_fields') as repair:
+                receipt = configure(ConfigStore(root), config.name, initial_config=config,
+                                    session_factory=factory, ask=lambda _: '', tell=lambda _:None)
+                self.assertEqual(receipt['status'], 'google_login_blocked')
+                repair.assert_not_called()
+        finally:
+            self.page.unroute('https://accounts.google.com/**')
+
     def test_no_authorization_no_send(self):
         config = self.prepare()
         self.assertEqual(exchange(self.page, config, health_check=True).status, 'not_authorized')
