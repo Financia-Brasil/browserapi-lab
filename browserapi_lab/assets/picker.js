@@ -24,8 +24,8 @@
     if (!el) return;
     if (role === 'campo de mensagem') el = el.closest('textarea,input,[contenteditable=true]') || el;
     if (role === 'botão Enviar') el = el.closest('button,[role=button]') || el;
-    if (role === 'mensagem do usuário') el = el.closest('user-query,[data-role=user],[data-message-author-role=user]') || el;
-    if (role === 'resposta do assistente') el = el.closest('model-response,[data-role=assistant],[data-message-author-role=assistant]') || el;
+    if (role === 'mensagem do usuário') el = el.closest('.body,.message-content') || el.closest('user-query,[data-role=user],[data-message-author-role=user]') || el;
+    if (role === 'resposta do assistente') el = el.closest('.markdown,.markdown-content,.model-response-text,.body,[data-response-content]') || el.closest('model-response,[data-role=assistant],[data-message-author-role=assistant]') || el;
     // Seletores de mensagem devem capturar todos os turnos, não o ID de um turno antigo.
     let selector;
     const message = ['mensagem do usuário', 'resposta do assistente'].includes(role);
@@ -40,6 +40,16 @@
     if (!selector) {
       const classes = [...el.classList].filter(c => !/^(ng-|css-|sc-)|[0-9a-f]{8,}/i.test(c)).slice(0,3);
       selector = el.tagName.toLowerCase() + classes.map(c => '.' + escape(c)).join('');
+    }
+    if (message) {
+      const author = el.closest('user-query,model-response,[data-role=user],[data-role=assistant],[data-message-author-role]');
+      if (author && author !== el) {
+        let prefix = author.tagName.toLowerCase();
+        for (const attr of ['data-message-author-role', 'data-role']) {
+          if (author.hasAttribute(attr)) { prefix += '[' + attr + '=' + JSON.stringify(author.getAttribute(attr)) + ']'; break; }
+        }
+        selector = prefix + ' ' + selector;
+      }
     }
     if (['html','body','div','span','p'].includes(selector)) {
       banner.textContent = 'Seleção muito genérica. Clique no contêiner da mensagem ou pressione Esc.';

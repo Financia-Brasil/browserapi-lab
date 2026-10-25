@@ -127,6 +127,23 @@ class TestChatWorkflow(BrowserTestCase):
             self.page.evaluate('clearInterval(window.noiseTimer)')
 
 
+    def test_repair_message_containers_by_real_pointing(self):
+        config = self.prepare()
+        self.page.evaluate("FakeChat.send('mensagem de amostra')")
+        self.page.wait_for_function("FakeChat.state().status === 'done'")
+        script = (Path(__file__).parents[1] / 'browserapi_lab/assets/picker.js').read_text()
+        for role, target, key in (('mensagem do usuário', '[data-role=user] .body', 'user'),
+                                  ('resposta do assistente', '[data-role=assistant]:last-child .body', 'assistant')):
+            self.page.evaluate(script, role)
+            self.page.locator(target).click()
+            selected = self.page.evaluate('window.__balPick.selector')
+            setattr(config, key, selected)
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 2)
+
+
+
 class TestCLIRealBrowser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
