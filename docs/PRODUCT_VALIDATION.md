@@ -149,3 +149,35 @@ instalador publicado é idêntico ao desse commit; mudanças seguintes só adici
 documentação, evidências e teste de aviso em inglês (não incluído nessa bateria
 completa). Montagem/extração do pacote e simulação de dependências aprovadas.
 Não houve novo login autenticado no Google nem execução no computador do usuário.
+
+
+## Dois estados do controle e perfil pessoal consentido — ubuntu3
+
+O usuário confirmou que deseja seu perfil pessoal, revisando a regra anterior
+de usar exclusivamente perfil separado. Foi implementada conexão opt-in ao
+Chrome já aberto por CDP com o fluxo de permissão nativo, sem lançar outro
+processo no diretório pessoal, copiar cookies ou usar Node/MCP/extensão.
+A permissão é ampla sobre as abas/contas e exige aviso explícito.
+
+O apontamento gráfico agora oferece rascunho temporário autorizado para expor
+o estado Enviar. Indícios explícitos de microfone impedem seleção/ativação.
+Limites e instruções estão no [guia Ubuntu](UBUNTU.md).
+
+
+### Evidência da versão ubuntu3
+
+[Actions 40157983637](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40157983637), código `8b11752`: **SUCCESS, 257 testes em 124,149 s, 1 ignorado**.
+
+Exercitados com navegador real e fixture: controle que muda de microfone para
+Enviar, recusa de clique em microfone, apontamento real que rejeita voz, rascunho
+temporário (consentido/negado/cancelado), preservação de rascunho anterior e de
+edições, conexão CDP a um processo já aberto, reconexão sem recarregar a página,
+não fechamento do processo/abas e recusa de múltiplas abas do mesmo chat.
+O navegador CDP desse teste é um Chromium temporário controlado, não um perfil
+pessoal real. O diálogo nativo de permissão do Chrome pessoal, disponibilização
+do endpoint em cada versão e a sessão Google do usuário **não foram homologados**.
+Também passaram testes de autorização negada antes de conectar, validação de
+endpoint local/UID/symlink e montagem/extração do `.deb` com simulação de
+dependências Ubuntu 24.04. O pacote publicado contém o mesmo código de execução
+do commit validado; mudanças posteriores desta publicação são documentação e
+artefato de instalação.

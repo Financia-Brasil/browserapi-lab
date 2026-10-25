@@ -112,7 +112,7 @@ sanitizados ficam em `results/ci/<run_id>/`.
 
 ## Segurança e confiabilidade
 
-- Nunca usa o perfil pessoal padrão; perfis persistentes possuem lock cooperativo.
+- Por padrão usa perfil separado com lock cooperativo. A opção experimental de conectar ao Chrome pessoal já aberto exige consentimento explícito; não inicia outro processo no perfil nem copia cookies. Veja [o guia e os riscos de acesso](docs/UBUNTU.md).
 - Não repete automaticamente um envio cuja aceitação seja ambígua.
 - Campo esvaziado é evidência adicional, não prova isolada de envio.
 - Contrato JSON opt-in rejeita saídas antigas e sinaliza múltiplas saídas válidas.

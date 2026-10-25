@@ -48,7 +48,7 @@ reproduzida na fixture, não comprova que explica todo detalhe do site real repo
 
 1. Na primeira vez, clique em **Preparar BrowserAPI** e confirme o download. Isso cria um ambiente privado do usuário e baixa Playwright/Chromium. Requer internet e pelo menos 1,5 GB disponíveis. Não instala Chrome nem Edge.
 2. Escolha o **navegador** e o **chat**. Dê um nome para salvar; use nomes diferentes para navegadores/chats diferentes.
-3. Clique em **Abrir e configurar**. Na outra janela, faça login e escolha o modelo. Seu perfil pessoal não é usado; é normal precisar entrar novamente.
+3. Clique em **Abrir e configurar**. Na outra janela, faça login e escolha o modelo. No modo separado, seu perfil pessoal não é usado e é normal precisar entrar novamente. No modo Chrome já aberto, a conexão é autorizada e reutiliza a sessão existente.
 4. Volte ao painel e clique em **Continuar**. Responda aos botões e, se solicitado, aponte os campos na janela do chat. Não é preciso escrever seletores ou código. Esc cancela o apontamento atual.
 5. Autorize **uma mensagem de teste**, somente se estiver de acordo. O resultado aparece no painel, com uma orientação caso não funcione.
 
@@ -108,3 +108,72 @@ instalador publicado é idêntico ao desse commit; mudanças seguintes só adici
 documentação, evidências e teste de aviso em inglês (não incluído nessa bateria
 completa). Montagem/extração do pacote e simulação de dependências aprovadas.
 Não houve novo login autenticado no Google nem execução no computador do usuário.
+
+
+## Versão 0.1.0+ubuntu3 — microfone/Enviar e Chrome já logado
+
+### Apontar o estado correto do botão
+
+Alguns chats exibem microfone enquanto o campo está vazio e Enviar quando há
+texto. Ao usar **Corrigir campos**, o painel pode pedir autorização para escrever
+um rascunho temporário **sem enviar**. Aceitando, aponte o botão no estado
+**Enviar**. O rascunho do programa é removido apenas se continuar idêntico; se
+você alterar o texto, sua edição é preservada. Um rascunho que já existia não é
+substituído. Esc cancela o apontamento. Enter fica bloqueado durante a seleção.
+O programa recusa controles explicitamente identificados como microfone/voz,
+tanto no apontamento quanto antes do clique de envio. Isso não é reconhecimento
+universal de qualquer ícone ou de toda mudança possível do site.
+
+### Usar seu Chrome pessoal já aberto e logado — experimental
+
+Esta opção atende ao pedido explícito do usuário de usar o perfil cotidiano,
+sem copiar cookies e sem lançar outra instância sobre seu diretório de perfil.
+
+1. Use Chrome **144 ou mais recente**, já aberto no perfil/conta desejados.
+2. No Chrome, abra **chrome://inspect/#remote-debugging** e habilite a opção de
+   depuração remota. Se a opção não existir, não tente flags/comandos para forçar.
+3. Deixe somente uma aba do chat escolhido aberta nesse navegador, na conta e
+   no modelo desejados. Outras abas não serão fechadas pelo programa.
+4. No formulário BrowserAPI, escolha **Meu Chrome já aberto e logado**, deixe
+   Google Chrome selecionado e salve com **outro nome**, por exemplo `gemini-logado`.
+5. Leia o aviso de acesso e autorize a conexão no painel e no pedido do próprio
+   Chrome. Só aceite se confiar no programa. A autorização de conexão é distinta
+   da autorização para enviar uma mensagem.
+
+**Acesso sensível:** a permissão CDP pode acessar todas as abas e contas desse
+navegador, não apenas Gemini. O código do BrowserAPI opera apenas a aba do chat
+selecionado; isso não é uma barreira de isolamento imposta pelo Chrome. Não
+autorize uma conexão de programa desconhecido. Desative a depuração remota na
+mesma tela quando não quiser mais permitir solicitações.
+
+O programa conecta ao processo existente e desconecta sem fechar o Chrome, suas
+abas ou sua sessão. Se houver mais de uma aba do chat, ele pede para deixar
+somente uma em vez de escolher arbitrariamente. Não lê/exporta cookies. A
+conexão usa somente o endpoint local publicado pelo próprio Chrome do usuário.
+Algumas versões/instalações não disponibilizam esse endpoint; nesse caso falha
+com orientação, sem tentar outras portas nem contornar a permissão.
+
+Referência oficial do fluxo de consentimento do Chrome 144+: https://developer.chrome.com/blog/chrome-devtools-mcp-debug-your-browser-session
+O projeto usa Playwright diretamente para CDP; não instala MCP/Node nem extensões.
+A conexão nativa com permissão no Chrome pessoal e o login real no Google ainda
+precisam de validação nesse desktop. Testar CDP em navegador controlado não prova
+que o login funcionará nem que toda versão do Chrome disponibiliza esse modo.
+
+
+### Evidência da versão ubuntu3
+
+[Actions 40157983637](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40157983637), código `8b11752`: **SUCCESS, 257 testes em 124,149 s, 1 ignorado**.
+
+Exercitados com navegador real e fixture: controle que muda de microfone para
+Enviar, recusa de clique em microfone, apontamento real que rejeita voz, rascunho
+temporário (consentido/negado/cancelado), preservação de rascunho anterior e de
+edições, conexão CDP a um processo já aberto, reconexão sem recarregar a página,
+não fechamento do processo/abas e recusa de múltiplas abas do mesmo chat.
+O navegador CDP desse teste é um Chromium temporário controlado, não um perfil
+pessoal real. O diálogo nativo de permissão do Chrome pessoal, disponibilização
+do endpoint em cada versão e a sessão Google do usuário **não foram homologados**.
+Também passaram testes de autorização negada antes de conectar, validação de
+endpoint local/UID/symlink e montagem/extração do `.deb` com simulação de
+dependências Ubuntu 24.04. O pacote publicado contém o mesmo código de execução
+do commit validado; mudanças posteriores desta publicação são documentação e
+artefato de instalação.

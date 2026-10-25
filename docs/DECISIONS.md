@@ -231,3 +231,26 @@ instalação gráfica nesse desktop ainda não homologada.
 Evidência: Actions 40153757793, código 7020ea3, 244 testes/1 ignorado sem
 falhas; montagem e simulação de dependências aprovadas. Não equivale a
 compatibilidade autenticada com Gemini/LMArena ou serviço OpenAI pronto.
+
+
+## ADR-016 — Botão em dois estados e sessão pessoal consentida
+
+O usuário identificou o estado microfone/Enviar e solicitou explicitamente seu
+perfil pessoal já logado (escolha confirmada no painel de perguntas). Essa é uma
+revisão do escopo anterior que proibia o perfil pessoal. Não passamos a lançar
+Playwright sobre o diretório pessoal: conectamos ao Chrome existente apenas
+por endpoint publicado pelo próprio Chrome, depois de consentimento explícito.
+Chrome 144+ oferece um fluxo nativo com permissão; sua disponibilidade nessa
+máquina não é garantida. Nenhuma cópia de cookies, porta remota configurável ou
+contorno de bloqueio Google é introduzido. O CDP tem acesso amplo às abas/contas:
+o risco é explicado antes da conexão. Falha em ambiguidade de abas/contextos;
+a desconexão não fecha o navegador pessoal.
+
+Para apontar Enviar no estado correto, a GUI oferece rascunho temporário
+explicitamente autorizado. A seleção continua sem enviar. A limpeza só remove
+o rascunho próprio idêntico e preserva conteúdo anterior/edições do usuário.
+Indícios explícitos de voz/microfone impedem selecionar/ativar o controle.
+
+A integração permanece stdlib + Playwright, sem MCP/Node/extensão. A validação
+sintética CDP não substitui homologar o diálogo de permissão e a sessão real do
+Chrome pessoal. Não prometer login ou compatibilidade autenticada com Gemini.
