@@ -23,9 +23,14 @@ from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS
 from .session import ProfileBusyError, ProfileLock
 from .setup import configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
+from .version import APP_VERSION
 
 ASSETS = Path(__file__).parent / 'assets'
 DATA_DIR = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'browserapi-lab'
+
+
+class PanelInputError(ValueError):
+    """Mensagem controlada, segura para exibição; nunca exceção bruta do navegador/SO."""
 
 
 def playwright_ready():
@@ -128,10 +133,10 @@ class Panel:
     def reply(self, identifier, value):
         with self.condition:
             if not self.prompt or self.prompt['id'] != identifier or self.answer is not None:
-                raise ValueError('Pergunta encerrada. Aguarde a próxima etapa.')
+                raise PanelInputError('Pergunta encerrada. Aguarde a próxima etapa.')
             allowed = ('s', 'n') if self.prompt['kind'] == 'yesno' else ('',)
             if value not in allowed:
-                raise ValueError('Resposta inválida.')
+                raise PanelInputError('Resposta inválida.')
             self.answer = value
             self.condition.notify_all()
 
@@ -143,31 +148,37 @@ class Panel:
     def submit(self, payload):
         allowed = ('configure', 'check', 'repair', 'ask', 'doctor', 'prepare', 'point_voice', 'point_send', 'use_existing')
         if payload.get('operation') not in allowed:
-            raise ValueError('Ação inválida.')
+            raise PanelInputError('Este painel pediu uma ação não reconhecida. Reabra BrowserAPI pelo menu; se você atualizou, reinicie para encerrar a versão antiga.')
         if payload['operation'] == 'configure':
             provider = payload.get('provider')
             if provider not in (*PROVIDERS, 'custom'):
-                raise ValueError('Escolha um chat válido.')
-            config = ChatConfig(payload.get('name'), PROVIDERS.get(provider) or payload.get('url'),
-                                provider=provider, browser=payload.get('browser'), session_mode=payload.get('session_mode', 'dedicated')).validate()
+                raise PanelInputError('Escolha um chat válido.')
+            try:
+                config = ChatConfig(payload.get('name'), PROVIDERS.get(provider) or payload.get('url'),
+                                    provider=provider, browser=payload.get('browser'), session_mode=payload.get('session_mode', 'dedicated')).validate()
+            except (ValueError, TypeError):
+                raise PanelInputError('Confira o nome (letras, números, hífen ou sublinhado), a URL sem parâmetros e a sessão. Chrome já aberto exige Google Chrome.') from None
             # Formulário básico só oferece produtos conhecidos. Não executa caminho recebido via HTTP.
             if config.browser not in ('chrome', 'chromium', 'msedge'):
-                raise ValueError('Escolha Chrome, Chromium ou Edge.')
+                raise PanelInputError('Escolha Chrome, Chromium ou Edge.')
             if config.name in self.store.names():
-                raise ValueError('Nome já salvo. Use Corrigir campos ou escolha outro nome.')
+                raise PanelInputError('Nome já salvo. Use Corrigir campos ou escolha outro nome.')
             task = (payload['operation'], config)
         elif payload['operation'] in ('check', 'repair', 'ask', 'point_voice', 'point_send', 'use_existing'):
-            config = self.store.load(payload.get('name'))
+            try:
+                config = self.store.load(payload.get('name'))
+            except (ValueError, TypeError, OSError):
+                raise PanelInputError('Chat salvo não encontrado ou configuração inválida. Atualize o painel e selecione um chat existente.') from None
             if payload['operation'] == 'ask' and (not isinstance(payload.get('message'), str)
                                                 or not payload['message'].strip()
                                                 or len(payload['message']) > 32000):
-                raise ValueError('Digite uma mensagem de até 32 mil caracteres.')
+                raise PanelInputError('Digite uma mensagem de até 32 mil caracteres.')
             task = (payload['operation'], (config.name, payload.get('message')))
         else:
             task = (payload['operation'], None)
         with self.lock:
             if self.phase in ('running', 'waiting'):
-                raise ValueError('Uma operação já está em andamento.')
+                raise PanelInputError('Uma operação já está em andamento.')
             self.cancelled.clear()
             self.phase = 'running'
             self.prompt = None
@@ -187,7 +198,7 @@ class Panel:
                                   'checked_at': previous.get('checked_at')})
                 except (OSError, ValueError, TypeError):
                     chats.append({'name': name, 'compatible': False, 'invalid': True})
-            return {'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
+            return {'version': APP_VERSION, 'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
                     'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready()}
 
     def _worker(self):
@@ -298,6 +309,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.host_ok():
             return self.send(403, {'error': 'Origem não autorizada.'})
+        if self.path == '/favicon.ico':
+            return self.send(204, b'', 'image/x-icon')
         static = {'/': ('panel.html', 'text/html; charset=utf-8'),
                   '/panel.js': ('panel.js', 'text/javascript; charset=utf-8'),
                   '/panel.css': ('panel.css', 'text/css; charset=utf-8')}
@@ -331,6 +344,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self.send(404, {'error': 'Ação não encontrada.'})
             self.send(200, {'ok': True})
+        except PanelInputError as error:
+            self.send(400, {'error': str(error)})
         except (ValueError, TypeError, OSError):
             self.send(400, {'error': 'Não foi possível iniciar. Confira os dados ou aguarde a operação atual terminar.'})
 

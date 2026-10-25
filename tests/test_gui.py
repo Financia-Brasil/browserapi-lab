@@ -71,6 +71,32 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.request('/panel.css', token=False)[0], 200)
         self.assertEqual(self.server.server_address[0], '127.0.0.1')
 
+    def test_favicon_public_empty_and_runtime_versioned_assets(self):
+        from browserapi_lab.version import APP_VERSION
+        code, _, data = self.request('/favicon.ico', token=False)
+        self.assertEqual((code,data),(204,b''))
+        self.assertEqual(json.loads(self.request()[2])['version'],APP_VERSION)
+        for path in ('/','/panel.js'):
+            body = self.request(path, token=False)[2]
+            self.assertIn(APP_VERSION.encode(),body)
+            self.assertNotIn(b'__BROWSERAPI_PANEL_VERSION__',body)
+        self.assertEqual(self.request('/favicon.ico', host='evil.example')[0],403)
+
+    def test_task_400_explains_reason_without_exposing_paths(self):
+        code, _, body = self.request('/api/task',method='POST',body={'operation':'point_send','name':'missing'})
+        self.assertEqual(code,400)
+        self.assertIn('Chat salvo não encontrado',json.loads(body)['error'])
+        self.assertNotIn(self.tmp.name,body.decode())
+        self.store.save(ChatConfig('saved','https://example.com'))
+        code, _, body = self.request('/api/task',method='POST',body={'operation':'configure','name':'saved','provider':'gemini','browser':'chrome'})
+        self.assertEqual(code,400)
+        self.assertIn('Nome já salvo',json.loads(body)['error'])
+        with self.panel.lock:
+            self.panel.phase = 'running'
+        code, _, body = self.request('/api/task',method='POST',body={'operation':'doctor'})
+        self.assertEqual(code,400)
+        self.assertIn('operação já está em andamento',json.loads(body)['error'])
+
     def test_auth_host_and_origin_rejected(self):
         self.assertEqual(self.request(token=False)[0], 403)
         self.assertEqual(self.request(token='wrong')[0], 403)

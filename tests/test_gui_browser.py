@@ -8,11 +8,13 @@ from unittest.mock import patch
 from _harness import BrowserTestCase, FixtureServer, REPO_ROOT
 from browserapi_lab.config import ChatConfig, ConfigStore
 from browserapi_lab.gui import LocalServer, Panel
-from browserapi_lab.setup import HYPOTHESES
+from browserapi_lab.setup import HYPOTHESES, configure as real_configure
+from browserapi_lab.browser import BrowserSession
 
 
 class TestGraphicalJourney(BrowserTestCase):
     def setUp(self):
+        self.training_audit = []
         self.temp = tempfile.TemporaryDirectory()
         fixture_dir = Path(self.temp.name) / 'fixture'
         fixture_dir.mkdir()
@@ -54,6 +56,113 @@ class TestGraphicalJourney(BrowserTestCase):
         self.store.save(config)
         return config
 
+    def configure_with_simulated_person(self, store, name, **kwargs):
+        # Fixtures locais apenas. O worker possui a página; o teste não a usa em outra thread.
+        audit = self.training_audit
+        current = []
+        class TrainingSession(BrowserSession):
+            def page(self, url=None):
+                page = super().page(url)
+                current[:] = [page]
+                page.evaluate("""() => {
+                    const composer = document.querySelector('#composer');
+                    const send = document.querySelector('#send');
+                    send.setAttribute('aria-label','Microfone');
+                    composer.addEventListener('input', () => send.setAttribute('aria-label', composer.value ? 'Enviar mensagem' : 'Microfone'));
+                    let previous;
+                    window.__fixtureTeaching = [];
+                    setInterval(() => {
+                        if (window.__balTypingCleanup && !composer.value) {
+                            composer.value = 'rascunho digitado na fixture';
+                            composer.dispatchEvent(new Event('input', {bubbles:true}));
+                        }
+                        const banner = document.querySelector('#__browserapi_picker');
+                        if (banner && banner !== previous) {
+                            previous = banner;
+                            const text = banner.textContent;
+                            if (text.includes('botão de comando de voz')) {
+                                window.__fixtureTeaching.push('voice'); send.click();
+                            } else if (text.includes('botão Enviar')) {
+                                window.__fixtureTeaching.push('send'); send.click(); window.__fixtureSelected = true;
+                            }
+                        }
+                        if (window.__fixtureClearAllowed && window.__fixtureSelected && !window.__balTypingCleanup && !window.__balPickerCleanup && composer.value === 'rascunho digitado na fixture') {
+                            window.__fixtureTeaching.push('removed-own-draft');
+                            composer.value = ''; composer.dispatchEvent(new Event('input',{bubbles:true}));
+                        }
+                    }, 80);
+                }""")
+                return page
+        original_ask = kwargs['ask']
+        def ask(text):
+            if 'Apontar mensagem do usuário' in text:
+                current[0].evaluate('window.__fixtureClearAllowed = true')
+            if 'Autoriza UMA' in text:
+                audit.append(current[0].evaluate('({count:FakeChat.state().user_messages,steps:window.__fixtureTeaching})'))
+            return original_ask(text)
+        kwargs['ask'] = ask
+        return real_configure(store,name,session_factory=TrainingSession,**kwargs)
+
+    def skip_other_message_fields(self):
+        self.wait_question('Apontar mensagem do usuário')
+        self.page.click('#no')
+        self.wait_question('Apontar resposta do assistente')
+        self.page.click('#no')
+
+    def test_pattern_and_console_have_no_invalid_regex_or_favicon_error(self):
+        failures = []
+        self.page.on('pageerror', lambda error: failures.append(str(error)))
+        self.page.on('console', lambda message: failures.append(message.text) if message.type == 'error' else None)
+        self.open_panel()
+        for value in ('chat-voz','chat_voz','Gemini2'):
+            self.page.fill('#name',value)
+            self.assertTrue(self.page.locator('#name').evaluate('el => el.checkValidity()'))
+        for value in ('-chat','chat com espaço','chat!'):
+            self.page.fill('#name',value)
+            self.assertFalse(self.page.locator('#name').evaluate('el => el.checkValidity()'))
+        self.assertEqual(self.page.request.get(self.http.url+'/favicon.ico').status,204)
+        self.assertEqual(failures,[])
+
+    def test_runtime_mismatch_blocks_actions_instead_of_old_task_400(self):
+        self.seed()
+        original = self.panel.snapshot
+        def old_state():
+            state = original()
+            state.pop('version')
+            return state
+        with patch.object(self.panel,'snapshot',side_effect=old_state):
+            self.open_panel()
+            self.assertIn('versões diferentes',self.page.locator('#error').inner_text())
+            self.assertTrue(self.page.locator('#configure').is_disabled())
+            self.assertTrue(self.page.get_by_role('button',name='Corrigir campos').is_disabled())
+            self.assertIn('antigo',self.page.locator('#version-status').inner_text())
+
+    def test_repair_always_asks_voice_presence_then_type_and_send(self):
+        config = self.seed()
+        config.voice = '#send'
+        config.voice_signature = 'a'*64
+        self.store.save(config)
+        self.open_panel()
+        with patch('browserapi_lab.gui.configure',side_effect=self.configure_with_simulated_person):
+            self.page.get_by_role('button',name='Corrigir campos').click()
+            self.wait_question('Quando o chat')
+            self.page.click('#continue')
+            self.wait_question('Apontar campo de mensagem')
+            self.page.click('#no')
+            self.wait_question('Com o campo de mensagem vazio')
+            self.page.click('#no')  # sem voz: remove estado negativo antigo
+            self.wait_question('digite algo SEM enviar')
+            self.page.click('#continue')
+            self.skip_other_message_fields()
+            self.wait_question('Autoriza UMA')
+            self.page.click('#no')
+            self.wait_phase('Concluído')
+        self.assertEqual(self.store.load('saved').voice,'')
+        self.assertEqual(self.store.load('saved').voice_signature,'')
+        self.assertEqual(self.store.status('saved')['status'],'not_authorized')
+        self.assertEqual(self.training_audit[0]['count'],0)
+        self.assertIn('send',self.training_audit[0]['steps'])
+
     def test_buttons_voice_send_and_switch_saved_session_are_visible(self):
         self.seed()
         self.open_panel()
@@ -70,7 +179,7 @@ class TestGraphicalJourney(BrowserTestCase):
 
     def test_full_form_configure_then_health_check(self):
         # A hipótese é local à fixture, não evidência de compatibilidade com sites reais.
-        with patch.dict(HYPOTHESES, {'custom':HYPOTHESES['fixture']}):
+        with patch.dict(HYPOTHESES, {'custom':HYPOTHESES['fixture']}), patch('browserapi_lab.gui.configure',side_effect=self.configure_with_simulated_person):
             self.open_panel()
             self.page.select_option('#browser','chromium')
             self.page.select_option('#provider','custom')
@@ -80,14 +189,22 @@ class TestGraphicalJourney(BrowserTestCase):
             self.wait_question('Quando o chat')
             self.assertFalse((self.store.root/'graphical.status.json').exists())
             self.page.click('#continue')
-            self.wait_question('Revisar os campos')
+            self.wait_question('Apontar campo de mensagem')
             self.page.click('#no')
+            self.wait_question('Com o campo de mensagem vazio')
+            self.page.click('#yes')
+            self.wait_question('digite algo SEM enviar')
+            self.page.click('#continue')
+            self.skip_other_message_fields()
             self.wait_question('Autoriza UMA')
             self.assertFalse((self.store.root/'graphical.status.json').exists())
             self.page.click('#yes')
             self.wait_phase('Concluído')
             receipt = self.store.status('graphical')
             self.assertTrue(receipt['compatible_in_this_run'], receipt)
+            self.assertEqual(self.training_audit[0]['count'],0)
+            self.assertIn('voice',self.training_audit[0]['steps'])
+            self.assertIn('send',self.training_audit[0]['steps'])
             self.assertIn('Funcionou neste teste',self.page.locator('#result-title').inner_text())
             self.assertEqual(receipt['browser'],'chromium')
             self.page.get_by_role('button', name='Testar agora').click()

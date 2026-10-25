@@ -99,7 +99,15 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
     for key, label in labels.items():
         if fields is not None and key not in fields:
             continue
-        if ask(f'Apontar {label}? [s/N] ').strip().lower() in ('s', 'sim'):
+        if key == 'voice':
+            should_pick = confirmed(ask, 'Com o campo de mensagem vazio, este chat tem um botão de entrada de texto por voz (microfone)?')
+            if not should_pick:
+                config.voice = ''
+                config.voice_signature = ''
+                tell('Chat sem entrada por voz: nenhum estado de microfone será usado.')
+        else:
+            should_pick = (key == 'send' and manual_send) or confirmed(ask, f'Apontar {label}?')
+        if should_pick:
             preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
             temporary = False
             composer = None
@@ -196,7 +204,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         if blocked:
             return blocked
         suggest(page, config)
-        review = repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
+        review = manual_send or repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
         if review:
             tell('4/5 — Aponte os controles sem escrever CSS ou JavaScript.')
             repair_fields(page, config, ask, tell, picker, draft_preview=draft_preview, manual_send=manual_send)

@@ -1,4 +1,5 @@
 'use strict';
+const PANEL_VERSION = '0.1.0+ubuntu5';
 const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('browserapi-token') || '';
 if (token) sessionStorage.setItem('browserapi-token', token);
@@ -16,15 +17,16 @@ async function api(path, body) {
   if (!response.ok) throw new Error(value.error || 'Não foi possível concluir.');
   return value;
 }
+function incompatible() { return !!state && state.version !== PANEL_VERSION; }
 function busy() { return pending || !!(state && ['running','waiting'].includes(state.phase)); }
 function controls() {
-  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy();
-  $('ask').disabled = busy() || !selected;
+  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy() || incompatible();
+  $('ask').disabled = busy() || incompatible() || !selected;
   $('cancel').disabled = !busy();
-  for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy();
+  for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy() || incompatible();
 }
 async function task(operation, extra = {}) {
-  if (busy()) return;
+  if (busy() || incompatible()) return;
   pending = true; controls(); error('');
   try { await api('task', {operation, ...extra}); await refresh(); }
   catch (err) { error(err.message); }
@@ -56,7 +58,7 @@ $('cancel').onclick = async () => {
   try { await api('cancel', {}); } catch (err) { error(err.message); }
 };
 async function reply(value) {
-  if (!state || !state.prompt) return;
+  if (!state || !state.prompt || incompatible()) return;
   for (const id of ['yes','no','continue']) $(id).disabled = true;
   try { await api('reply', {id: state.prompt.id, value}); await refresh(); }
   catch (err) { error(err.message); }
@@ -92,6 +94,8 @@ function renderChats(chats) {
 function render(value) {
   const oldPrompt = state?.prompt?.id;
   state = value;
+  $('version-status').textContent = `Painel ${PANEL_VERSION} · programa ${state.version || 'antigo (sem identificação)'}`;
+  if (incompatible()) error('O painel e o programa em execução são de versões diferentes. Não prossiga com os campos. Reinicie o computador e abra BrowserAPI pelo menu; fechar só a aba não encerra a versão antiga.');
   const labels = {idle:'Pronto',running:'Trabalhando…',waiting:'Aguardando você',done:'Concluído',error:'Precisa de atenção',cancelled:'Interrompido'};
   $('phase').textContent = labels[state.phase] || state.phase;
   $('prepared-label').textContent = state.prepared ? 'Componente de automação disponível. O teste confirma o navegador.' : 'Primeira vez? Clique em Preparar BrowserAPI.';
@@ -104,7 +108,7 @@ function render(value) {
     $('yes').hidden = $('no').hidden = !yesno;
     $('continue').hidden = yesno;
     if (oldPrompt !== state.prompt.id) {
-      for (const id of ['yes','no','continue']) $(id).disabled = false;
+      for (const id of ['yes','no','continue']) $(id).disabled = incompatible();
       $('continue').textContent = /digite algo/i.test(state.prompt.text) ? 'Já digitei · Selecionar Enviar' : 'Continuar';
       (yesno ? $('yes') : $('continue')).focus();
     }

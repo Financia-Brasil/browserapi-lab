@@ -3,11 +3,12 @@
 import argparse
 from pathlib import Path
 import shutil
+import runpy
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.1.0+ubuntu4'
+VERSION = runpy.run_path(str(ROOT / 'browserapi_lab/version.py'))['APP_VERSION']
 DEPENDENCIES = (
     'python3 (>= 3.11), python3-venv, xdg-utils, '
     'libnss3, libnspr4, libatk1.0-0t64 | libatk1.0-0, '
