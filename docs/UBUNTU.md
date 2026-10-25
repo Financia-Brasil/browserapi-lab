@@ -4,6 +4,12 @@ Interface experimental para configuração e teste de chats. **Não é um servi�
 
 ## Instalar e abrir
 
+Você informou **Linux Lite 7.2**. Essa distribuição usa a base Ubuntu 24.04,
+portanto é um alvo esperado para este pacote, mas não foi instalada uma sessão
+Linux Lite completa para homologação. O teste automatizado usa Ubuntu 24.04.
+Fonte da base: https://www.linuxliteos.com/forums/showthread.php?tid=9251
+
+
 - Destinado inicialmente ao **Ubuntu 24.04 ou mais recente, com Python 3.11+**. Ubuntu 22.04 padrão não atende ao requisito; não atualize o Python do sistema para contornar isso.
 - Baixe o arquivo **BrowserAPI-Ubuntu.deb** entregue junto com esta orientação.
 - Abra o arquivo com o **instalador de pacotes** do Ubuntu e escolha **Instalar**. O Ubuntu pode pedir a senha de administrador na janela do próprio sistema. Nunca envie essa senha no chat.

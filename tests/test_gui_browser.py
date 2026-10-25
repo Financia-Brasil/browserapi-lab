@@ -17,7 +17,10 @@ class TestGraphicalJourney(BrowserTestCase):
         fixture_dir = Path(self.temp.name) / 'fixture'
         fixture_dir.mkdir()
         source = (REPO_ROOT/'fixtures/fake_chat.html').read_text()
-        source = source.replace('</body>', '<script>FakeChat.config({mode:"contract",delay:1});</script></body>')
+        # Não substituir </body> dentro da string srcdoc do iframe: isso
+        # introduziria um </script> no meio do JavaScript original.
+        before, after = source.rsplit('</body>', 1)
+        source = before + '<script>FakeChat.config({mode:"contract",delay:1});</script></body>' + after
         (fixture_dir/'fake_chat.html').write_text(source)
         self.chat_server = FixtureServer(fixture_dir).start()
         self.store = ConfigStore(Path(self.temp.name) / 'config')
