@@ -103,6 +103,113 @@ class TestChatWorkflow(BrowserTestCase):
         finally:
             self.page.unroute('https://accounts.google.com/**')
 
+    def test_microphone_is_never_activated(self):
+        config = self.prepare()
+        self.page.locator('#send').evaluate("el => el.setAttribute('aria-label', 'Microfone')")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'send_is_microphone')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_same_button_changes_from_microphone_to_send(self):
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const button = document.querySelector('#send');
+            button.setAttribute('aria-label', 'Microfone');
+            document.querySelector('#composer').addEventListener('input', () => {
+                button.setAttribute('aria-label', 'Enviar mensagem');
+            });
+        }""")
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_preview_draft_cleanup_preserves_changes_and_never_sends(self):
+        for case in ('normal', 'existing', 'changed', 'cancelled', 'denied'):
+            with self.subTest(case=case):
+                config = self.prepare()
+                if case == 'existing':
+                    self.page.locator('#composer').fill('rascunho pessoal')
+                replies = iter(['n','s','n' if case == 'denied' else 's','n','n'])
+                def selecting(page, role):
+                    self.assertEqual(role, 'botão Enviar')
+                    value = page.locator('#composer').input_value()
+                    if case in ('normal','changed','cancelled'):
+                        self.assertIn('rascunho temporário', value)
+                    if case == 'existing':
+                        self.assertEqual(value, 'rascunho pessoal')
+                    if case == 'denied':
+                        self.assertEqual(value, '')
+                    if case == 'changed':
+                        page.locator('#composer').fill('edição pessoal')
+                    if case == 'cancelled':
+                        raise EOFError()
+                    return '#send'
+                try:
+                    repair_fields(self.page, config, ask=lambda _:next(replies),tell=lambda _:None,
+                                  picker=selecting,draft_preview=True)
+                    self.assertNotEqual(case,'cancelled')
+                except EOFError:
+                    self.assertEqual(case,'cancelled')
+                expected = {'existing':'rascunho pessoal','changed':'edição pessoal'}.get(case,'')
+                self.assertEqual(self.page.locator('#composer').input_value(), expected)
+                self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_real_picker_rejects_voice_then_selects_send(self):
+        self.prepare()
+        self.page.evaluate("""() => {
+            const button = document.querySelector('#send');
+            button.setAttribute('aria-label', 'Microfone');
+            setTimeout(() => button.click(), 150);
+            setTimeout(() => {
+                window.__voiceRejected = window.__balPick === null;
+                button.setAttribute('aria-label', 'Enviar mensagem');
+                button.click();
+            }, 350);
+        }""")
+        self.assertEqual(pick(self.page, 'botão Enviar'), '#send')
+        self.assertTrue(self.page.evaluate('window.__voiceRejected'))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
+
+    def test_connect_existing_browser_does_not_close_or_reload_it(self):
+        import subprocess
+        import time
+        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        from browserapi_lab.existing_chrome import endpoint
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            profile = home/'google-chrome'
+            process = subprocess.Popen([self.session._pw.chromium.executable_path,
+                '--headless=new','--no-sandbox','--remote-debugging-port=0',
+                '--user-data-dir='+str(profile),'about:blank'], stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.monotonic()+20
+                while not (profile/'DevToolsActivePort').exists():
+                    self.assertIsNone(process.poll())
+                    self.assertLess(time.monotonic(),deadline)
+                    self.page.wait_for_timeout(100)
+                address = endpoint(home)
+                config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True)
+                with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
+                    with BrowserSession(config) as attached:
+                        page = attached.page(self.server.url())
+                        page.evaluate("window.__fixtureSession = 'still-here'")
+                        other = attached.context.new_page()
+                        other.goto('data:text/html,unrelated-fixture')
+                    self.assertIsNone(process.poll(), 'Desconectar não deve fechar navegador pessoal')
+                    with BrowserSession(config) as attached:
+                        page = attached.page(self.server.url())
+                        self.assertEqual(page.evaluate('window.__fixtureSession'),'still-here')
+                        self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
+                        attached.new_page(self.server.url())
+                        with self.assertRaises(RuntimeError):
+                            attached.page(self.server.url())
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+
     def test_no_authorization_no_send(self):
         config = self.prepare()
         self.assertEqual(exchange(self.page, config, health_check=True).status, 'not_authorized')

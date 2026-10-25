@@ -18,7 +18,7 @@ async function api(path, body) {
 }
 function busy() { return pending || !!(state && ['running','waiting'].includes(state.phase)); }
 function controls() {
-  for (const id of ['configure','prepare','doctor','browser','provider','name','url']) $(id).disabled = busy();
+  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy();
   $('ask').disabled = busy() || !selected;
   $('cancel').disabled = !busy();
   for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy();
@@ -36,7 +36,12 @@ $('configuration').addEventListener('submit', event => {
     error('Esse nome já está salvo. Use Corrigir campos, ou escolha outro nome para um novo navegador/chat.'); return;
   }
   task('configure', {name: $('name').value, browser: $('browser').value,
-                     provider: $('provider').value, url: $('url').value});
+                     provider: $('provider').value, session_mode: $('session-mode').value, url: $('url').value});
+});
+$('session-mode').addEventListener('change', () => {
+  const personal = $('session-mode').value === 'existing_chrome';
+  $('personal-warning').hidden = !personal;
+  if (personal) { $('browser').value = 'chrome'; $('name').value = 'meu-chrome-logado'; }
 });
 $('provider').addEventListener('change', () => {
   $('url-box').hidden = $('provider').value !== 'custom';
@@ -75,7 +80,7 @@ function renderChats(chats) {
     label.append(radio, document.createTextNode(chat.name)); box.append(label);
     const info = document.createElement('small');
     info.textContent = chat.invalid ? 'Configuração inválida. Crie outra com um nome diferente.' :
-      `${chat.browser} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
+      `${chat.browser}${chat.session_mode === 'existing_chrome' ? ' · Chrome pessoal conectado' : ' · perfil separado'} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
     box.append(info);
     for (const [caption, operation] of [['Testar agora','check'],['Corrigir campos','repair']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';

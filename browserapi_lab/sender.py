@@ -232,6 +232,15 @@ class SendControlUnavailable(RuntimeError):
     """Controle não está pronto após preencher; nenhuma ativação foi feita."""
 
 
+class VoiceControlUnavailable(SendControlUnavailable):
+    """Não ativar um controle explicitamente identificado como gravação/voz."""
+
+
+def is_voice_control(locator):
+    from pathlib import Path
+    return locator.evaluate((Path(__file__).parent / 'assets' / 'voice_control.js').read_text())
+
+
 def send_message(
     page: Any,
     composer: ScoredCandidate,

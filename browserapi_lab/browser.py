@@ -48,6 +48,7 @@ class BrowserConfig:
     extra_args: Tuple[str, ...] = ()
     locale: str = "pt-BR"
     screenshot_on_error: bool = False
+    attach_existing_chrome: bool = False
 
     @property
     def profile_dir(self) -> Path:
@@ -100,7 +101,7 @@ class BrowserSession:
 
     def __init__(self, config: Optional[BrowserConfig] = None) -> None:
         self.config = config or BrowserConfig()
-        self._lock = ProfileLock(self.config.profile_dir)
+        self._lock = ProfileLock(Path(self.config.profiles_root) / '.attached-chrome') if self.config.attach_existing_chrome else ProfileLock(self.config.profile_dir)
         self._pw: Any = None
         self._context: Any = None
         self._started_at: Optional[float] = None
@@ -116,6 +117,16 @@ class BrowserSession:
         self._lock.acquire()
         try:
             self._pw = sync_playwright().start()
+            if self.config.attach_existing_chrome:
+                from .existing_chrome import endpoint, ExistingChromeError
+                self._attached_browser = self._pw.chromium.connect_over_cdp(endpoint(), timeout=60000)
+                contexts = self._attached_browser.contexts
+                if len(contexts) != 1:
+                    raise ExistingChromeError('A conexão não identificou um único contexto do Chrome. Desconectamos sem fechar seu navegador.')
+                self._context = contexts[0]
+                self._context.set_default_timeout(self.config.timeout_ms)
+                self._cold_start_ms = (time.perf_counter() - started) * 1000
+                return self
             launch_kwargs: Dict[str, Any] = dict(
                 user_data_dir=str(self.config.profile_dir),
                 headless=self.config.headless,
@@ -157,6 +168,17 @@ class BrowserSession:
         """Aba quente: reaproveita a primeira aba existente (briefing: aba única)."""
         ctx = self.context
         pages = ctx.pages
+        if self.config.attach_existing_chrome:
+            from .config import origin
+            from .existing_chrome import ExistingChromeError
+            if not url:
+                raise ValueError('Informe o chat escolhido antes de acessar abas pessoais.')
+            matches = [p for p in pages if p.url.startswith(('http://', 'https://')) and origin(p.url) == origin(url)]
+            if len(matches) > 1:
+                raise ExistingChromeError('Mais de uma aba do chat está aberta. Deixe somente uma para conectar; nenhuma aba foi fechada pelo programa.')
+            if matches:
+                return matches[0]
+            return self.new_page(url)
         page = pages[0] if pages else ctx.new_page()
         if url and page.url != url:
             page.goto(url, wait_until="domcontentloaded")
@@ -170,7 +192,7 @@ class BrowserSession:
 
     def close(self) -> None:
         try:
-            if self._context is not None:
+            if self._context is not None and not self.config.attach_existing_chrome:
                 self._context.close()
         finally:
             self._context = None

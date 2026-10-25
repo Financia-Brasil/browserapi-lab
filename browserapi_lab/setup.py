@@ -35,6 +35,8 @@ def browser_options():
 
 def pick(page, role, cancelled=None):
     script = (Path(__file__).parent / 'assets' / 'picker.js').read_text(encoding='utf-8')
+    voice_script = (Path(__file__).parent / 'assets' / 'voice_control.js').read_text()
+    page.evaluate('window.__balVoiceControl = (' + voice_script + ');')
     page.evaluate(script, role)
     try:
         if cancelled is None:
@@ -49,7 +51,7 @@ def pick(page, role, cancelled=None):
         value = page.evaluate('window.__balPick')
         return None if value.get('cancelled') else value.get('selector')
     finally:
-        page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); }')
+        page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); delete window.__balVoiceControl; }')
 
 
 def suggest(page, config):
@@ -68,17 +70,45 @@ def suggest(page, config):
     return config
 
 
-def repair_fields(page, config, ask=input, tell=print, picker=pick):
+def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False):
     labels = {'composer': 'campo de mensagem', 'send': 'botão Enviar',
               'user': 'mensagem do usuário', 'assistant': 'resposta do assistente'}
     tell('Reparo por apontamento. Tenha uma mensagem sua e uma resposta visíveis na conversa.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
     for key, label in labels.items():
         if ask(f'Apontar {label}? [s/N] ').strip().lower() in ('s', 'sim'):
-            selected = picker(page, label)
-            if selected:
-                setattr(config, key, selected)
-                tell('Seleção atualizada.')
+            preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
+            temporary = False
+            composer = None
+            try:
+                if key == 'send' and draft_preview and confirmed(ask,
+                        'Autoriza um rascunho temporário SEM enviar, para o microfone virar Enviar?'):
+                    from .sender import read_composer
+                    composer = page.locator(config.composer)
+                    if composer.count() != 1 or not composer.is_editable():
+                        tell('Primeiro aponte um campo de mensagem editável. Nenhum rascunho foi escrito.')
+                        continue
+                    if read_composer(composer):
+                        tell('Seu rascunho será preservado. Aponte o botão Enviar, não o microfone.')
+                    else:
+                        temporary = True
+                        composer.fill(preview)
+                        tell('Rascunho temporário preenchido. Aponte Enviar; nada será enviado pelo apontamento.')
+                selected = picker(page, label)
+                if selected:
+                    setattr(config, key, selected)
+                    tell('Seleção atualizada.')
+            finally:
+                if temporary:
+                    try:
+                        from .sender import read_composer
+                        if composer.count() == 1 and read_composer(composer) == preview:
+                            composer.fill('')
+                            tell('Rascunho temporário removido.')
+                        else:
+                            tell('O conteúdo mudou; não apagamos sua edição. Confira o campo antes do teste.')
+                    except Exception:
+                        tell('Não foi possível conferir a remoção do rascunho temporário. Confira a janela do chat.')
     return config.validate()
 
 
@@ -97,8 +127,17 @@ def blocked_login_receipt(page, config, store, tell):
     return receipt
 
 
+def authorize_session(config, ask, tell):
+    if config.session_mode != 'existing_chrome':
+        return True
+    tell('Modo perfil pessoal: use Chrome 144+ já aberto e habilite Depuração remota em chrome://inspect/#remote-debugging.')
+    tell('O Chrome pedirá sua permissão. Esta conexão pode acessar todas as abas/contas desse navegador; só prossiga se confiar no programa. Não copiamos cookies nem abrimos outro processo no seu perfil.')
+    tell('Deixe somente uma aba do chat escolhido aberta. O programa não fecha o Chrome ao desconectar.')
+    return confirmed(ask, 'Autoriza conectar ao Chrome pessoal já aberto com esse acesso?')
+
+
 def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick,
-              initial_config=None, cancelled=None):
+              initial_config=None, cancelled=None, draft_preview=False):
     safe_name(name)
     if initial_config is not None:
         config = initial_config.validate()
@@ -120,6 +159,8 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
             raise ValueError('Chat inválido.')
         url = PROVIDERS[provider] if provider in PROVIDERS else safe_url(ask('URL do chat: ').strip())
         config = ChatConfig(name, url, browser=browser, executable=executable, provider=provider).validate()
+    if not authorize_session(config, ask, tell):
+        return ChatResult('not_authorized').receipt(config)
     tell('3/5 — Abra o navegador do projeto. Faça login e escolha o modelo manualmente.')
     tell('Se o Google disser que o navegador não é seguro, interrompa. Não avance ao apontamento; o programa não contorna essa proteção.')
     with session_factory(browser_config(config, store.root)) as session:
@@ -132,7 +173,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         review = repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
         if review:
             tell('4/5 — Aponte os controles sem escrever CSS ou JavaScript.')
-            repair_fields(page, config, ask, tell, picker)
+            repair_fields(page, config, ask, tell, picker, draft_preview=draft_preview)
         else:
             tell('4/5 — Detectamos hipóteses de controles. O teste abaixo verificará se funcionam.')
         store.save(config)
@@ -150,6 +191,8 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
 
 def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None):
     config = store.load(name)
+    if not authorize_session(config, ask, tell):
+        return ChatResult('not_authorized').receipt(config)
     with session_factory(browser_config(config, store.root)) as session:
         page = session.page(config.url)
         ask('Faça login e escolha o modelo no navegador; Enter quando estiver pronto. ')

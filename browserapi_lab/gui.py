@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS
 from .session import ProfileBusyError, ProfileLock
 from .setup import configure, check, pick, status
+from .existing_chrome import ExistingChromeError
 
 ASSETS = Path(__file__).parent / 'assets'
 DATA_DIR = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'browserapi-lab'
@@ -147,7 +148,7 @@ class Panel:
             if provider not in (*PROVIDERS, 'custom'):
                 raise ValueError('Escolha um chat válido.')
             config = ChatConfig(payload.get('name'), PROVIDERS.get(provider) or payload.get('url'),
-                                provider=provider, browser=payload.get('browser')).validate()
+                                provider=provider, browser=payload.get('browser'), session_mode=payload.get('session_mode', 'dedicated')).validate()
             # Formulário básico só oferece produtos conhecidos. Não executa caminho recebido via HTTP.
             if config.browser not in ('chrome', 'chromium', 'msedge'):
                 raise ValueError('Escolha Chrome, Chromium ou Edge.')
@@ -180,7 +181,7 @@ class Panel:
                 try:
                     config = self.store.load(name)
                     previous = status(self.store, name)
-                    chats.append({'name': name, 'provider': config.provider, 'browser': config.browser,
+                    chats.append({'name': name, 'provider': config.provider, 'browser': config.browser, 'session_mode': config.session_mode,
                                   'compatible': previous.get('compatible_in_this_run', False),
                                   'checked_at': previous.get('checked_at')})
                 except (OSError, ValueError, TypeError):
@@ -207,10 +208,10 @@ class Panel:
                               'Não foi encontrado um ambiente gráfico. Abra o programa na sua sessão normal do Ubuntu.')
                 elif operation == 'configure':
                     self.receipt = configure(self.store, value.name, initial_config=value,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), **common)
+                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), draft_preview=True, **common)
                 elif operation == 'repair':
                     self.receipt = configure(self.store, value[0], repairing=True,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), **common)
+                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), draft_preview=True, **common)
                 else:
                     self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None, **common)
                 with self.lock:
@@ -219,6 +220,10 @@ class Panel:
                 self.tell('Operação interrompida. Isso não desfaz mensagens que já foram enviadas.')
                 with self.lock:
                     self.phase = 'cancelled'
+            except ExistingChromeError as error:
+                self.tell(str(error))
+                with self.lock:
+                    self.phase = 'error'
             except ProfileBusyError:
                 self.tell('Este perfil já está aberto. Feche a outra janela do projeto que usa o mesmo chat e tente de novo.')
                 with self.lock:

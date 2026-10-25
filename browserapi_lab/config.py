@@ -59,12 +59,17 @@ class ChatConfig:
     timeout_ms: int = 60000
     stability_ms: int = 1200
     schema_version: int = 1
+    session_mode: str = 'dedicated'
 
     def validate(self):
         safe_name(self.name)
         safe_url(self.url)
         if self.browser not in BROWSERS or self.provider not in (*PROVIDERS, 'custom', 'fixture'):
             raise ValueError('Navegador ou provedor inválido.')
+        if self.session_mode not in ('dedicated', 'existing_chrome'):
+            raise ValueError('Modo de sessão inválido.')
+        if self.session_mode == 'existing_chrome' and self.browser != 'chrome':
+            raise ValueError('Sessão existente exige Google Chrome.')
         if self.schema_version != 1 or type(self.schema_version) is not int:
             raise ValueError('Versão da configuração incompatível.')
         if self.browser == 'custom':

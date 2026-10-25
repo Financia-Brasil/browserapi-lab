@@ -15,6 +15,7 @@
     delete window.__balPickerCleanup;
   };
   const key = ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); }
     if (ev.key === 'Escape') { window.__balPick = {cancelled:true}; cleanup(); }
   };
   const escape = value => CSS.escape(value);
@@ -24,6 +25,10 @@
     if (!el) return;
     if (role === 'campo de mensagem') el = el.closest('textarea,input,[contenteditable=true]') || el;
     if (role === 'botão Enviar') el = el.closest('button,[role=button]') || el;
+    if (role === 'botão Enviar' && window.__balVoiceControl && window.__balVoiceControl(el)) {
+      banner.textContent = 'Esse controle é de microfone/voz. Aponte Enviar com um rascunho no campo, ou Esc para cancelar.';
+      return;
+    }
     if (role === 'mensagem do usuário') el = el.closest('.body,.message-content') || el.closest('user-query,[data-role=user],[data-message-author-role=user]') || el;
     if (role === 'resposta do assistente') el = el.closest('.markdown,.markdown-content,.model-response-text,.body,[data-response-content]') || el.closest('model-response,[data-role=assistant],[data-message-author-role=assistant]') || el;
     // Seletores de mensagem devem capturar todos os turnos, não o ID de um turno antigo.

@@ -12,7 +12,7 @@ from .config import origin
 from .discovery import ScoredCandidate, install_probe
 from .extractor import html_to_markdown, html_to_text
 from .observer import WatchConfig, install, mark_sent, read_ui, wait_for_completion
-from .sender import SendControlUnavailable, read_composer, send_message
+from .sender import SendControlUnavailable, VoiceControlUnavailable, is_voice_control, read_composer, send_message
 from .validation import response_instruction, select_output
 
 REMEDIES = {
@@ -21,6 +21,7 @@ REMEDIES = {
     'composer_missing': ('Campo de mensagem não encontrado ou ambíguo', 'Execute repair e clique no campo de mensagem correto.'),
     'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo.'),
     'send_missing': ('Botão Enviar não ficou disponível com segurança', 'Após preencher, o botão precisa estar visível, habilitado e ser único. Pode ter ficado um rascunho: confira a página antes de tentar de novo. Se necessário, use Corrigir campos.'),
+    'send_is_microphone': ('O controle selecionado ainda é de voz/microfone', 'Nenhum clique foi feito. Use Corrigir campos e autorize o rascunho temporário para apontar o botão no estado Enviar. Confira o rascunho deixado antes de outra tentativa.'),
     'google_login_blocked': ('Google recusou o login neste navegador controlado', 'Não continue o apontamento nem repita o login pelo programa. Não há correção garantida aqui; a proteção do Google não será contornada.'),
     'output_invalid': ('Saída configurada não pôde ser lida', 'Execute repair e aponte uma resposta inteira do assistente.'),
     'send_unconfirmed': ('Envio sem confirmação', 'Confira a conversa manualmente. Não reenviamos para evitar duplicação; repare o campo da mensagem do usuário.'),
@@ -73,6 +74,7 @@ def browser_config(config, root, headless=False):
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     return BrowserConfig(profile=config.name, profiles_root=root / 'profiles', headless=headless,
                          channel=config.browser if config.browser in ('chrome', 'msedge') else None,
+                         attach_existing_chrome=config.session_mode == 'existing_chrome',
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
@@ -154,6 +156,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                     raise EOFError('Operação interrompida')
                 control = page.locator(config.send)
                 if control.count() == 1 and control.is_visible() and control.is_enabled():
+                    if is_voice_control(control):
+                        raise VoiceControlUnavailable()
                     return
                 if time.monotonic() >= deadline:
                     raise SendControlUnavailable()
@@ -163,6 +167,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                             activation=('click_send',), user_selector=config.user,
                             verify_timeout_ms=min(5000, config.timeout_ms), before_activate=ready_to_activate)
         if not sent.success:
+            if any(attempt.error == 'VoiceControlUnavailable' for attempt in sent.attempts):
+                return ChatResult('send_is_microphone')
             if any(attempt.error == 'SendControlUnavailable' for attempt in sent.attempts):
                 return ChatResult('send_missing')
             return ChatResult('send_unconfirmed')
