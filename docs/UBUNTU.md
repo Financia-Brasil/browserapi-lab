@@ -48,3 +48,14 @@ Configurações, recibos e perfis exclusivos ficam em `~/.config/browserapi-lab/
 Fechar a aba do painel não encerra o processo local: abrir BrowserAPI de novo no menu reabre o mesmo painel, sem duplicar o perfil. Sair da sessão Ubuntu encerra os processos. A remoção do pacote pelo gerenciador gráfico não apaga seus dados pessoais automaticamente.
 
 O teste sintético não equivale a homologar Gemini/LMArena autenticados, todos os navegadores, todas as versões do Ubuntu ou comparar com uma API real. Sites externos podem mudar. Nenhuma instalação foi feita no computador do usuário nesta sessão.
+
+## O que foi verificado nesta entrega
+
+- Código validado: `7020ea3`; [Actions 40153757793](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40153757793), aprovado.
+- Ubuntu 24.04 em CI: **244 testes, 127,108 s, sem falhas, 1 ignorado** (cenário de ausência de navegador, pois havia navegador instalado).
+- Formulário real no painel, segundo Chromium visível sob Xvfb, autorização por botões, configuração e nova verificação com recibo de sucesso na fixture. Cancelamento antes da autorização, negativa, proteção contra HTML executável e orientação de reparo também exercitados.
+- Instalador montado, extraído e importado fora do checkout; dependências resolvidas em **simulação**, sem instalar o pacote no sistema.
+- Evidência sanitizada: `results/ci/40153757793/gui-flow.json`.
+- Preparação com downloads na máquina do usuário, instalação gráfica via gerenciador do Linux Lite e sessão autenticada Gemini/LMArena **não foram executadas** aqui. Não se afirma homologação completa desse desktop.
+
+As primeiras execuções encontraram uma falha no preparo da página sintética do teste: uma substituição de HTML também alterava a string interna do iframe. A fixture foi corrigida, sem relaxar a validação de URLs ou a exigência de autorização. A execução final acima passou.

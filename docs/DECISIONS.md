@@ -207,3 +207,27 @@ reutilização/virtualização de um único nó) é limitação explícita desta
 Dados locais usam arquivos 0600. Relatórios públicos não contêm texto de conversa,
 cookies, URL privada ou seletores. O estado de aprovação e limites está em
 `PRODUCT_VALIDATION.md`; nenhum gate externo é fechado por simulação local.
+
+
+## ADR-015 — Painel local e instalação Ubuntu com consentimento
+
+Após o usuário informar que não sabia utilizar o terminal, o fluxo CLI não
+pode ser apresentado como facilidade de uso comprovada. Acrescentamos painel
+HTTP stdlib servido exclusivamente em loopback, token de sessão no fragmento
+inicial, autenticação por cabeçalho, verificação de Host/Origin, CSP, corpo
+limitado e conteúdo dinâmico como texto. Não é o servidor de API adiado.
+Um worker serializado mantém os objetos Playwright na mesma thread. As
+perguntas do assistente usam identificadores únicos, respostas por botões e
+consentimento antes de cada envio. Login/modelo permanecem manuais.
+
+O `.deb` só contém aplicação e launcher: sem scripts privilegiados nem rede
+durante instalação. Dependências do sistema são declaradas ao gerenciador de
+pacotes. A preparação opcional, explicitamente confirmada, cria venv no
+usuário e baixa Playwright fixado/Chromium, sem sudo ou shell. O launcher
+recusa execução como root. Python 3.11+ permanece obrigatório. Alvo verificado
+em CI Ubuntu 24.04, mesma base do Linux Lite 7.2 informado pelo usuário;
+instalação gráfica nesse desktop ainda não homologada.
+
+Evidência: Actions 40153757793, código 7020ea3, 244 testes/1 ignorado sem
+falhas; montagem e simulação de dependências aprovadas. Não equivale a
+compatibilidade autenticada com Gemini/LMArena ou serviço OpenAI pronto.

@@ -111,3 +111,18 @@ Em ambiente com navegador visível do usuário: configurar um chat, aguardar log
 e seleção manual do modelo, autorizar uma mensagem, conferir o recibo sanitizado,
 validar reparo e repetir medições. Sem essa etapa, trocar os estados acima por
 "SIM em chats reais" seria uma afirmação sem prova.
+
+
+## Complemento: janela Ubuntu / Linux Lite 7.2
+
+O usuário não conseguia usar o fluxo de terminal. Foi acrescentado um painel
+local com formulário e botões, worker único, confirmação explícita de envio,
+reparo por apontamento e instalador `.deb` com entrada no menu. Isso substitui
+a orientação de uso por comandos, não as limitações externas anteriores.
+
+Validação do código `7020ea3`: [Actions 40153757793](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40153757793),
+**SUCCESS, 244 testes em 127,108 s, 1 ignorado**, Ubuntu 24.04; evidência `b013f0d`.
+Jornada gráfica completa e consentimento testados com Chromium real e chat
+sintético. A montagem/extração do `.deb` e a simulação de dependências passaram.
+Não houve instalação num desktop Linux Lite, nem login em site real.
+Veja [instruções sem terminal e limites do instalador](UBUNTU.md).
