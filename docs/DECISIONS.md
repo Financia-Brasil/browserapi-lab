@@ -183,3 +183,27 @@ composers fora da região recente ainda podem exigir adaptação.
 
 Pin de Playwright 1.64.1 para reproduzir esta rodada. Mudança de versão exige novo CI.
 A aprovação final é a do relatório `VALIDATION_REPORT.md`, não uso contínuo 24/7.
+
+## ADR-014 — Metas de produto, configuração assistida e homologação por execução
+
+As seis perguntas do usuário passam a ser gates em `PRODUCT_GOALS.md`.
+Implementar seleção de navegador/chat, diagnóstico, recibos e apontamento visual
+não autoriza declarar Gemini/LMArena homologados sem autenticação real assistida.
+
+`configure/check/repair/ask` abrem janela visível, usam perfil dedicado por chat,
+aguardam login e modelo manuais, e exigem consentimento para uma mensagem.
+`status/chats` não abrem navegador nem enviam nada. Não há importação de perfil
+pessoal, autoidentificação de modelos, bypass ou retry de envio ambíguo.
+
+O check usa nonce, mensagem nova do usuário e resposta nova com contrato JSON;
+conteúdo é mantido somente em memória, nunca no recibo. Configuração alterada
+invalida recibos. Budget de captura e funcionalidade são resultados separados;
+comparação de API fica `not_measured` até existir evidência equivalente.
+
+Escolha e reparo de campos são por apontamento no navegador, com seletores
+relativos ao autor para isolar conteúdo. A hipótese de turnos novos (em vez de
+reutilização/virtualização de um único nó) é limitação explícita desta versão.
+
+Dados locais usam arquivos 0600. Relatórios públicos não contêm texto de conversa,
+cookies, URL privada ou seletores. O estado de aprovação e limites está em
+`PRODUCT_VALIDATION.md`; nenhum gate externo é fechado por simulação local.

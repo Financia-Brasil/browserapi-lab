@@ -4,6 +4,26 @@ Laboratório Python/Linux para validar automação de chats por navegador real.
 **Não é ainda uma API para agentes nem um serviço 24/7.** O aplicativo final
 OpenAI-compatible continua fora do escopo desta etapa.
 
+## Novo: escolher e verificar um chat
+
+As [seis metas de produto](docs/PRODUCT_GOALS.md) agora orientam o desenvolvimento.
+O assistente permite selecionar navegador e chat, fazer login/escolher modelo
+manualmente, testar uma mensagem autorizada e reparar campos por apontamento:
+
+```bash
+browserapi-lab configure meu-gemini
+browserapi-lab check meu-gemini
+browserapi-lab status meu-gemini
+browserapi-lab repair meu-gemini
+browserapi-lab ask meu-gemini
+```
+
+Leia o [guia de configuração e reparo](docs/CHAT_GUIDE.md) e o
+[estado de validação das metas](docs/PRODUCT_VALIDATION.md). Compatibilidade só é
+confirmada para a execução testada; Gemini/LMArena continuam aguardando homologação
+assistida real. Seletores conhecidos são hipóteses, não garantia. Não há promessa
+medida de equivalência a API ou funcionamento contínuo.
+
 ## O que já é executável
 
 Um comando abre um Chromium real, serve uma fixture HTTP local, descobre os
