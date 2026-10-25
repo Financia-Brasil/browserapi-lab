@@ -1,0 +1,247 @@
+test_chromium_available_e_boleano (test_browser.TestDeteccaoDeAmbiente.test_chromium_available_e_boleano) ... ok
+test_motivo_quando_indisponivel (test_browser.TestDeteccaoDeAmbiente.test_motivo_quando_indisponivel) ... skipped 'há navegador neste ambiente'
+test_pid_inexistente (test_browser.TestRss.test_pid_inexistente) ... ok
+test_rss_do_proprio_processo (test_browser.TestRss.test_rss_do_proprio_processo) ... ok
+test_aba_quente_e_reutilizada (test_browser.TestSessao.test_aba_quente_e_reutilizada) ... ok
+test_abre_e_fecha (test_browser.TestSessao.test_abre_e_fecha) ... ok
+test_arvore_de_processos_tem_rss (test_browser.TestSessao.test_arvore_de_processos_tem_rss) ... ok
+test_persistencia_apos_fechamento (test_browser.TestSessao.test_persistencia_apos_fechamento)
+E-SESS-1: o perfil sobrevive a fechar e reabrir. ... ok
+test_segundo_processo_e_recusado (test_browser.TestSessao.test_segundo_processo_e_recusado)
+E-SESS-3: nunca dois processos no mesmo user_data_dir. ... ok
+test_check_status_and_ask_from_real_cli (test_chat_browser.TestCLIRealBrowser.test_check_status_and_ask_from_real_cli) ... ok
+test_ask_returns_markdown_without_health_prompt (test_chat_browser.TestChatWorkflow.test_ask_returns_markdown_without_health_prompt) ... ok
+test_authorized_health_contract (test_chat_browser.TestChatWorkflow.test_authorized_health_contract) ... ok
+test_blocked_states_and_remedies (test_chat_browser.TestChatWorkflow.test_blocked_states_and_remedies) ... ok
+test_broken_selector_repair_then_success (test_chat_browser.TestChatWorkflow.test_broken_selector_repair_then_success) ... ok
+test_configure_wizard_with_explicit_confirmation (test_chat_browser.TestChatWorkflow.test_configure_wizard_with_explicit_confirmation) ... ok
+test_draft_not_overwritten (test_chat_browser.TestChatWorkflow.test_draft_not_overwritten) ... ok
+test_no_authorization_no_send (test_chat_browser.TestChatWorkflow.test_no_authorization_no_send) ... ok
+test_old_answer_does_not_confirm_new_response (test_chat_browser.TestChatWorkflow.test_old_answer_does_not_confirm_new_response) ... ok
+test_picker_selects_composer_and_prevents_send (test_chat_browser.TestChatWorkflow.test_picker_selects_composer_and_prevents_send) ... ok
+test_unrelated_page_mutations_do_not_block_completion (test_chat_browser.TestChatWorkflow.test_unrelated_page_mutations_do_not_block_completion) ... ok
+test_wrong_origin_never_sends (test_chat_browser.TestChatWorkflow.test_wrong_origin_never_sends) ... ok
+test_ten_checks_same_chat_with_capture_budget (test_chat_browser.TestProductHealthBenchmark.test_ten_checks_same_chat_with_capture_budget) ... ok
+test_bad_iterations (test_cli.TestCLI.test_bad_iterations) ... ok
+test_help (test_cli.TestCLI.test_help) ... ok
+test_missing_browser_is_not_success (test_cli.TestCLI.test_missing_browser_is_not_success) ... ok
+test_percentile (test_cli.TestCLI.test_percentile) ... ok
+test_success_and_failure_exit_codes (test_cli.TestCLI.test_success_and_failure_exit_codes) ... ok
+test_changed_config_invalidates_status (test_config.TestConfig.test_changed_config_invalidates_status) ... ok
+test_invalid_values (test_config.TestConfig.test_invalid_values) ... ok
+test_no_path_traversal (test_config.TestConfig.test_no_path_traversal) ... ok
+test_not_tested_is_not_compatible (test_config.TestConfig.test_not_tested_is_not_compatible) ... ok
+test_performance_is_separate_from_functional_compatibility (test_config.TestConfig.test_performance_is_separate_from_functional_compatibility) ... ok
+test_receipt_never_contains_answer (test_config.TestConfig.test_receipt_never_contains_answer) ... ok
+test_roundtrip_and_permissions (test_config.TestConfig.test_roundtrip_and_permissions) ... ok
+test_two_chats_have_independent_configuration_and_profiles (test_config.TestConfig.test_two_chats_have_independent_configuration_and_profiles) ... ok
+test_unknown_schema_or_config_shape (test_config.TestConfig.test_unknown_schema_or_config_shape) ... ok
+test_unsafe_urls_rejected (test_config.TestConfig.test_unsafe_urls_rejected) ... ok
+test_ambiguidade_penalizada (test_discovery.TestComposer.test_ambiguidade_penalizada) ... ok
+test_classe_dinamica_e_penalizada (test_discovery.TestComposer.test_classe_dinamica_e_penalizada) ... ok
+test_contenteditable_e_forte (test_discovery.TestComposer.test_contenteditable_e_forte) ... ok
+test_contribuicoes_sao_explicaveis (test_discovery.TestComposer.test_contribuicoes_sao_explicaveis) ... ok
+test_invisivel_penalizado (test_discovery.TestComposer.test_invisivel_penalizado) ... ok
+test_nth_e_penalizado (test_discovery.TestComposer.test_nth_e_penalizado) ... ok
+test_seletor_dependente_de_idioma_penalizado (test_discovery.TestComposer.test_seletor_dependente_de_idioma_penalizado) ... ok
+test_shadow_e_iframe_chegam_ao_topo_com_pequena_penalidade (test_discovery.TestComposer.test_shadow_e_iframe_chegam_ao_topo_com_pequena_penalidade) ... ok
+test_textarea_vence_decoy_de_busca (test_discovery.TestComposer.test_textarea_vence_decoy_de_busca) ... ok
+test_drift_detecta_mudancas (test_discovery.TestHintsEDrift.test_drift_detecta_mudancas) ... ok
+test_drift_sem_mudanca (test_discovery.TestHintsEDrift.test_drift_sem_mudanca) ... ok
+test_hint_conhecido_ajuda_mas_nao_decide (test_discovery.TestHintsEDrift.test_hint_conhecido_ajuda_mas_nao_decide)
+Hipótese de site: bônus, nunca contrato (ADR-005). ... ok
+test_hint_nao_salva_candidato_ruim (test_discovery.TestHintsEDrift.test_hint_nao_salva_candidato_ruim) ... ok
+test_ranking_vazio (test_discovery.TestHintsEDrift.test_ranking_vazio) ... ok
+test_relatorio_de_ranking (test_discovery.TestHintsEDrift.test_relatorio_de_ranking) ... ok
+test_assistant_vs_user_por_data_role (test_discovery.TestMensagens.test_assistant_vs_user_por_data_role) ... ok
+test_classe_indicativa_conta_sem_data_role (test_discovery.TestMensagens.test_classe_indicativa_conta_sem_data_role) ... ok
+test_ultima_mensagem_recebe_bonus (test_discovery.TestMensagens.test_ultima_mensagem_recebe_bonus) ... ok
+test_botao_desabilitado_penalizado (test_discovery.TestSendButton.test_botao_desabilitado_penalizado) ... ok
+test_botao_enviar_vence_botao_generico (test_discovery.TestSendButton.test_botao_enviar_vence_botao_generico) ... ok
+test_proximidade_do_composer_conta (test_discovery.TestSendButton.test_proximidade_do_composer_conta) ... ok
+test_papeis_conhecidos (test_discovery.TestValidacoes.test_papeis_conhecidos) ... ok
+test_papel_invalido (test_discovery.TestValidacoes.test_papel_invalido) ... ok
+test_ranking_numerado (test_discovery.TestValidacoes.test_ranking_numerado) ... ok
+test_envia_dentro_de_iframe (test_discovery_browser.TestBotaoDeEnvio.test_envia_dentro_de_iframe) ... ok
+test_envia_dentro_de_shadow (test_discovery_browser.TestBotaoDeEnvio.test_envia_dentro_de_shadow) ... ok
+test_envia_no_dom_comum (test_discovery_browser.TestBotaoDeEnvio.test_envia_no_dom_comum) ... ok
+test_busca_nao_enganja_o_ranking (test_discovery_browser.TestComposerReal.test_busca_nao_enganja_o_ranking) ... ok
+test_closed_shadow_dom_e_limitacao (test_discovery_browser.TestComposerReal.test_closed_shadow_dom_e_limitacao)
+Closed Shadow DOM é inacessível: o laboratório registra, não finge. ... ok
+test_contenteditable (test_discovery_browser.TestComposerReal.test_contenteditable) ... ok
+test_dom_comum (test_discovery_browser.TestComposerReal.test_dom_comum) ... ok
+test_iframe (test_discovery_browser.TestComposerReal.test_iframe) ... ok
+test_input (test_discovery_browser.TestComposerReal.test_input) ... ok
+test_open_shadow_dom (test_discovery_browser.TestComposerReal.test_open_shadow_dom) ... ok
+test_drift_entre_cenarios (test_discovery_browser.TestDrift.test_drift_entre_cenarios)
+Mudando o DOM (shadow ligado), o ranking precisa acusar a mudança. ... ok
+test_assistant_message (test_discovery_browser.TestMensagens.test_assistant_message) ... ok
+test_conversation_container (test_discovery_browser.TestMensagens.test_conversation_container) ... ok
+test_papeis_nao_se_confundem (test_discovery_browser.TestMensagens.test_papeis_nao_se_confundem) ... ok
+test_user_message (test_discovery_browser.TestMensagens.test_user_message) ... ok
+test_candidatos_tem_campos_obrigatorios (test_discovery_browser.TestProbe.test_candidatos_tem_campos_obrigatorios) ... ok
+test_probe_instala_e_expõe_api (test_discovery_browser.TestProbe.test_probe_instala_e_expõe_api) ... ok
+test_varre_elementos (test_discovery_browser.TestProbe.test_varre_elementos) ... ok
+test_ambiente_conhecido (test_doctor.TestDeteccao.test_ambiente_conhecido) ... ok
+test_biblioteca_inexistente (test_doctor.TestDeteccao.test_biblioteca_inexistente) ... ok
+test_check_libraries_cobre_todas (test_doctor.TestDeteccao.test_check_libraries_cobre_todas) ... ok
+test_disco_livre (test_doctor.TestDeteccao.test_disco_livre) ... ok
+test_find_library_retorna_status (test_doctor.TestDeteccao.test_find_library_retorna_status) ... ok
+test_lista_de_libs_tem_itens_criticos (test_doctor.TestDeteccao.test_lista_de_libs_tem_itens_criticos) ... ok
+test_padrao_nao_pronto (test_doctor.TestEnvReportDataclass.test_padrao_nao_pronto) ... ok
+test_browser_ready_implica_sem_libs_faltando (test_doctor.TestRelatorio.test_browser_ready_implica_sem_libs_faltando) ... ok
+test_can_headed_implica_browser_ready (test_doctor.TestRelatorio.test_can_headed_implica_browser_ready) ... ok
+test_coerencia_das_listas_de_libs (test_doctor.TestRelatorio.test_coerencia_das_listas_de_libs) ... ok
+test_relatorio_e_serializavel (test_doctor.TestRelatorio.test_relatorio_e_serializavel) ... ok
+test_relatorio_json_gravavel (test_doctor.TestRelatorio.test_relatorio_json_gravavel) ... ok
+test_render_text_contem_cabecalho_e_veredito (test_doctor.TestRelatorio.test_render_text_contem_cabecalho_e_veredito) ... ok
+test_sugestoes_nao_sao_vazias_quando_falta_algo (test_doctor.TestRelatorio.test_sugestoes_nao_sao_vazias_quando_falta_algo) ... ok
+test_blockquote (test_extractor.TestMarkdown.test_blockquote) ... ok
+test_bloco_de_codigo_com_linguagem (test_extractor.TestMarkdown.test_bloco_de_codigo_com_linguagem) ... ok
+test_bloco_de_codigo_sem_linguagem (test_extractor.TestMarkdown.test_bloco_de_codigo_sem_linguagem) ... ok
+test_hr (test_extractor.TestMarkdown.test_hr) ... ok
+test_inline_code (test_extractor.TestMarkdown.test_inline_code) ... ok
+test_link (test_extractor.TestMarkdown.test_link) ... ok
+test_link_sem_href_vira_texto (test_extractor.TestMarkdown.test_link_sem_href_vira_texto) ... ok
+test_lista_aninhada (test_extractor.TestMarkdown.test_lista_aninhada) ... ok
+test_lista_nao_ordenada (test_extractor.TestMarkdown.test_lista_nao_ordenada) ... ok
+test_lista_ordenada (test_extractor.TestMarkdown.test_lista_ordenada) ... ok
+test_negrito_e_italico (test_extractor.TestMarkdown.test_negrito_e_italico) ... ok
+test_niveis_de_titulo (test_extractor.TestMarkdown.test_niveis_de_titulo) ... ok
+test_paragrafos_e_titulos (test_extractor.TestMarkdown.test_paragrafos_e_titulos) ... ok
+test_quebra_de_linha (test_extractor.TestMarkdown.test_quebra_de_linha) ... ok
+test_tabela_simples (test_extractor.TestMarkdown.test_tabela_simples) ... ok
+test_entidades_html (test_extractor.TestRobustez.test_entidades_html) ... ok
+test_espacos_excessivos (test_extractor.TestRobustez.test_espacos_excessivos) ... ok
+test_html_sem_tags (test_extractor.TestRobustez.test_html_sem_tags) ... ok
+test_html_vazio (test_extractor.TestRobustez.test_html_vazio) ... ok
+test_tag_de_fechamento_orfa (test_extractor.TestRobustez.test_tag_de_fechamento_orfa) ... ok
+test_tag_nao_fechada (test_extractor.TestRobustez.test_tag_nao_fechada) ... ok
+test_aria_hidden_removido (test_extractor.TestRuido.test_aria_hidden_removido) ... ok
+test_atributo_hidden_removido (test_extractor.TestRuido.test_atributo_hidden_removido) ... ok
+test_botoes_e_feedback_removidos (test_extractor.TestRuido.test_botoes_e_feedback_removidos) ... ok
+test_elemento_oculto_e_removido (test_extractor.TestRuido.test_elemento_oculto_e_removido) ... ok
+test_script_e_style_removidos (test_extractor.TestRuido.test_script_e_style_removidos) ... ok
+test_svg_removido (test_extractor.TestRuido.test_svg_removido) ... ok
+test_is_hidden (test_extractor.TestTextoPuro.test_is_hidden) ... ok
+test_normalizacao (test_extractor.TestTextoPuro.test_normalizacao) ... ok
+test_texto_puro_sem_marcacao (test_extractor.TestTextoPuro.test_texto_puro_sem_marcacao) ... ok
+test_closed_shadow_dom_e_limitacao (test_fixture.TestComposer.test_closed_shadow_dom_e_limitacao) ... ok
+test_contenteditable (test_fixture.TestComposer.test_contenteditable) ... ok
+test_iframe_srcdoc (test_fixture.TestComposer.test_iframe_srcdoc) ... ok
+test_input (test_fixture.TestComposer.test_input) ... ok
+test_open_shadow_dom (test_fixture.TestComposer.test_open_shadow_dom) ... ok
+test_textarea (test_fixture.TestComposer.test_textarea) ... ok
+test_copy_antes_da_estabilidade (test_fixture.TestSinaisDeUi.test_copy_antes_da_estabilidade)
+Cenário que engana quem decide o fim só por sinais de UI. ... ok
+test_copy_aparece_no_fim (test_fixture.TestSinaisDeUi.test_copy_aparece_no_fim) ... ok
+test_stop_aparece_durante_streaming (test_fixture.TestSinaisDeUi.test_stop_aparece_durante_streaming) ... ok
+test_stop_e_copy_dentro_de_shadow (test_fixture.TestSinaisDeUi.test_stop_e_copy_dentro_de_shadow) ... ok
+test_erro_generico (test_fixture.TestStreaming.test_erro_generico) ... ok
+test_fluxo_normal (test_fixture.TestStreaming.test_fluxo_normal) ... ok
+test_login_expirado (test_fixture.TestStreaming.test_login_expirado) ... ok
+test_pausa_artificial_de_3s (test_fixture.TestStreaming.test_pausa_artificial_de_3s)
+Base para E-OBS: a pausa precisa existir de fato na fixture. ... ok
+test_rate_limit (test_fixture.TestStreaming.test_rate_limit) ... ok
+test_resposta_contem_estrutura (test_fixture.TestStreaming.test_resposta_contem_estrutura) ... ok
+test_resposta_vazia (test_fixture.TestStreaming.test_resposta_vazia) ... ok
+test_bloqueios_tem_precedencia (test_observer.TestCasosLimite.test_bloqueios_tem_precedencia) ... ok
+test_min_text_len_configuravel (test_observer.TestCasosLimite.test_min_text_len_configuravel) ... ok
+test_politica_invalida (test_observer.TestCasosLimite.test_politica_invalida) ... ok
+test_resposta_vazia_nao_termina (test_observer.TestCasosLimite.test_resposta_vazia_nao_termina) ... ok
+test_resposta_vazia_termina_por_timeout (test_observer.TestCasosLimite.test_resposta_vazia_termina_por_timeout) ... ok
+test_timeout_absoluto (test_observer.TestCasosLimite.test_timeout_absoluto) ... ok
+test_nao_termina_durante_stream (test_observer.TestEstabilidade.test_nao_termina_durante_stream) ... ok
+test_pausa_artificial_nao_termina_prematuramente (test_observer.TestEstabilidade.test_pausa_artificial_nao_termina_prematuramente)
+Cenário central do briefing: pausa de 3 s no meio do streaming. ... ok
+test_stability_only_respeita_a_janela (test_observer.TestEstabilidade.test_stability_only_respeita_a_janela) ... ok
+test_stability_only_termina_apos_janela (test_observer.TestEstabilidade.test_stability_only_termina_apos_janela) ... ok
+test_aceita_antecipado_com_ui_forte (test_observer.TestHibrido.test_aceita_antecipado_com_ui_forte) ... ok
+test_aria_busy_true_impede_antecipacao (test_observer.TestHibrido.test_aria_busy_true_impede_antecipacao) ... ok
+test_exige_estabilidade_e_ausencia_de_stop (test_observer.TestHibrido.test_exige_estabilidade_e_ausencia_de_stop) ... ok
+test_nao_aceita_antecipado_sem_copy (test_observer.TestHibrido.test_nao_aceita_antecipado_sem_copy) ... ok
+test_from_summary (test_observer.TestStreamState.test_from_summary) ... ok
+test_from_summary_vazio (test_observer.TestStreamState.test_from_summary_vazio) ... ok
+test_copy_antes_da_estabilidade_engana_ui_signals (test_observer.TestUiSignals.test_copy_antes_da_estabilidade_engana_ui_signals)
+Documenta a falha conhecida: só sinais de UI aceitam Copy prematuro. ... ok
+test_nao_termina_enquanto_stop_visivel (test_observer.TestUiSignals.test_nao_termina_enquanto_stop_visivel) ... ok
+test_sem_sinais_de_ui_disponiveis (test_observer.TestUiSignals.test_sem_sinais_de_ui_disponiveis) ... ok
+test_termina_quando_ui_confirma (test_observer.TestUiSignals.test_termina_quando_ui_confirma) ... ok
+test_decision_bool (test_observer.TestUiSignalsModel.test_decision_bool) ... ok
+test_from_probe (test_observer.TestUiSignalsModel.test_from_probe) ... ok
+test_from_probe_vazio (test_observer.TestUiSignalsModel.test_from_probe_vazio) ... ok
+test_contenteditable (test_pipeline.TestPipeline.test_contenteditable) ... ok
+test_dez_execucoes_consecutivas (test_pipeline.TestPipeline.test_dez_execucoes_consecutivas) ... ok
+test_iframe (test_pipeline.TestPipeline.test_iframe) ... ok
+test_input (test_pipeline.TestPipeline.test_input) ... ok
+test_pausa_longa (test_pipeline.TestPipeline.test_pausa_longa) ... ok
+test_shadow (test_pipeline.TestPipeline.test_shadow) ... ok
+test_mismatched_text_not_in_diagnostic (test_recovery.TestCleanup.test_mismatched_text_not_in_diagnostic) ... ok
+test_stop_failure_still_releases_lock (test_recovery.TestCleanup.test_stop_failure_still_releases_lock) ... ok
+test_booleano_vira_true_false (test_report.TestCsv.test_booleano_vira_true_false) ... ok
+test_colunas_fixas (test_report.TestCsv.test_colunas_fixas) ... ok
+test_execucao_sem_metricas_nao_gera_linha_de_metrica (test_report.TestCsv.test_execucao_sem_metricas_nao_gera_linha_de_metrica) ... ok
+test_metric_rows_ordenadas_por_nome (test_report.TestCsv.test_metric_rows_ordenadas_por_nome) ... ok
+test_metricas_ausentes_viram_celula_vazia (test_report.TestCsv.test_metricas_ausentes_viram_celula_vazia) ... ok
+test_unidades_conhecidas (test_report.TestCsv.test_unidades_conhecidas) ... ok
+test_campos_obrigatorios (test_report.TestEnvelope.test_campos_obrigatorios) ... ok
+test_evento_sem_t_ms_e_invalido (test_report.TestEnvelope.test_evento_sem_t_ms_e_invalido) ... ok
+test_run_id_ordenavel_e_unico (test_report.TestEnvelope.test_run_id_ordenavel_e_unico) ... ok
+test_run_valido (test_report.TestEnvelope.test_run_valido) ... ok
+test_schema_version_constante (test_report.TestEnvelope.test_schema_version_constante) ... ok
+test_schema_version_errada (test_report.TestEnvelope.test_schema_version_errada) ... ok
+test_status_invalido_rejeitado (test_report.TestEnvelope.test_status_invalido_rejeitado) ... ok
+test_status_validos (test_report.TestEnvelope.test_status_validos) ... ok
+test_invalid_iteration (test_report.TestReportSafety.test_invalid_iteration) ... ok
+test_path_traversal_is_rejected (test_report.TestReportSafety.test_path_traversal_is_rejected) ... ok
+test_reject_nonfinite_metrics_and_invalid_shape (test_report.TestReportSafety.test_reject_nonfinite_metrics_and_invalid_shape) ... ok
+test_append_mantem_um_cabecalho (test_report.TestResultWriter.test_append_mantem_um_cabecalho) ... ok
+test_candidatos_auxiliares (test_report.TestResultWriter.test_candidatos_auxiliares) ... ok
+test_envelope_invalido_nao_e_gravado (test_report.TestResultWriter.test_envelope_invalido_nao_e_gravado) ... ok
+test_grava_json_e_csvs (test_report.TestResultWriter.test_grava_json_e_csvs) ... ok
+test_alerts_not_options_detect_blocking (test_resilience_browser.TestResilience.test_alerts_not_options_detect_blocking) ... ok
+test_contract_new_assistant_only_and_ambiguity (test_resilience_browser.TestResilience.test_contract_new_assistant_only_and_ambiguity) ... ok
+test_empty_timeout_then_recover_same_page (test_resilience_browser.TestResilience.test_empty_timeout_then_recover_same_page) ... ok
+test_fill_keyboard_js_and_enter (test_resilience_browser.TestResilience.test_fill_keyboard_js_and_enter) ... ok
+test_large_history_does_not_exhaust_scan_before_composer (test_resilience_browser.TestResilience.test_large_history_does_not_exhaust_scan_before_composer) ... ok
+test_old_feedback_buttons_do_not_hide_send_candidate (test_resilience_browser.TestResilience.test_old_feedback_buttons_do_not_hide_send_candidate) ... ok
+test_uncertain_send_never_duplicates (test_resilience_browser.TestResilience.test_uncertain_send_never_duplicates) ... ok
+test_watcher_reinstall_disconnects_previous_observer (test_resilience_browser.TestResilience.test_watcher_reinstall_disconnects_previous_observer) ... ok
+test_kind (test_sender.TestEvidence.test_kind) ... ok
+test_new_matching_message (test_sender.TestEvidence.test_new_matching_message) ... ok
+test_no_message_is_failure (test_sender.TestEvidence.test_no_message_is_failure) ... ok
+test_wrong_text_is_failure (test_sender.TestEvidence.test_wrong_text_is_failure) ... ok
+test_sem_playwright_nao_quebra (test_session.TestApiDoPlaywright.test_sem_playwright_nao_quebra) ... ok
+test_suporta_exportacao_indexeddb_quando_instalado (test_session.TestApiDoPlaywright.test_suporta_exportacao_indexeddb_quando_instalado)
+Não assumimos a API: verificamos a assinatura instalada (briefing). ... ok
+test_adquire_e_libera (test_session.TestProfileLock.test_adquire_e_libera) ... ok
+test_context_manager (test_session.TestProfileLock.test_context_manager) ... ok
+test_lock_entre_processos (test_session.TestProfileLock.test_lock_entre_processos)
+O lock real é entre processos: é o cenário que corrompe perfil. ... ok
+test_readquire_apos_liberar (test_session.TestProfileLock.test_readquire_apos_liberar) ... ok
+test_segundo_lock_no_mesmo_perfil_falha (test_session.TestProfileLock.test_segundo_lock_no_mesmo_perfil_falha) ... ok
+test_ensure_profile_cria_diretorio (test_session.TestProfilePath.test_ensure_profile_cria_diretorio) ... ok
+test_nao_escapa_do_root (test_session.TestProfilePath.test_nao_escapa_do_root) ... ok
+test_nome_com_espaco_e_sanitizado (test_session.TestProfilePath.test_nome_com_espaco_e_sanitizado) ... ok
+test_nome_vazio_ou_ponto (test_session.TestProfilePath.test_nome_vazio_ou_ponto) ... ok
+test_padrao (test_session.TestProfilePath.test_padrao) ... ok
+test_assert_no_private_values (test_session.TestSanitizacao.test_assert_no_private_values) ... ok
+test_detecta_chaves_sensiveis (test_session.TestSanitizacao.test_detecta_chaves_sensiveis) ... ok
+test_estado_vazio (test_session.TestSanitizacao.test_estado_vazio) ... ok
+test_marcador_constante (test_session.TestSanitizacao.test_marcador_constante) ... ok
+test_remove_valores_de_cookies (test_session.TestSanitizacao.test_remove_valores_de_cookies) ... ok
+test_changed_or_wrong_value (test_validation.TestComposerEvidence.test_changed_or_wrong_value) ... ok
+test_cleared_alone_is_not_confirmation (test_validation.TestComposerEvidence.test_cleared_alone_is_not_confirmation) ... ok
+test_combined_confirmation (test_validation.TestComposerEvidence.test_combined_confirmation) ... ok
+test_missing_control_is_not_empty (test_validation.TestComposerEvidence.test_missing_control_is_not_empty) ... ok
+test_ambiguous_is_not_silently_selected (test_validation.TestOutputContract.test_ambiguous_is_not_silently_selected) ... ok
+test_current_response (test_validation.TestOutputContract.test_current_response) ... ok
+test_no_match (test_validation.TestOutputContract.test_no_match) ... ok
+test_previous_response (test_validation.TestOutputContract.test_previous_response) ... ok
+test_rejects_invalid_shapes (test_validation.TestOutputContract.test_rejects_invalid_shapes) ... ok
+test_selects_only_valid_candidate (test_validation.TestOutputContract.test_selects_only_valid_candidate) ... ok
+
+----------------------------------------------------------------------
+Ran 231 tests in 100.577s
+
+OK (skipped=1)
