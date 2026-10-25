@@ -18,6 +18,32 @@ Fonte da base: https://www.linuxliteos.com/forums/showthread.php?tid=9251
 
 O pacote não instala nada durante a montagem e não contém scripts de instalação privilegiados. O gerenciador de pacotes resolve as dependências declaradas e pede a autorização local necessária. O programa deve rodar como usuário normal, nunca como administrador.
 
+## Atualizar uma instalação existente
+
+Baixe o novo `.deb` e abra no instalador de pacotes, escolhendo atualizar/instalar.
+Depois salve seus trabalhos e reinicie o computador, para encerrar a versão antiga
+que pode continuar na memória mesmo depois de fechar a aba do painel. Abra
+BrowserAPI novamente pelo menu. Não é necessário apagar seus perfis/configurações.
+
+### Se o Google recusar o login
+
+O Chrome controlado por automação pode ser recusado pelo Google, inclusive quando
+é o Chrome oficial instalado. O usuário reportou essa recusa no uso real desta
+versão inicial. Não peça repetidamente o login nem avance ao apontamento nesse
+estado. A atualização identifica a mensagem conhecida (português/inglês na página
+de contas Google) e interrompe o fluxo com explicação, mas **não libera o login**.
+Não desative proteções da conta, não copie cookies e não compartilhe credenciais.
+Não se garante uso do Gemini por este mecanismo.
+
+### Se Enviar só aparecer depois de digitar
+
+A verificação agora preenche o campo somente após autorização e, então, espera
+até três segundos por um botão Enviar único, visível e habilitado. Só então tenta
+clicar uma vez e exige evidência de uma nova mensagem sua. Se o botão continuar
+indisponível/ambíguo, não clica nem reenvia; pode restar um rascunho. Confira a página
+antes de autorizar qualquer outra tentativa. Essa correção cobre uma falha interna
+reproduzida na fixture, não comprova que explica todo detalhe do site real reportado.
+
 ## Na janela do programa
 
 1. Na primeira vez, clique em **Preparar BrowserAPI** e confirme o download. Isso cria um ambiente privado do usuário e baixa Playwright/Chromium. Requer internet e pelo menos 1,5 GB disponíveis. Não instala Chrome nem Edge.

@@ -91,6 +91,18 @@ class TestChatWorkflow(BrowserTestCase):
         finally:
             self.page.unroute('https://accounts.google.com/**')
 
+    def test_google_refusal_english_no_send(self):
+        config = self.prepare()
+        self.page.route('https://accounts.google.com/**', lambda route: route.fulfill(
+            content_type='text/html; charset=utf-8',
+            body='<p>This browser or app may not be secure.</p>'))
+        try:
+            self.page.goto('https://accounts.google.com/fixture')
+            self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status,
+                             'google_login_blocked')
+        finally:
+            self.page.unroute('https://accounts.google.com/**')
+
     def test_no_authorization_no_send(self):
         config = self.prepare()
         self.assertEqual(exchange(self.page, config, health_check=True).status, 'not_authorized')
