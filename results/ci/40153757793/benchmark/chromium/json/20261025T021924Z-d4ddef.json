@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20261025T021924Z-d4ddef",
+  "timestamp_utc": "2026-10-25T02:19:24Z",
+  "milestone": "M7",
+  "experiment": "E-BENCH-1",
+  "target": "fixture",
+  "strategy": "hybrid",
+  "iteration": 7,
+  "status": "success",
+  "error": null,
+  "env": {
+    "python": "3.11.17",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "cpu_count": 4,
+    "ram_total_kb": 16372440,
+    "playwright": "1.64.1",
+    "browser_channel": "chromium",
+    "browser_version": "156.0.8078.4",
+    "headed": false,
+    "ci": true
+  },
+  "metrics": {
+    "discovery_ms": 15.21335000001045,
+    "fill_ms": 4.519823999999062,
+    "send_ms": 27.936742000008508,
+    "composer_confirmed": true,
+    "extract_ms": 4.376260000015009,
+    "ttft_ms": 57.899999999965075,
+    "settle_overhead_ms": 306.0,
+    "mutation_count": 417,
+    "poll_count": 19,
+    "success": true,
+    "total_ms": 2006.7337269999825,
+    "python_cpu_ms": 56.42772500000004,
+    "python_rss_kb": 40876
+  },
+  "events": [
+    {
+      "t_ms": 0.0,
+      "type": "scenario",
+      "detail": "soak"
+    }
+  ],
+  "artifacts": {}
+}
