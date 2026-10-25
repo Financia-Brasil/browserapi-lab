@@ -12,9 +12,10 @@ dependencies = ["playwright==1.64.1"]
 
 [project.scripts]
 browserapi-lab = "browserapi_lab.cli:main"
+browserapi-window = "browserapi_lab.gui:main"
 
 [tool.setuptools]
 packages = ["browserapi_lab"]
 
 [tool.setuptools.package-data]
-browserapi_lab = ["assets/*.js", "assets/*.html"]
+browserapi_lab = ["assets/*.js", "assets/*.html", "assets/*.css"]

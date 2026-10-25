@@ -4,6 +4,14 @@ Laboratório Python/Linux para validar automação de chats por navegador real.
 **Não é ainda uma API para agentes nem um serviço 24/7.** O aplicativo final
 OpenAI-compatible continua fora do escopo desta etapa.
 
+## Janela para Ubuntu (experimental)
+
+Agora há um painel local com botões de configurar, autorizar, testar e corrigir,
+e montagem de instalador `.deb` com entrada no menu. Veja o [guia sem terminal](docs/UBUNTU.md).
+Alvo inicial: Ubuntu 24.04+ com Python 3.11+. A instalação gráfica no desktop do
+usuário e os sites autenticados ainda não estão homologados; isso não é uma API pronta.
+
+
 ## Novo: escolher e verificar um chat
 
 As [seis metas de produto](docs/PRODUCT_GOALS.md) agora orientam o desenvolvimento.

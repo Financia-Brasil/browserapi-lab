@@ -34,3 +34,6 @@ screenshots/
 # Configurações e recibos locais (URLs/seletores podem ser privados)
 .browserapi/
 .chat-config/
+
+# Instaladores gerados (entregues fora do Git)
+*.deb

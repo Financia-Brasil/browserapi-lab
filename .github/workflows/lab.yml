@@ -41,6 +41,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Montar instalador Ubuntu e simular resolução de dependências
+        run: |
+          python scripts/build_deb.py
+          apt-get --simulate install ./dist/BrowserAPI-Ubuntu.deb
+
+      - name: Publicar instalador Ubuntu
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrowserAPI-Ubuntu
+          path: dist/BrowserAPI-Ubuntu.deb
+
       - name: Auditoria do ambiente
         run: python -m browserapi_lab.cli doctor --json results/ci/doctor-unit.json
 
@@ -80,7 +91,7 @@ jobs:
 
       - name: Bateria de integracao com navegador
         id: testes
-        run: python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
+        run: xvfb-run -a python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
 
       - name: Instalar pacote e verificar fora do checkout
         run: |
@@ -152,6 +163,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p "results/ci/${GITHUB_RUN_ID}"
           cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
+          if [ -f results/ci/gui-flow.json ]; then cp results/ci/gui-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/product-flow.json ]; then cp results/ci/product-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
           git restore results/ci/resumo.md results/ci/doctor-browser.json

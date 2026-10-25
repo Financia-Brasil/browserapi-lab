@@ -103,13 +103,15 @@ def preflight(page, config):
     return None
 
 
-def exchange(page, config, text=None, *, authorized=False, health_check=False):
+def exchange(page, config, text=None, *, authorized=False, health_check=False, cancelled=None):
     """Não registra texto. O caller decide exibir answer, nunca inclui no recibo."""
     if not authorized:
         return ChatResult('not_authorized')
     start = time.perf_counter()
     result = ChatResult('page_unavailable')
     try:
+        if cancelled and cancelled():
+            raise EOFError('Operação interrompida')
         config.validate()
         problem = preflight(page, config)
         if problem:
@@ -127,6 +129,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False):
             return ChatResult('not_authorized')
         install(page, root_selector=config.root, message_selector=config.assistant,
                 message_count_baseline=outputs_before)
+        if cancelled and cancelled():
+            raise EOFError('Operação interrompida')
         mark_sent(page)
         sent = send_message(page, composer, button, prompt,
                             strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
@@ -134,8 +138,12 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False):
                             verify_timeout_ms=min(5000, config.timeout_ms))
         if not sent.success:
             return ChatResult('send_unconfirmed')
+        def check_cancel(*_):
+            if cancelled and cancelled():
+                raise EOFError('Operação interrompida')
+        check_cancel()
         observation = wait_for_completion(page, WatchConfig(stability_window_ms=config.stability_ms,
-                                                           timeout_ms=config.timeout_ms), config.root)
+                                                           timeout_ms=config.timeout_ms), config.root, on_poll=check_cancel)
         if observation.status != 'success':
             block = read_ui(page, config.root).blocking
             return ChatResult(block or ('timeout' if observation.status == 'timeout' else 'page_unavailable'))
@@ -172,6 +180,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False):
         })
         result.browser_version = page.context.browser.version
         return result
+    except (EOFError, KeyboardInterrupt):
+        raise
     except Exception:
         # Playwright inclui texto/HTML/URLs em exceções: não persistir o detalhe.
         return ChatResult('page_unavailable')

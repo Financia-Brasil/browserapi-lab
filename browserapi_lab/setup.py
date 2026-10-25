@@ -33,11 +33,19 @@ def browser_options():
     }
 
 
-def pick(page, role):
+def pick(page, role, cancelled=None):
     script = (Path(__file__).parent / 'assets' / 'picker.js').read_text(encoding='utf-8')
     page.evaluate(script, role)
     try:
-        page.wait_for_function('window.__balPick !== null', timeout=120000)
+        if cancelled is None:
+            page.wait_for_function('window.__balPick !== null', timeout=120000)
+        else:
+            import time
+            deadline = time.monotonic() + 120
+            while page.evaluate('window.__balPick === null'):
+                if cancelled() or time.monotonic() > deadline:
+                    raise EOFError('Seleção cancelada')
+                page.wait_for_timeout(100)
         value = page.evaluate('window.__balPick')
         return None if value.get('cancelled') else value.get('selector')
     finally:
@@ -78,9 +86,14 @@ def confirmed(ask, message):
     return ask(message + ' [s/N] ').strip().lower() in ('s', 'sim')
 
 
-def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick):
+def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick,
+              initial_config=None, cancelled=None):
     safe_name(name)
-    if repairing:
+    if initial_config is not None:
+        config = initial_config.validate()
+        if config.name != name:
+            raise ValueError('Nome da configuração divergente.')
+    elif repairing:
         config = store.load(name)
     else:
         tell('1/5 — Navegador. Usaremos o produto escolhido com perfil separado, nunca seu perfil pessoal.')
@@ -110,7 +123,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         store.save(config)
         tell('Configuração salva. Isso sozinho NÃO comprova compatibilidade.')
         if confirmed(ask, '5/5 — Autoriza UMA mensagem sintética neste chat para testar?'):
-            result = exchange(page, config, authorized=True, health_check=True)
+            result = exchange(page, config, authorized=True, health_check=True, cancelled=cancelled)
         else:
             result = ChatResult('not_authorized')
         receipt = result.receipt(config)
@@ -120,7 +133,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         return receipt
 
 
-def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession):
+def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None):
     config = store.load(name)
     with session_factory(browser_config(config, store.root)) as session:
         page = session.page(config.url)
@@ -129,7 +142,7 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
             authorized = confirmed(ask, 'Autoriza UMA mensagem sintética de verificação?')
         else:
             authorized = confirmed(ask, 'Autoriza enviar a mensagem informada UMA vez?')
-        result = exchange(page, config, message, authorized=authorized, health_check=message is None)
+        result = exchange(page, config, message, authorized=authorized, health_check=message is None, cancelled=cancelled)
         receipt = result.receipt(config)
         # ask não é prova de formato/compatibilidade equivalente ao desafio check.
         if message is None:
