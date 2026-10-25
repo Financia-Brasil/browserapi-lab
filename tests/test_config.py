@@ -76,3 +76,9 @@ class TestConfig(unittest.TestCase):
             store._path('bad').write_text('{"name":"bad","url":"https://x.com","extra":true}')
             with self.assertRaises(ValueError):
                 store.load('bad')
+
+    def test_performance_is_separate_from_functional_compatibility(self):
+        receipt = ChatResult('success', True, timings={'capture_overhead_ms': 1000}).receipt(self.config())
+        self.assertTrue(receipt['compatible_in_this_run'])
+        self.assertFalse(receipt['performance']['within_capture_budget'])
+        self.assertEqual(receipt['performance']['api_equivalence'], 'not_measured')

@@ -41,15 +41,22 @@ class ChatResult:
     answer: str | None = None
     timings: dict = field(default_factory=dict)
     request_id: str | None = None
+    browser_version: str | None = None
 
     def receipt(self, config):
         title, action = REMEDIES.get(self.status, ('Resposta confirmada nesta execução', 'Modelo escolhido manualmente; repita check se a interface mudar.'))
         return {
             'schema_version': 1, 'name': config.name, 'provider': config.provider,
-            'browser': config.browser, 'checked_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'browser': config.browser, 'browser_version': self.browser_version, 'checked_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'config_fingerprint': config_fingerprint(config),
             'status': self.status, 'compatible_in_this_run': self.compatible,
             'message': title, 'action': action, 'timings': self.timings,
+            'performance': {
+                'capture_budget_ms': 900,
+                'within_capture_budget': (self.timings.get('capture_overhead_ms') <= 900
+                    if self.timings.get('capture_overhead_ms') is not None else None),
+                'api_equivalence': 'not_measured',
+            },
             'scope': 'Uma execução; não garante disponibilidade futura ou funcionamento 24/7.',
         }
 
@@ -163,6 +170,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False):
             'capture_overhead_ms': summary.get('since_last_mutation_ms'),
             'fill_ms': round(sent.fill_ms, 1), 'send_ms': round(sent.send_ms, 1),
         })
+        result.browser_version = page.context.browser.version
         return result
     except Exception:
         # Playwright inclui texto/HTML/URLs em exceções: não persistir o detalhe.

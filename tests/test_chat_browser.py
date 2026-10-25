@@ -90,7 +90,7 @@ class TestChatWorkflow(BrowserTestCase):
         def factory(browser):
             self.assertFalse(browser.headless, 'assistente deve abrir janela visível por padrão')
             yield WizardSession()
-        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's'])
+        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's', 's'])
         selectors = iter(['#composer', '#send', '[data-role="user"] .body', '[data-role="assistant"] .body'])
         with tempfile.TemporaryDirectory() as root:
             store = ConfigStore(root)
@@ -111,3 +111,62 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#send')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
         self.assertEqual(self.page.locator('#__browserapi_picker').count(), 0)
+
+    def test_unrelated_page_mutations_do_not_block_completion(self):
+        config = self.prepare()
+        config.root = 'body'
+        self.page.evaluate('''() => {
+          const clock = document.createElement('div'); document.body.appendChild(clock);
+          window.noiseTimer = setInterval(() => { clock.textContent = String(performance.now()); }, 25);
+        }''')
+        try:
+            result = exchange(self.page, config, authorized=True, health_check=True)
+            self.assertEqual(result.status, 'success')
+        finally:
+            self.page.evaluate('clearInterval(window.noiseTimer)')
+
+
+class TestCLIRealBrowser(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from _harness import no_browser_reason
+        import shutil
+        reason = no_browser_reason()
+        if reason:
+            raise unittest.SkipTest(reason)
+        if not shutil.which('xvfb-run'):
+            raise RuntimeError('CI precisa de xvfb-run para testar a CLI headed')
+
+    def test_check_status_and_ask_from_real_cli(self):
+        import os
+        import subprocess
+        import sys
+        from _harness import FixtureServer, REPO_ROOT
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            html = (REPO_ROOT / 'browserapi_lab/assets/fake_chat.html').read_text()
+            html = html.replace('mode: "normal",', 'mode: "contract",').replace('delay: 4,', 'delay: 1,')
+            (root / 'fake_chat.html').write_text(html)
+            server = FixtureServer(root).start()
+            try:
+                config = ChatConfig('cli-chat', server.url(), provider='fixture', timeout_ms=15000,
+                                    stability_ms=400, **HYPOTHESES['fixture'])
+                store = ConfigStore(root / 'settings')
+                store.save(config)
+                command = ['xvfb-run', '-a', sys.executable, '-m', 'browserapi_lab.cli',
+                           '--config-dir', str(store.root)]
+                env = dict(os.environ, PYTHONPATH=str(REPO_ROOT))
+                result = subprocess.run(command + ['check', 'cli-chat'], input='\ns\n', text=True,
+                                        capture_output=True, timeout=40, cwd=root, env=env)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(store.status('cli-chat')['compatible_in_this_run'])
+                status_result = subprocess.run(command + ['status', 'cli-chat'], text=True,
+                                               capture_output=True, timeout=10, cwd=root, env=env)
+                self.assertEqual(status_result.returncode, 0, status_result.stderr)
+                # Ausência de consentimento nunca envia; status anterior é substituído por recibo de não envio.
+                result = subprocess.run(command + ['check', 'cli-chat'], input='\nn\n', text=True,
+                                        capture_output=True, timeout=40, cwd=root, env=env)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(store.status('cli-chat')['status'], 'not_authorized')
+            finally:
+                server.stop()

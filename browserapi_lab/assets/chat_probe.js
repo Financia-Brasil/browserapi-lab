@@ -488,7 +488,7 @@
       var text = (target.innerText !== undefined && target.innerText !== null)
         ? target.innerText
         : (target.textContent || "");
-      return { text: text, len: text.length };
+      return { text: text, len: text.length, target: target };
     }
 
     var observer = new MutationObserver(function (records) {
@@ -511,7 +511,15 @@
       if (snapshot.text) state.last_text = snapshot.text;
 
       if (grew && state.first_token_at === null) state.first_token_at = t;
-      if (records.length) state.last_mutation_at = t;
+      // Relógios/sidebars fora da resposta não podem adiar o término.
+      var responseMutation = snapshot.target && records.some(function (rec) {
+        var node = rec.target.nodeType === 1 ? rec.target : rec.target.parentElement;
+        if (node && (node === snapshot.target || snapshot.target.contains(node))) return true;
+        return rec.type === 'childList' && Array.prototype.some.call(rec.addedNodes, function (added) {
+          return added === snapshot.target || (added.nodeType === 1 && added.contains(snapshot.target));
+        });
+      });
+      if (responseMutation || grew) state.last_mutation_at = t;
 
       if (state.events.length < MAX_EVENTS) {
         state.events.push({

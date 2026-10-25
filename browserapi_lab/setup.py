@@ -10,6 +10,8 @@ from .discovery import collect, rank_candidates
 
 # Hipóteses, não contratos: check é o único caminho para recibo de compatibilidade.
 HYPOTHESES = {
+    'custom': {'user': '[data-message-author-role="user"],user-query,[data-role="user"]',
+               'assistant': '[data-message-author-role="assistant"],model-response,[data-role="assistant"]'},
     'gemini': {'composer': '.ql-editor[contenteditable="true"]',
                'send': 'button[aria-label="Send message"],button[aria-label="Enviar mensagem"]',
                'user': 'user-query', 'assistant': 'model-response'},
@@ -49,7 +51,9 @@ def suggest(page, config):
     for role, key in (('composer', 'composer'), ('send_button', 'send')):
         try:
             candidates = rank_candidates(collect(page, role)['candidates'], role)
-            if candidates and candidates[0].inside == 'document' and candidates[0].candidate.get('visible'):
+            if (candidates and candidates[0].inside == 'document' and candidates[0].candidate.get('visible')
+                    and candidates[0].score >= 50
+                    and any(signal in candidates[0].signals for signal in ('name_match', 'placeholder_match', 'testid_match'))):
                 setattr(config, key, candidates[0].selector)
         except Exception:
             pass
@@ -97,7 +101,8 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         page = session.page(config.url)
         ask('Quando o chat e o modelo estiverem prontos, pressione Enter. ')
         suggest(page, config)
-        if repairing or not config.ready:
+        review = repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
+        if review:
             tell('4/5 — Aponte os controles sem escrever CSS ou JavaScript.')
             repair_fields(page, config, ask, tell, picker)
         else:
