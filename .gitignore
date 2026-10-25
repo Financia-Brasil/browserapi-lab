@@ -37,3 +37,6 @@ screenshots/
 
 # Instaladores gerados (entregues fora do Git)
 *.deb
+
+# Instalador publicado a pedido do usuário
+!downloads/BrowserAPI-Ubuntu.deb
