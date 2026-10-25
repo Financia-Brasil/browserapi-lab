@@ -71,9 +71,10 @@ class TestChatWorkflow(BrowserTestCase):
     def test_google_refusal_stops_before_pointing_or_sending(self):
         config = self.prepare()
         self.page.route('https://accounts.google.com/**', lambda route: route.fulfill(
-            content_type='text/html', body='<p>Esse navegador ou app pode não ser seguro.</p>'))
+            content_type='text/html; charset=utf-8', body='<meta charset="utf-8"><p>Esse navegador ou app pode não ser seguro.</p>'))
         try:
             self.page.goto('https://accounts.google.com/fixture')
+            self.assertEqual(self.page.locator('p').inner_text(), 'Esse navegador ou app pode não ser seguro.')
             self.assertEqual(preflight(self.page, config), 'google_login_blocked')
             page = self.page
             class BlockedSession:
