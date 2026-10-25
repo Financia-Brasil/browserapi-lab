@@ -137,6 +137,18 @@ class TestPanel(unittest.TestCase):
         until(lambda: self.panel.phase == 'cancelled')
         self.assertIn('não desfaz', '\n'.join(self.panel.snapshot()['messages']))
 
+    def test_switch_existing_saved_chat_never_launches_and_requires_consent(self):
+        self.store.save(ChatConfig('saved','https://example.com'))
+        with patch('browserapi_lab.browser.BrowserSession.start') as launch:
+            for reply, expected in (('n','dedicated'),('s','existing_chrome')):
+                self.panel.submit({'operation':'use_existing','name':'saved'})
+                until(lambda: self.panel.snapshot()['prompt'])
+                self.panel.reply(self.panel.snapshot()['prompt']['id'],reply)
+                until(lambda: self.panel.phase == 'done')
+                self.assertEqual(self.store.load('saved').session_mode,expected)
+            self.assertEqual(self.store.load('saved').browser,'chrome')
+            launch.assert_not_called()
+
     def test_configure_uses_form_and_rejects_overwrite(self):
         def fake_configure(store, name, **kwargs):
             config = kwargs['initial_config']

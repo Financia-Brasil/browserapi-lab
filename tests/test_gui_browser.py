@@ -54,6 +54,20 @@ class TestGraphicalJourney(BrowserTestCase):
         self.store.save(config)
         return config
 
+    def test_buttons_voice_send_and_switch_saved_session_are_visible(self):
+        self.seed()
+        self.open_panel()
+        self.assertEqual(self.page.get_by_role('button',name='Selecionar botão de voz').count(),1)
+        self.assertEqual(self.page.get_by_role('button',name='Digitar e selecionar Enviar / Enter').count(),1)
+        with patch('browserapi_lab.browser.BrowserSession.start') as launch:
+            self.page.get_by_role('button',name='Usar Chrome já aberto').click()
+            self.wait_question('Mudar este chat salvo')
+            self.page.click('#yes')
+            self.wait_phase('Concluído')
+            self.assertEqual(self.store.load('saved').session_mode,'existing_chrome')
+            self.assertIn('Chrome já aberto (configurado)',self.page.locator('#chats').inner_text())
+            launch.assert_not_called()
+
     def test_full_form_configure_then_health_check(self):
         # A hipótese é local à fixture, não evidência de compatibilidade com sites reais.
         with patch.dict(HYPOTHESES, {'custom':HYPOTHESES['fixture']}):

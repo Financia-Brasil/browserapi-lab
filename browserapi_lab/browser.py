@@ -178,7 +178,7 @@ class BrowserSession:
                 raise ExistingChromeError('Mais de uma aba do chat está aberta. Deixe somente uma para conectar; nenhuma aba foi fechada pelo programa.')
             if matches:
                 return matches[0]
-            return self.new_page(url)
+            raise ExistingChromeError('Não encontramos a aba já aberta do chat nesse Chrome. Não abrimos nova aba, janela, perfil de visitante nem tela de login. Abra o chat no Chrome/perfil desejado, deixe só uma aba desse chat e autorize novamente a conexão.')
         page = pages[0] if pages else ctx.new_page()
         if url and page.url != url:
             page.goto(url, wait_until="domcontentloaded")

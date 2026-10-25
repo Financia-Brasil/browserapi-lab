@@ -12,7 +12,7 @@ from .config import origin
 from .discovery import ScoredCandidate, install_probe
 from .extractor import html_to_markdown, html_to_text
 from .observer import WatchConfig, install, mark_sent, read_ui, wait_for_completion
-from .sender import SendControlUnavailable, VoiceControlUnavailable, is_voice_control, read_composer, send_message
+from .sender import SendControlUnavailable, VoiceControlUnavailable, is_voice_control, is_recorded_voice, read_composer, send_message
 from .validation import response_instruction, select_output
 
 REMEDIES = {
@@ -156,7 +156,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                     raise EOFError('Operação interrompida')
                 control = page.locator(config.send)
                 if control.count() == 1 and control.is_visible() and control.is_enabled():
-                    if is_voice_control(control):
+                    if is_voice_control(control) or is_recorded_voice(control, config):
                         raise VoiceControlUnavailable()
                     return
                 if time.monotonic() >= deadline:

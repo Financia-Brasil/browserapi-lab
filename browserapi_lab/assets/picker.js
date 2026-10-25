@@ -24,7 +24,10 @@
     let el = ev.composedPath().find(n => n instanceof Element && n !== banner);
     if (!el) return;
     if (role === 'campo de mensagem') el = el.closest('textarea,input,[contenteditable=true]') || el;
-    if (role === 'botão Enviar') el = el.closest('button,[role=button]') || el;
+    if (['botão Enviar','botão de comando de voz'].includes(role)) el = el.closest('button,[role=button]') || el;
+    if (role === 'botão de comando de voz' && !el.matches('button,[role=button]')) {
+      banner.textContent = 'Clique no botão de comando de voz, não no campo de texto.'; return;
+    }
     if (role === 'botão Enviar' && window.__balVoiceControl && window.__balVoiceControl(el)) {
       banner.textContent = 'Esse controle é de microfone/voz. Aponte Enviar com um rascunho no campo, ou Esc para cancelar.';
       return;
@@ -69,4 +72,5 @@
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
   window.__balPickerCleanup = cleanup;
+  if (window.__balTypingCleanup) window.__balTypingCleanup();
 }

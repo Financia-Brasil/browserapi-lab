@@ -241,6 +241,23 @@ def is_voice_control(locator):
     return locator.evaluate((Path(__file__).parent / 'assets' / 'voice_control.js').read_text())
 
 
+def control_fingerprint(locator):
+    import hashlib
+    import json
+    state = locator.evaluate(r"""el => {
+        const attributes = node => ['aria-label','title','data-testid','data-icon','d','href'].map(key => [key, (node.getAttribute(key) || '').slice(0,4096)]);
+        return {attributes: attributes(el), text:(el.textContent || '').replace(/\s+/g,' ').trim().slice(0,256),
+            icons:[...el.querySelectorAll('svg path,svg use,svg title,mat-icon,[data-icon]')].slice(0,24).map(node => ({tag:node.tagName, attributes:attributes(node), text:(node.textContent || '').slice(0,128)}))};
+    }""")
+    return hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+
+
+def is_recorded_voice(locator, config):
+    return bool(config.voice and config.voice_signature
+                and locator.evaluate('(el, selector) => el.matches(selector)', config.voice)
+                and control_fingerprint(locator) == config.voice_signature)
+
+
 def send_message(
     page: Any,
     composer: ScoredCandidate,

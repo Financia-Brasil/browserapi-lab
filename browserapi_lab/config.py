@@ -60,10 +60,16 @@ class ChatConfig:
     stability_ms: int = 1200
     schema_version: int = 1
     session_mode: str = 'dedicated'
+    voice: str = ''
+    voice_signature: str = ''
 
     def validate(self):
         safe_name(self.name)
         safe_url(self.url)
+        if not isinstance(self.voice, str) or len(self.voice) > 1000:
+            raise ValueError('Seletor de voz inválido.')
+        if not isinstance(self.voice_signature, str) or (self.voice_signature and not re.fullmatch('[0-9a-f]{64}', self.voice_signature)):
+            raise ValueError('Estado do controle de voz inválido.')
         if self.browser not in BROWSERS or self.provider not in (*PROVIDERS, 'custom', 'fixture'):
             raise ValueError('Navegador ou provedor inválido.')
         if self.session_mode not in ('dedicated', 'existing_chrome'):

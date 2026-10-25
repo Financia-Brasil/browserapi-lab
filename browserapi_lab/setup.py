@@ -70,12 +70,35 @@ def suggest(page, config):
     return config
 
 
-def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False):
+def manual_send_pick(page, config, ask, tell, picker):
+    script = (Path(__file__).parent / 'assets/typing_guard.js').read_text()
+    page.evaluate(script)
+    try:
+        ask('Na janela do chat, digite algo SEM enviar. Não pressione Enter. Quando aparecer Enviar, volte aqui e clique em Continuar; depois clique nesse botão apenas para selecioná-lo. ')
+        if page.evaluate('window.__balTypingCancelled'):
+            raise EOFError('Seleção cancelada')
+        from .sender import is_recorded_voice
+        while True:
+            selected = picker(page, 'botão Enviar')
+            if not selected or not is_recorded_voice(page.locator(selected), config):
+                break
+            tell('Esse é o estado de voz registrado. Selecione Enviar depois de digitar, ou Esc para cancelar.')
+        tell('Seu rascunho foi preservado. Apague-o manualmente antes de autorizar um teste; nada foi enviado pelo apontamento.')
+        return selected
+    finally:
+        page.evaluate('() => { if (window.__balTypingCleanup) window.__balTypingCleanup(); delete window.__balTypingCancelled; }')
+
+
+def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False, manual_send=False, fields=None):
     labels = {'composer': 'campo de mensagem', 'send': 'botão Enviar',
               'user': 'mensagem do usuário', 'assistant': 'resposta do assistente'}
+    if manual_send or (fields and 'voice' in fields):
+        labels = {'composer': 'campo de mensagem', 'voice': 'botão de comando de voz', **{key: label for key, label in labels.items() if key != 'composer'}}
     tell('Reparo por apontamento. Tenha uma mensagem sua e uma resposta visíveis na conversa.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
     for key, label in labels.items():
+        if fields is not None and key not in fields:
+            continue
         if ask(f'Apontar {label}? [s/N] ').strip().lower() in ('s', 'sim'):
             preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
             temporary = False
@@ -94,10 +117,13 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
                         temporary = True
                         composer.fill(preview)
                         tell('Rascunho temporário preenchido. Aponte Enviar; nada será enviado pelo apontamento.')
-                selected = picker(page, label)
+                selected = manual_send_pick(page, config, ask, tell, picker) if key == 'send' and manual_send else picker(page, label)
                 if selected:
+                    if key == 'voice':
+                        from .sender import control_fingerprint
+                        config.voice_signature = control_fingerprint(page.locator(selected))
                     setattr(config, key, selected)
-                    tell('Seleção atualizada.')
+                    tell('Controle de voz registrado para ignorar esse estado; não bloqueamos o mesmo botão depois que virar Enviar.' if key == 'voice' else 'Seleção atualizada.')
             finally:
                 if temporary:
                     try:
@@ -137,7 +163,7 @@ def authorize_session(config, ask, tell):
 
 
 def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick,
-              initial_config=None, cancelled=None, draft_preview=False):
+              initial_config=None, cancelled=None, draft_preview=False, manual_send=False):
     safe_name(name)
     if initial_config is not None:
         config = initial_config.validate()
@@ -173,7 +199,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         review = repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
         if review:
             tell('4/5 — Aponte os controles sem escrever CSS ou JavaScript.')
-            repair_fields(page, config, ask, tell, picker, draft_preview=draft_preview)
+            repair_fields(page, config, ask, tell, picker, draft_preview=draft_preview, manual_send=manual_send)
         else:
             tell('4/5 — Detectamos hipóteses de controles. O teste abaixo verificará se funcionam.')
         store.save(config)
@@ -225,3 +251,22 @@ def status(store, name):
         return {'name': name, 'status': 'configuration_changed', 'compatible_in_this_run': False,
                 'action': f'A configuração mudou. Execute check {name} novamente.'}
     return receipt
+
+
+def point_controls(store, name, field, *, ask=input, tell=print, cancelled=None,
+                   session_factory=BrowserSession, picker=pick):
+    if field not in ('voice', 'send'):
+        raise ValueError('Controle inválido.')
+    config = store.load(name)
+    if not authorize_session(config, ask, tell):
+        return ChatResult('not_authorized').receipt(config)
+    with session_factory(browser_config(config, store.root)) as session:
+        page = session.page(config.url)
+        ask('Confira a aba e a conta do chat. Quando estiverem corretas, clique em Continuar. ')
+        blocked = blocked_login_receipt(page, config, store, tell)
+        if blocked:
+            return blocked
+        repair_fields(page, config, ask, tell, picker, manual_send=True, fields=(field,))
+        store.save(config)
+        tell('Apontamento salvo. Não enviamos mensagem e isso não é um teste de compatibilidade.')
+    return None

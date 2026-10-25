@@ -80,9 +80,9 @@ function renderChats(chats) {
     label.append(radio, document.createTextNode(chat.name)); box.append(label);
     const info = document.createElement('small');
     info.textContent = chat.invalid ? 'Configuração inválida. Crie outra com um nome diferente.' :
-      `${chat.browser}${chat.session_mode === 'existing_chrome' ? ' · Chrome pessoal conectado' : ' · perfil separado'} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
+      `${chat.browser}${chat.session_mode === 'existing_chrome' ? ' · Chrome já aberto (configurado)' : ' · perfil separado'} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
     box.append(info);
-    for (const [caption, operation] of [['Testar agora','check'],['Corrigir campos','repair']]) {
+    for (const [caption, operation] of [['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send'],['Testar agora','check'],['Corrigir campos','repair']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';
       button.onclick = () => task(operation, {name: chat.name}); box.append(button);
     }
@@ -105,6 +105,7 @@ function render(value) {
     $('continue').hidden = yesno;
     if (oldPrompt !== state.prompt.id) {
       for (const id of ['yes','no','continue']) $(id).disabled = false;
+      $('continue').textContent = /digite algo/i.test(state.prompt.text) ? 'Já digitei · Selecionar Enviar' : 'Continuar';
       (yesno ? $('yes') : $('continue')).focus();
     }
   }

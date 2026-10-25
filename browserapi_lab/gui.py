@@ -1,6 +1,7 @@
 """Painel local Ubuntu: stdlib, um worker Playwright, consentimento por botão."""
 from collections import deque
 import argparse
+from dataclasses import replace
 import importlib.util
 import json
 import os
@@ -20,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS
 from .session import ProfileBusyError, ProfileLock
-from .setup import configure, check, pick, status
+from .setup import configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
 
 ASSETS = Path(__file__).parent / 'assets'
@@ -140,7 +141,7 @@ class Panel:
             self.condition.notify_all()
 
     def submit(self, payload):
-        allowed = ('configure', 'check', 'repair', 'ask', 'doctor', 'prepare')
+        allowed = ('configure', 'check', 'repair', 'ask', 'doctor', 'prepare', 'point_voice', 'point_send', 'use_existing')
         if payload.get('operation') not in allowed:
             raise ValueError('Ação inválida.')
         if payload['operation'] == 'configure':
@@ -155,7 +156,7 @@ class Panel:
             if config.name in self.store.names():
                 raise ValueError('Nome já salvo. Use Corrigir campos ou escolha outro nome.')
             task = (payload['operation'], config)
-        elif payload['operation'] in ('check', 'repair', 'ask'):
+        elif payload['operation'] in ('check', 'repair', 'ask', 'point_voice', 'point_send', 'use_existing'):
             config = self.store.load(payload.get('name'))
             if payload['operation'] == 'ask' and (not isinstance(payload.get('message'), str)
                                                 or not payload['message'].strip()
@@ -208,10 +209,20 @@ class Panel:
                               'Não foi encontrado um ambiente gráfico. Abra o programa na sua sessão normal do Ubuntu.')
                 elif operation == 'configure':
                     self.receipt = configure(self.store, value.name, initial_config=value,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), draft_preview=True, **common)
+                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
+                elif operation == 'use_existing':
+                    if self.ask('Mudar este chat salvo para conectar ao Chrome já aberto, sem iniciar perfil separado? A conexão seguinte pedirá permissão e pode acessar todas as abas/contas. [s/N] ') == 's':
+                        config = replace(self.store.load(value[0]), browser='chrome', executable=None, session_mode='existing_chrome').validate()
+                        self.store.save(config)
+                        self.tell('Modo salvo: Chrome já aberto. Abra o chat na conta desejada e autorize a conexão ao usar os botões de seleção. Nenhuma janela foi aberta nesta mudança.')
+                    else:
+                        self.tell('Modo anterior preservado. Nenhum navegador foi aberto.')
+                elif operation in ('point_voice', 'point_send'):
+                    self.receipt = point_controls(self.store, value[0], 'voice' if operation == 'point_voice' else 'send',
+                        picker=lambda page, role: pick(page, role, self.cancelled.is_set), **common)
                 elif operation == 'repair':
                     self.receipt = configure(self.store, value[0], repairing=True,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), draft_preview=True, **common)
+                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
                 else:
                     self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None, **common)
                 with self.lock:

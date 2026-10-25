@@ -193,6 +193,11 @@ class TestChatWorkflow(BrowserTestCase):
                 def exercise_connection():
                     with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
                         with BrowserSession(config) as attached:
+                            count = len(attached.context.pages)
+                            with self.assertRaises(RuntimeError):
+                                attached.page(self.server.url())
+                            self.assertEqual(len(attached.context.pages), count)
+                            attached.context.pages[0].goto(self.server.url())  # usuário já abriu o chat
                             page = attached.page(self.server.url())
                             page.evaluate("window.__fixtureSession = 'still-here'")
                             other = attached.context.new_page()
@@ -215,6 +220,67 @@ class TestChatWorkflow(BrowserTestCase):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
+
+    def test_manual_voice_then_type_then_select_send_without_sending(self):
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const button = document.querySelector('#send');
+            button.setAttribute('aria-label', 'Microfone');
+            document.querySelector('#composer').addEventListener('input', event => {
+                button.setAttribute('aria-label', event.target.value ? 'Enviar mensagem' : 'Microfone');
+            });
+        }""")
+        prompts = []
+        def ask(text):
+            prompts.append(text)
+            if 'digite algo' in text:
+                self.page.locator('#composer').fill('rascunho digitado pela pessoa')
+                self.page.locator('#send').click()
+                self.page.keyboard.press('Enter')
+                self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+                return ''
+            return 's'
+        def choose(page, role):
+            page.evaluate("""() => { const timer = setInterval(() => {
+                if (!window.__balPickerCleanup) return;
+                clearInterval(timer); document.querySelector('#send').click();
+            }, 100); }""")
+            return pick(page, role)
+        repair_fields(self.page, config, ask=ask, tell=lambda _:None, picker=choose,
+                      manual_send=True, fields=('voice','send'))
+        self.assertEqual(config.voice, '#send')
+        self.assertEqual(len(config.voice_signature), 64)
+        self.assertEqual(config.send, '#send')
+        self.assertTrue(any('digite algo' in text for text in prompts))
+        self.assertEqual(self.page.locator('#composer').input_value(), 'rascunho digitado pela pessoa')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+        self.page.locator('#composer').fill('')  # pessoa apaga antes de autorizar o teste
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_recorded_voice_state_blocks_even_without_voice_label(self):
+        from browserapi_lab.sender import control_fingerprint
+        config = self.prepare()
+        button = self.page.locator('#send')
+        button.evaluate("el => { el.removeAttribute('aria-label'); el.textContent = '●'; }")
+        config.voice = '#send'
+        config.voice_signature = control_fingerprint(button)
+        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'send_is_microphone')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
+    def test_manual_teaching_cancel_preserves_user_draft_and_removes_guard(self):
+        config = self.prepare()
+        def ask(text):
+            if 'digite algo' in text:
+                self.page.locator('#composer').fill('minha edição')
+                raise EOFError()
+            return 's'
+        with self.assertRaises(EOFError):
+            repair_fields(self.page, config, ask=ask, tell=lambda _:None,
+                          manual_send=True, fields=('send',))
+        self.assertEqual(self.page.locator('#composer').input_value(), 'minha edição')
+        self.assertFalse(self.page.evaluate('Boolean(window.__balTypingCleanup)'))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
 
     def test_no_authorization_no_send(self):
         config = self.prepare()
