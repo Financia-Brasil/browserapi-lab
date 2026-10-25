@@ -158,12 +158,14 @@ class TestChatWorkflow(BrowserTestCase):
         self.page.evaluate("""() => {
             const button = document.querySelector('#send');
             button.setAttribute('aria-label', 'Microfone');
-            setTimeout(() => button.click(), 150);
-            setTimeout(() => {
+            const timer = setInterval(() => {
+                if (!window.__balVoiceControl || window.__balPick !== null) return;
+                clearInterval(timer);
+                button.click();
                 window.__voiceRejected = window.__balPick === null;
                 button.setAttribute('aria-label', 'Enviar mensagem');
                 button.click();
-            }, 350);
+            }, 100);
         }""")
         self.assertEqual(pick(self.page, 'botão Enviar'), '#send')
         self.assertTrue(self.page.evaluate('window.__voiceRejected'))
@@ -188,20 +190,24 @@ class TestChatWorkflow(BrowserTestCase):
                     self.page.wait_for_timeout(100)
                 address = endpoint(home)
                 config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True)
-                with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
-                    with BrowserSession(config) as attached:
-                        page = attached.page(self.server.url())
-                        page.evaluate("window.__fixtureSession = 'still-here'")
-                        other = attached.context.new_page()
-                        other.goto('data:text/html,unrelated-fixture')
-                    self.assertIsNone(process.poll(), 'Desconectar não deve fechar navegador pessoal')
-                    with BrowserSession(config) as attached:
-                        page = attached.page(self.server.url())
-                        self.assertEqual(page.evaluate('window.__fixtureSession'),'still-here')
-                        self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
-                        attached.new_page(self.server.url())
-                        with self.assertRaises(RuntimeError):
-                            attached.page(self.server.url())
+                def exercise_connection():
+                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
+                        with BrowserSession(config) as attached:
+                            page = attached.page(self.server.url())
+                            page.evaluate("window.__fixtureSession = 'still-here'")
+                            other = attached.context.new_page()
+                            other.goto('data:text/html,unrelated-fixture')
+                        self.assertIsNone(process.poll(), 'Desconectar não deve fechar navegador pessoal')
+                        with BrowserSession(config) as attached:
+                            page = attached.page(self.server.url())
+                            self.assertEqual(page.evaluate('window.__fixtureSession'),'still-here')
+                            self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
+                            attached.new_page(self.server.url())
+                            with self.assertRaises(RuntimeError):
+                                attached.page(self.server.url())
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=1) as worker:
+                    worker.submit(exercise_connection).result(timeout=40)
             finally:
                 process.terminate()
                 try:

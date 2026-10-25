@@ -36,7 +36,7 @@ def browser_options():
 def pick(page, role, cancelled=None):
     script = (Path(__file__).parent / 'assets' / 'picker.js').read_text(encoding='utf-8')
     voice_script = (Path(__file__).parent / 'assets' / 'voice_control.js').read_text()
-    page.evaluate('window.__balVoiceControl = (' + voice_script + ');')
+    page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
     page.evaluate(script, role)
     try:
         if cancelled is None:
