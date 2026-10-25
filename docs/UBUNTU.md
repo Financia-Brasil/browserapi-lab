@@ -85,3 +85,26 @@ O teste sintético não equivale a homologar Gemini/LMArena autenticados, todos 
 - Preparação com downloads na máquina do usuário, instalação gráfica via gerenciador do Linux Lite e sessão autenticada Gemini/LMArena **não foram executadas** aqui. Não se afirma homologação completa desse desktop.
 
 As primeiras execuções encontraram uma falha no preparo da página sintética do teste: uma substituição de HTML também alterava a string interna do iframe. A fixture foi corrigida, sem relaxar a validação de URLs ou a exigência de autorização. A execução final acima passou.
+
+
+## Correção após relato de uso real — versão 0.1.0+ubuntu2
+
+O usuário reportou recusa do login Google no navegador controlado e falha de
+reconhecimento de Enviar mesmo após apontamento. O bloqueio do Google continua
+sem solução garantida: o programa apenas reconhece o aviso conhecido e impede
+continuar a configuração nesse estado. Nenhum mecanismo de autenticação ou
+proteção foi contornado.
+
+Foi corrigido um defeito reproduzível: exigir Enviar visível antes de preencher.
+Agora, após autorização, preenche e só ativa um botão único, visível e habilitado,
+com espera limitada. Se falhar, não ativa nem reenvia e informa possível rascunho.
+Isso não demonstra que essa era a única causa do erro no Gemini do usuário.
+
+Validação: [Actions 40156336579](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40156336579),
+**SUCCESS, 248 testes em 120,867 s, 1 ignorado**, código `9a59cf6`. Inclui botão
+oculto/ausente até digitar, ambiguidade sem envio, rascunho preservado e recusa
+Google em página sintética UTF-8 antes do apontamento. O código de execução do
+instalador publicado é idêntico ao desse commit; mudanças seguintes só adicionam
+documentação, evidências e teste de aviso em inglês (não incluído nessa bateria
+completa). Montagem/extração do pacote e simulação de dependências aprovadas.
+Não houve novo login autenticado no Google nem execução no computador do usuário.
