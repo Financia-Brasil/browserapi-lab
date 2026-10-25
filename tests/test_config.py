@@ -82,3 +82,16 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(receipt['compatible_in_this_run'])
         self.assertFalse(receipt['performance']['within_capture_budget'])
         self.assertEqual(receipt['performance']['api_equivalence'], 'not_measured')
+
+    def test_two_chats_have_independent_configuration_and_profiles(self):
+        from browserapi_lab.chat import browser_config
+        with tempfile.TemporaryDirectory() as root:
+            store = ConfigStore(root)
+            first = self.config()
+            second = ChatConfig('second-chat', 'https://other.example/chat', browser='chrome')
+            store.save(first)
+            store.save(second)
+            self.assertEqual(store.names(), ['my-chat', 'second-chat'])
+            self.assertNotEqual(browser_config(first, store.root).profile_dir,
+                                browser_config(second, store.root).profile_dir)
+            self.assertEqual(store.load('second-chat').browser, 'chrome')

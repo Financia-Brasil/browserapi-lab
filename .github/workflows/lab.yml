@@ -152,6 +152,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p "results/ci/${GITHUB_RUN_ID}"
           cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
+          if [ -f results/ci/product-flow.json ]; then cp results/ci/product-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
           git restore results/ci/resumo.md results/ci/doctor-browser.json
           git add -f "results/ci/${GITHUB_RUN_ID}"

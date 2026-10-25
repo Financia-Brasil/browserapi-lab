@@ -106,6 +106,7 @@ class TestChatWorkflow(BrowserTestCase):
         self.page.evaluate(script, 'campo de mensagem')
         self.page.locator('#composer').click()
         self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#composer')
+        self.page.locator('#composer').fill('Não enviar durante reparo')
         self.page.evaluate(script, 'botão Enviar')
         self.page.locator('#send').click()
         self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#send')
@@ -170,3 +171,28 @@ class TestCLIRealBrowser(unittest.TestCase):
                 self.assertEqual(store.status('cli-chat')['status'], 'not_authorized')
             finally:
                 server.stop()
+
+
+class TestProductHealthBenchmark(BrowserTestCase):
+    def test_ten_checks_same_chat_with_capture_budget(self):
+        import json
+        import statistics
+        from _harness import REPO_ROOT
+        from browserapi_lab.benchmark import percentile
+        config = ChatConfig('benchmark-health', self.server.url(), provider='fixture',
+                            timeout_ms=15000, stability_ms=1200, **HYPOTHESES['fixture'])
+        self.page.goto(config.url, wait_until='load')
+        self.page.evaluate("FakeChat.config({mode:'contract', delay:1})")
+        values, totals = [], []
+        for iteration in range(10):
+            result = exchange(self.page, config, authorized=True, health_check=True)
+            self.assertEqual(result.status, 'success', f'iteration={iteration+1}')
+            values.append(result.timings['capture_overhead_ms'])
+            totals.append(result.timings['total_ms'])
+        summary = {'iterations': 10, 'failures': 0, 'same_conversation': True,
+                   'capture_p95_ms': percentile(values), 'capture_budget_ms': 900,
+                   'total_p50_ms': statistics.median(totals), 'total_p95_ms': percentile(totals),
+                   'browser_version': self.session.context.browser.version,
+                   'scope': 'Contrato sintético local; não mede API ou chat real.'}
+        self.assertLess(summary['capture_p95_ms'], 900)
+        ConfigStore.write_json(REPO_ROOT / 'results/ci/product-flow.json', summary)
