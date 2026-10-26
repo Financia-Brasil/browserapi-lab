@@ -330,3 +330,27 @@ Chrome, dependências incompatíveis e supervisor não são substituídos silenc
 Métricas em memória zeram com a troca de processo. Perfil pessoal/Google real,
 API de LLM, RAG/contexto, otimização de recursos e fallback continuam sem nova
 homologação/implementação por este marco; não são anunciados como entregues.
+
+
+### Publicação final 0.3.1
+
+[Main 40266861682](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40266861682)
+**SUCCESS**: núcleo, Chromium, instalação fora do checkout, janela sob Xvfb e
+publicação automática aprovados. Main em `0a3677280bd8e7fdb685dcfa33b03d13bc8198e4`
+após PR #2; release `v0.3.1` em commit derivado
+`f0d243e77d089a86e1d24dd5edb6c1dd264a4d84`.
+
+Verificação pública final sem token em
+[published-031-verification.json](../results/ci/local-updater-20261026/published-031-verification.json):
+bundle de **97090 bytes**, tag/commit, manifesto, todos os SHA256 e versão Debian
+0.3.1 conferidos. **29 arquivos de código/assets idênticos** entre ZIP de atualização
+e `.deb`. Download final não executado: verificação/extração apenas. Execução real
+de atualização e compatibilidade do supervisor anterior já cobertas pelos dois
+scripts/relatórios locais descritos acima. `downloads/` contém os artefatos exatos
+dessa release publicada, não outro `.deb` recompilado com timestamp diferente.
+
+O run main 40266791858 foi cancelado e substituído pelo 40266861682; não contado
+como aprovação. O cancelamento manual de um run anterior não estava autorizado
+pela integração GitHub (403); não se pediu credencial nem permissão adicional,
+e o fluxo normal de push/CI/publicação funcionou. Não há dependência de comandos
+ou testes manuais do usuário para gerar próximas releases compatíveis.

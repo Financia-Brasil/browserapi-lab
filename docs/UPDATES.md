@@ -96,3 +96,18 @@ com supervisor 0.3.0 obtido da release pública, venv criada depois da abertura,
 código 0.3.1 e módulo de prova presente somente nessa venv: atualização automática,
 mesma porta/token e confirmação de início após 30 segundos, sem mensagem de chat.
 Scripts/relatórios em results/ci/local-updater-20261026 (executar a partir do repo).
+
+
+## Publicação confirmada
+
+Integrações em main: PR #1 e #2. A release recomendada **v0.3.1** foi gerada
+pelo workflow [40266861682](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40266861682),
+com todos os jobs aprovados, às 2026-10-26T04:08:48Z. Commit imutável da release:
+`f0d243e77d089a86e1d24dd5edb6c1dd264a4d84`. Manifesto e bundle foram baixados
+pelo cliente público sem token, validados, e os 29 arquivos do runtime conferidos
+byte a byte contra o instalador publicado. SHA256SUMS também conferido.
+
+A troca de processo zera métricas e log temporário do painel; não apaga a conversa
+na aba do provedor. Não existe histórico persistente de respostas neste marco.
+O supervisor é estável, mas worker/servidor reiniciam automaticamente e a interface
+recarrega: não é hot reload arbitrário de Python em execução.

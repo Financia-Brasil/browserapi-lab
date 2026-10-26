@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "release": "0.3.1",
+  "immutable_commit": "f0d243e77d089a86e1d24dd5edb6c1dd264a4d84",
+  "public_client_without_token": true,
+  "all_published_sha256_verified": true,
+  "deb_version": "0.3.1",
+  "deb_and_runtime_files_identical": 29,
+  "bundle_bytes": 97090,
+  "execution_of_download": false,
+  "main_workflow": "40266861682"
+}
