@@ -207,6 +207,15 @@ class TestGraphicalJourney(BrowserTestCase):
             self.assertIn('send',self.training_audit[0]['steps'])
             self.assertIn('Funcionou neste teste',self.page.locator('#result-title').inner_text())
             self.assertEqual(receipt['browser'],'chromium')
+            self.page.wait_for_function("document.querySelector('#stat-requests').textContent === '1'")
+            self.assertEqual(self.page.locator('#stat-success').inner_text(),'100%')
+            self.assertEqual(self.page.locator('#stat-tokens').inner_text(),'Não disponível')
+            self.assertIn('Online (observado)',self.page.locator('#source-health').inner_text())
+            self.assertEqual(self.page.locator('#latency-history li').count(),1)
+            self.assertGreaterEqual(receipt['timings']['browser_start_ms'],0)
+            self.assertGreaterEqual(receipt['timings']['page_open_ms'],0)
+            self.assertIn('Pipeline de envio',self.page.locator('#stage-timings').text_content())
+
             self.page.get_by_role('button', name='Testar agora').click()
             self.wait_question('Faça login')
             self.page.click('#continue')
@@ -214,6 +223,10 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.click('#yes')
             self.wait_phase('Concluído')
             self.assertTrue(self.store.status('graphical')['compatible_in_this_run'])
+            self.page.wait_for_function("document.querySelector('#stat-requests').textContent === '2'")
+            self.assertEqual(self.page.locator('#latency-history li').count(),2)
+            self.assertEqual(self.panel.snapshot()['telemetry']['requests'],2)
+
             evidence = {'kind':'synthetic_graphical_journey','headed_worker':True,
                         'form_configure':True,'health_check':True,'consent_buttons':True,
                         'receipt':self.store.status('graphical'),

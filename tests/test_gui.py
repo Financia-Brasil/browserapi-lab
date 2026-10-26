@@ -115,6 +115,37 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.request('/api/task', method='POST', body={'operation':'configure','name':'x','provider':'gemini','browser':'custom'})[0], 400)
         self.assertEqual(self.request('/api/task', method='POST', body={'operation':'configure','name':'x','provider':'custom','browser':'chromium','url':'https://user:password@example.com'})[0], 400)
 
+    def test_metrics_finish_with_task_not_stale_receipt_or_duplicate_send(self):
+        self.store.save(ChatConfig('saved','https://example.com'))
+        def check_once(*args, **kwargs):
+            kwargs['ask']('Autoriza? [s/N] ')
+            return {'status':'success','timings':{'total_ms':123},'answer':'SECRET'}
+        with patch('browserapi_lab.gui.check',side_effect=check_once) as check_call:
+            self.panel.submit({'operation':'check','name':'saved'})
+            until(lambda:self.panel.snapshot()['prompt'])
+            self.assertEqual(self.panel.snapshot()['telemetry']['sources']['saved']['state'],'busy')
+            self.panel.reply(self.panel.snapshot()['prompt']['id'],'s')
+            until(lambda:self.panel.snapshot()['phase']=='done')
+            state = self.panel.snapshot()['telemetry']
+            self.assertEqual(state['requests'],1)
+            self.assertGreater(state['history'][0]['timings']['manual_wait_ms'],0)
+            check_call.assert_called_once()
+        self.panel.submit({'operation':'doctor'})
+        until(lambda:self.panel.snapshot()['phase']=='done')
+        state = self.panel.snapshot()['telemetry']
+        self.assertEqual(state['operations'],2)
+        self.assertEqual(state['requests'],1)
+        self.assertIsNone(state['history'][-1]['status'])
+        self.assertNotIn('SECRET',json.dumps(state))
+        with patch('browserapi_lab.gui.check',side_effect=RuntimeError('SECRET')):
+            self.panel.submit({'operation':'check','name':'saved'})
+            until(lambda:self.panel.snapshot()['phase']=='error')
+        state = self.panel.snapshot()['telemetry']
+        self.assertEqual(state['operation_errors'],1)
+        self.assertEqual(state['requests'],1)
+        self.assertEqual(state['sources']['saved']['state'],'needs_attention')
+        self.assertNotIn('SECRET',json.dumps(state))
+
     def test_prompt_unique_reply_once_and_cancel(self):
         result = []
         worker = threading.Thread(target=lambda: result.append(self.panel.ask('Autoriza? [s/N] ')))

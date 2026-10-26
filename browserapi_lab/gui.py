@@ -24,6 +24,7 @@ from .session import ProfileBusyError, ProfileLock
 from .setup import configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
 from .version import APP_VERSION
+from .telemetry import Telemetry
 
 ASSETS = Path(__file__).parent / 'assets'
 DATA_DIR = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'browserapi-lab'
@@ -106,6 +107,7 @@ class Panel:
         self.answer = None
         self.receipt = None
         self.messages = deque(maxlen=60)
+        self.telemetry = Telemetry()
         self.thread = threading.Thread(target=self._worker, name='BrowserAPI', daemon=True)
         self.thread.start()
 
@@ -122,7 +124,11 @@ class Panel:
             self.prompt = {'id': identifier, 'text': text.replace(' [s/N]', '').strip(),
                            'kind': 'yesno' if '[s/N]' in text else 'continue'}
             self.phase = 'waiting'
-            self.condition.wait_for(lambda: self.answer is not None or self.cancelled.is_set())
+            wait_started = time.perf_counter()
+            try:
+                self.condition.wait_for(lambda: self.answer is not None or self.cancelled.is_set())
+            finally:
+                self.telemetry.user_wait((time.perf_counter() - wait_started) * 1000)
             if self.cancelled.is_set():
                 raise EOFError()
             value = self.answer
@@ -199,7 +205,7 @@ class Panel:
                 except (OSError, ValueError, TypeError):
                     chats.append({'name': name, 'compatible': False, 'invalid': True})
             return {'version': APP_VERSION, 'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
-                    'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready()}
+                    'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready(), 'telemetry': self.telemetry.snapshot()}
 
     def _worker(self):
         while True:
@@ -207,7 +213,10 @@ class Panel:
             if task is None:
                 return
             operation, value = task
+            end_phase = 'error'
             try:
+                name = value.name if operation == 'configure' else value[0] if isinstance(value, tuple) else None
+                self.telemetry.begin(operation, name)
                 common = dict(ask=self.ask, tell=self.tell, cancelled=self.cancelled.is_set)
                 if operation == 'prepare':
                     self.installer(self.data_dir, self.tell, self.cancelled.is_set)
@@ -236,26 +245,25 @@ class Panel:
                                              picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
                 else:
                     self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None, **common)
-                with self.lock:
-                    self.phase = 'done'
+                end_phase = 'done'
             except (EOFError, KeyboardInterrupt):
                 self.tell('Operação interrompida. Isso não desfaz mensagens que já foram enviadas.')
-                with self.lock:
-                    self.phase = 'cancelled'
+                end_phase = 'cancelled'
             except ExistingChromeError as error:
                 self.tell(str(error))
-                with self.lock:
-                    self.phase = 'error'
+                end_phase = 'error'
             except ProfileBusyError:
                 self.tell('Este perfil já está aberto. Feche a outra janela do projeto que usa o mesmo chat e tente de novo.')
-                with self.lock:
-                    self.phase = 'error'
+                end_phase = 'error'
             except Exception:
                 self.tell('Não foi possível concluir. Confira a conexão e o navegador. Use Preparar ou Corrigir campos. Nenhum reenvio automático foi feito.')
-                with self.lock:
-                    self.phase = 'error'
+                end_phase = 'error'
             finally:
                 with self.lock:
+                    # Publicar conclusão + métricas atomicamente: submit não pode
+                    # apagar o recibo da tarefa anterior antes de finish.
+                    self.telemetry.finish(self.receipt, end_phase)
+                    self.phase = end_phase
                     self.prompt = None
 
     def close(self):

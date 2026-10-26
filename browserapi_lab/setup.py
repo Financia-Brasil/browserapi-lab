@@ -2,6 +2,8 @@
 from dataclasses import asdict
 from pathlib import Path
 import shutil
+import time
+from contextlib import contextmanager
 
 from .browser import BrowserSession
 from .chat import ChatResult, browser_config, config_fingerprint, exchange, google_login_blocked
@@ -150,10 +152,10 @@ def confirmed(ask, message):
     return ask(message + ' [s/N] ').strip().lower() in ('s', 'sim')
 
 
-def blocked_login_receipt(page, config, store, tell):
+def blocked_login_receipt(page, config, store, tell, timings=None):
     if not google_login_blocked(page):
         return None
-    receipt = ChatResult('google_login_blocked').receipt(config)
+    receipt = ChatResult('google_login_blocked',timings=timings or {}).receipt(config)
     if config.name in store.names():
         store.save_status(config.name, receipt)
     tell(receipt['message'])
@@ -168,6 +170,18 @@ def authorize_session(config, ask, tell):
     tell('O Chrome pedirá sua permissão. Esta conexão pode acessar todas as abas/contas desse navegador; só prossiga se confiar no programa. Não copiamos cookies nem abrimos outro processo no seu perfil.')
     tell('Deixe somente uma aba do chat escolhido aberta. O programa não fecha o Chrome ao desconectar.')
     return confirmed(ask, 'Autoriza conectar ao Chrome pessoal já aberto com esse acesso?')
+
+
+@contextmanager
+def measured_page(session_factory, config, store):
+    """Separar inicialização/lookup da aba da espera humana e da resposta."""
+    started = time.perf_counter()
+    with session_factory(browser_config(config, store.root)) as session:
+        timings = {'browser_start_ms': round((time.perf_counter() - started) * 1000, 3)}
+        opened = time.perf_counter()
+        page = session.page(config.url)
+        timings['page_open_ms'] = round((time.perf_counter() - opened) * 1000, 3)
+        yield page, timings
 
 
 def configure(store, name, *, repairing=False, ask=input, tell=print, session_factory=BrowserSession, picker=pick,
@@ -197,10 +211,9 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         return ChatResult('not_authorized').receipt(config)
     tell('3/5 — Abra o navegador do projeto. Faça login e escolha o modelo manualmente.')
     tell('Se o Google disser que o navegador não é seguro, interrompa. Não avance ao apontamento; o programa não contorna essa proteção.')
-    with session_factory(browser_config(config, store.root)) as session:
-        page = session.page(config.url)
+    with measured_page(session_factory, config, store) as (page, session_timings):
         ask('Quando o chat e o modelo estiverem prontos, pressione Enter. ')
-        blocked = blocked_login_receipt(page, config, store, tell)
+        blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
         suggest(page, config)
@@ -216,6 +229,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
             result = exchange(page, config, authorized=True, health_check=True, cancelled=cancelled)
         else:
             result = ChatResult('not_authorized')
+        result.timings.update(session_timings)
         receipt = result.receipt(config)
         store.save_status(config.name, receipt)
         tell(receipt['message'])
@@ -227,10 +241,9 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
     config = store.load(name)
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
-    with session_factory(browser_config(config, store.root)) as session:
-        page = session.page(config.url)
+    with measured_page(session_factory, config, store) as (page, session_timings):
         ask('Faça login e escolha o modelo no navegador; Enter quando estiver pronto. ')
-        blocked = blocked_login_receipt(page, config, store, tell)
+        blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
         if message is None:
@@ -238,6 +251,7 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
         else:
             authorized = confirmed(ask, 'Autoriza enviar a mensagem informada UMA vez?')
         result = exchange(page, config, message, authorized=authorized, health_check=message is None, cancelled=cancelled)
+        result.timings.update(session_timings)
         receipt = result.receipt(config)
         # ask não é prova de formato/compatibilidade equivalente ao desafio check.
         if message is None:
@@ -268,10 +282,9 @@ def point_controls(store, name, field, *, ask=input, tell=print, cancelled=None,
     config = store.load(name)
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
-    with session_factory(browser_config(config, store.root)) as session:
-        page = session.page(config.url)
+    with measured_page(session_factory, config, store) as (page, session_timings):
         ask('Confira a aba e a conta do chat. Quando estiverem corretas, clique em Continuar. ')
-        blocked = blocked_login_receipt(page, config, store, tell)
+        blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
         repair_fields(page, config, ask, tell, picker, manual_send=True, fields=(field,))

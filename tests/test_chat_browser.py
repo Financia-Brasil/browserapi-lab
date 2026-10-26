@@ -27,6 +27,21 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(result.answer, 'browserapi-ok')
         self.assertIsNotNone(result.timings['ttft_dom_ms'])
         self.assertLess(result.timings['capture_overhead_ms'], 2500)
+        stages = ('preflight_ms','send_pipeline_ms','response_wait_ms','parse_ms')
+        self.assertTrue(all(result.timings[key] >= 0 for key in stages))
+        self.assertLessEqual(sum(result.timings[key] for key in stages),result.timings['total_ms']+.01)
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),1)
+
+    def test_failure_is_timed_without_sending_or_inventing_later_stages(self):
+        config = self.prepare()
+        self.page.locator('#composer').fill('rascunho privado')
+        result = exchange(self.page,config,authorized=True,health_check=True)
+        self.assertEqual(result.status,'draft_present')
+        self.assertGreater(result.timings['total_ms'],0)
+        self.assertIn('preflight_ms',result.timings)
+        self.assertNotIn('response_wait_ms',result.timings)
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
+
 
     def test_send_hidden_until_composer_input(self):
         config = self.prepare()

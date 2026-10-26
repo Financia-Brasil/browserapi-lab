@@ -125,14 +125,27 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
     if not authorized:
         return ChatResult('not_authorized')
     start = time.perf_counter()
-    result = ChatResult('page_unavailable')
+    metrics = {}
+    result = ChatResult('page_unavailable', timings=metrics)
+    phase = 'preflight_ms'
+    phase_start = start
+    def stage(name):
+        nonlocal phase, phase_start
+        now = time.perf_counter()
+        if phase:
+            metrics[phase] = round((now - phase_start) * 1000, 3)
+        phase, phase_start = name, now
+    def outcome(*args, **kwargs):
+        nonlocal result
+        result = ChatResult(*args, timings=metrics, **kwargs)
+        return result
     try:
         if cancelled and cancelled():
             raise EOFError('Operação interrompida')
         config.validate()
         problem = preflight(page, config)
         if problem:
-            return ChatResult(problem)
+            return outcome(problem)
         outputs_before = page.locator(config.assistant).count()
         locator = page.locator(config.composer)
         data = locator.evaluate('''el => ({tag:el.tagName.toLowerCase(),
@@ -143,7 +156,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         prompt = (response_instruction(request_id) + ' Use answer igual a browserapi-ok.'
                   if health_check else text)
         if not isinstance(prompt, str) or not prompt.strip():
-            return ChatResult('not_authorized')
+            return outcome('not_authorized')
         install(page, root_selector=config.root, message_selector=config.assistant,
                 message_count_baseline=outputs_before)
         if cancelled and cancelled():
@@ -162,25 +175,29 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                 if time.monotonic() >= deadline:
                     raise SendControlUnavailable()
                 page.wait_for_timeout(100)
+        stage('send_pipeline_ms')
         sent = send_message(page, composer, button, prompt,
                             strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
                             activation=('click_send',), user_selector=config.user,
                             verify_timeout_ms=min(5000, config.timeout_ms), before_activate=ready_to_activate)
+        metrics.update(fill_ms=round(sent.fill_ms, 3), send_ms=round(sent.send_ms, 3))
         if not sent.success:
             if any(attempt.error == 'VoiceControlUnavailable' for attempt in sent.attempts):
-                return ChatResult('send_is_microphone')
+                return outcome('send_is_microphone')
             if any(attempt.error == 'SendControlUnavailable' for attempt in sent.attempts):
-                return ChatResult('send_missing')
-            return ChatResult('send_unconfirmed')
+                return outcome('send_missing')
+            return outcome('send_unconfirmed')
         def check_cancel(*_):
             if cancelled and cancelled():
                 raise EOFError('Operação interrompida')
         check_cancel()
+        stage('response_wait_ms')
         observation = wait_for_completion(page, WatchConfig(stability_window_ms=config.stability_ms,
                                                            timeout_ms=config.timeout_ms), config.root, on_poll=check_cancel)
         if observation.status != 'success':
             block = read_ui(page, config.root).blocking
-            return ChatResult(block or ('timeout' if observation.status == 'timeout' else 'page_unavailable'))
+            return outcome(block or ('timeout' if observation.status == 'timeout' else 'page_unavailable'))
+        stage('parse_ms')
         outputs = page.locator(config.assistant)
         fresh = []
         for index in range(outputs_before, outputs.count()):
@@ -188,38 +205,39 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             if item.is_visible():
                 fresh.append(item.inner_html())
         if not fresh:
-            return ChatResult('output_invalid')
+            return outcome('output_invalid')
         if health_check:
             texts = [html_to_text(html) for html in fresh]
             selection = select_output(texts, request_id)
             if selection.status != 'selected':
-                return ChatResult('ambiguous_output' if selection.status == 'ambiguous' else 'contract_invalid')
+                return outcome('ambiguous_output' if selection.status == 'ambiguous' else 'contract_invalid')
             # Uma resposta correta ao desafio, não só JSON de esquema correto.
             value = json.loads(texts[selection.index])
             if value['answer'] != 'browserapi-ok':
-                return ChatResult('contract_invalid')
+                return outcome('contract_invalid')
             answer = value['answer']
         else:
             if len(fresh) != 1:
-                return ChatResult('ambiguous_output')
+                return outcome('ambiguous_output')
             answer = html_to_markdown(fresh[0])
         summary = page.evaluate('window.__bal.streamSummary()')
         first = summary.get('first_token_ms')
         sent_ms = summary.get('sent_ms')
-        result = ChatResult('success', True, answer=answer, request_id=request_id, timings={
-            'total_ms': round((time.perf_counter() - start) * 1000, 1),
+        metrics.update({
             'ttft_dom_ms': round(max(0, first - sent_ms), 1) if first is not None and sent_ms is not None else None,
             'capture_overhead_ms': summary.get('since_last_mutation_ms'),
-            'fill_ms': round(sent.fill_ms, 1), 'send_ms': round(sent.send_ms, 1),
         })
+        outcome('success', True, answer=answer, request_id=request_id)
         result.browser_version = page.context.browser.version
         return result
     except (EOFError, KeyboardInterrupt):
         raise
     except Exception:
         # Playwright inclui texto/HTML/URLs em exceções: não persistir o detalhe.
-        return ChatResult('page_unavailable')
+        return outcome('page_unavailable')
     finally:
+        stage(None)
+        metrics['total_ms'] = round((time.perf_counter() - start) * 1000, 3)
         try:
             from .observer import reset
             reset(page)
