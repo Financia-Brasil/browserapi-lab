@@ -79,8 +79,9 @@ class TestLLMAPIChromium(BrowserTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);fixture=root/'fixture';fixture.mkdir()
             source=(REPO_ROOT/'fixtures/fake_chat.html').read_text()
-            (fixture/'fake_chat.html').write_text(source.replace('</body>',
-                '<script>FakeChat.config({mode:"normal",delay:1});</script></body>'))
+            before,after=source.rsplit('</body>',1)
+            (fixture/'fake_chat.html').write_text(before+
+                '<script>FakeChat.config({mode:"normal",delay:1});</script></body>'+after)
             server=FixtureServer(fixture).start()
             store=ConfigStore(root/'config')
             config=ChatConfig('saved',server.url(),provider='fixture',timeout_ms=8000,stability_ms=400,**HYPOTHESES['fixture'])
