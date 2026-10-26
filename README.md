@@ -139,6 +139,21 @@ agentes 24/7 ou automação genérica de sites reais.** Ainda é necessário:
 
 Não há FastAPI, SSE, fila, `/v1/models` ou `/v1/chat/completions` neste laboratório.
 
+## Dashboard e próxima arquitetura
+
+A versão **0.2.0+ubuntu1** acrescenta dashboard local: sucesso/falha, latência
+média/P95, fontes pelo último estado observado, fases da execução e até 30 barras
+de histórico. Janela de 100 operações em memória, sem conteúdo de mensagens.
+Tokens são **Não disponível**, não uma estimativa apresentada como consumo real.
+Configurar, testar e conversar continuam exigindo consentimento; nenhuma
+mensagem é enviada para monitoramento. Não foram ligados headless, bloqueio de
+recursos, replay Fetch/XHR, atualizador ou failover automático.
+
+O [plano da próxima arquitetura](docs/NEXT_ARCHITECTURE.md) descreve sessões,
+otimização, releases, API local, fallback seguro e RAG/histórico pesquisável.
+Histórico de 1M tokens **não** é contexto nativo de 1M tokens do modelo.
+[Instalação gráfica e limites](docs/UBUNTU.md).
+
 ## Documentação
 
 - [Relatório de validação](docs/VALIDATION_REPORT.md)

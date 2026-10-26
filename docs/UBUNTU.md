@@ -316,3 +316,36 @@ prova ausência universal de instabilidade.
 O instalador publicado contém o mesmo código de execução validado. As alterações
 seguintes são documentação e o `.deb` gerado. A escolha do perfil pessoal e o
 Google real permanecem fora desta homologação.
+
+
+## 0.2.0+ubuntu1 — dashboard e medição por etapa
+
+Esta atualização preserva o fluxo integrado de voz/digitação/Enviar da ubuntu5.
+Acrescenta **Dashboard de execução** na mesma janela: contadores da janela de
+100 operações, média/P95, tokens não disponíveis, fontes observadas e a seção
+**Análise de gargalos e histórico** com tempos e até 30 barras. O chat de teste
+continua em **Meus chats → Conversar**, com autorização antes do envio.
+
+As métricas ficam somente na memória e somem quando o programa é encerrado.
+“Online (observado)” não é monitoramento contínuo: após 5 minutos a observação
+fica antiga. Não se enviam mensagens para manter esse rótulo. Erros anteriores
+à obtenção de um recibo são **erros de operação**, não latência zero. Verificações
+sintéticas também contam como requisições com resultado; não existe API de LLM
+pública nesta versão. [Definições e próximos marcos](NEXT_ARCHITECTURE.md).
+
+**Atualização sem terminal:**
+1. Baixe `downloads/BrowserAPI-Ubuntu.deb` pelo GitHub (Download raw file).
+2. Abra o arquivo pelo gerenciador de arquivos e escolha instalar/atualizar.
+3. Salve seu trabalho e reinicie o computador pelo menu gráfico. Apenas fechar
+   a aba não encerra o programa antigo; ainda não há atualização a quente.
+4. Abra **BrowserAPI** pelo menu de aplicativos. Confira que **Interface** e
+   **programa em execução** mostram ambos **0.2.0+ubuntu1**.
+5. Abra **Análise de gargalos e histórico**. Use seu chat salvo e **Testar agora**
+   ou **Conversar** quando desejar autorizar uma mensagem; o resultado alimenta
+   o painel. Não é necessário recriar perfil nem fazer login só para medir.
+
+Chrome pessoal continua experimental; esta atualização não descobre todos os
+perfis instalados nem comprova a conta escolhida. Não há bloqueio de imagens,
+CSS ou scripts, headless novo, Fetch/XHR, RAG, atualizador ou failover neste marco.
+O relato anterior de Gemini em **9838 ms** foi do usuário, em perfil separado:
+não é teste de Chrome sincronizado feito pelo assistente nem benchmark comparativo.
