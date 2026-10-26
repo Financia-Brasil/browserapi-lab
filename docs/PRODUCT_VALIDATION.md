@@ -246,3 +246,45 @@ prova ausência universal de instabilidade.
 O instalador publicado contém o mesmo código de execução validado. As alterações
 seguintes são documentação e o `.deb` gerado. A escolha do perfil pessoal e o
 Google real permanecem fora desta homologação.
+
+
+## Marco M1 — métricas e dashboard, 0.2.0+ubuntu1
+
+Escolha delegada pelo usuário em 2026-10-25: medir gargalos antes de otimizar.
+Implementação `5e2c52e`, distribuição `28dadb1515c429adbc961d84aeff08cdd704efff`.
+[Actions 40262196504](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40262196504)
+**SUCCESS**: **279 testes em 143,910 s, 1 ignorado** (teste que exige ausência de
+navegador; este ambiente tinha navegador). Evidências em
+[`results/ci/40262196504/`](../results/ci/40262196504/), commit `f81de60`.
+Local: **190 testes em 17,357 s, 16 ignorados**, incluindo suites dependentes de
+navegador indisponível localmente; não tratados como testes gráficos executados.
+
+Validação nova:
+- Janela limitada, média/P95 e denominadores, tokens desconhecidos, latência
+  ausente não convertida em zero, cancelamento/negação/erro separados.
+- Lista branca de conteúdo, números inválidos/imensos descartados, snapshot
+  independente e leituras concorrentes com limite respeitado.
+- Worker termina métricas e estado atomicamente: próxima tarefa não pode apagar
+  recibo anterior; doctor sem resultado não repete sucesso antigo. Mock de envio
+  chamado uma vez; erro anterior ao recibo não expõe exceção nem vira sucesso.
+- Chromium real: sucesso com fases sequenciais dentro de total_ms; rascunho
+  privado causa falha medida antes do envio, sem fases de resposta inventadas.
+- GUI real: configuração autorizada → dashboard com 1 resultado, 100%, Online
+  observado, tokens indisponíveis e 1 barra → nova verificação autorizada → 2
+  resultados/2 barras. Tempos de browser/aba presentes. Mantidos os testes de voz,
+  Enviar, console, consentimento e versão do runtime.
+- Jobs completos: pacote construído e dependências simuladas no Ubuntu 24.04;
+  biblioteca instalada fora do checkout; verify em Chromium, Chrome e modo com
+  janela sob Xvfb. Não equivale à instalação gráfica num Linux Lite pessoal.
+
+O `.deb` publicado foi extraído e todos os módulos/assets comparados byte a byte
+com o código validado. Versão interna `0.2.0+ubuntu1`, checksum em
+`downloads/SHA256SUMS`. Não exige terminal do usuário.
+
+**Limites:** testes usam fixture local, não autenticação Gemini/LMArena nem Chrome
+pessoal sincronizado. Não se demonstra aceleração por este marco; ele fornece as
+medições para comparações futuras. A execução Gemini em 9838 ms foi relatada pelo
+usuário em perfil separado, não repetida pelo assistente. Tokens, CPU/RAM/tráfego,
+API OpenAI, inventário de perfis, atualizador, contexto/RAG e failover não estão
+implementados. Nenhum bloqueio de recursos ou Fetch/XHR foi ativado. Plano e gates:
+[NEXT_ARCHITECTURE.md](NEXT_ARCHITECTURE.md).

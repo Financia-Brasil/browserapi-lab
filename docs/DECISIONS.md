@@ -285,3 +285,22 @@ com Host validado, mensagens controladas de validação e exibição das versõe
 GUI/runtime. Versões diferentes bloqueiam tarefas e consentimentos na GUI,
 sem desativar os mecanismos de segurança do servidor. O diagnóstico não prova
 qual versão o usuário executava nem a causa de cada 400 reportado.
+
+
+## ADR-019 — Medir antes de otimizar; métricas não são conteúdo nem heartbeat
+
+O usuário descreveu uma futura API local com sessões, otimização, atualizações,
+contexto/RAG, fallback e dashboard e delegou a escolha do marco inicial. Escolhido
+M1: tempos de browser/aba e fases de troca, painel com janela limitada em memória
+e estados observados. Não ativar bloqueio de recursos, headless, replay de rede ou
+reenvio automático antes de medir estabilidade/correção.
+
+Média/P95 usam somente latências disponíveis, sem substituir ausência por zero;
+consumo de tokens é desconhecido. Telemetria usa lista branca, não copia conteúdo
+ou exceções. Finalização de métricas e publicação da fase da tarefa são atômicas
+para impedir que uma nova tarefa apague o recibo anterior. Observação Online não
+é disponibilidade permanente e não dispara mensagem de monitoramento. Configuração
+sem novo teste invalida Online anterior. Plano separado em NEXT_ARCHITECTURE.md;
+RAG pesquisável de 1M não implica contexto nativo de 1M. API e fallback exigem
+contratos e confirmação de envio antes de automatizar decisões potencialmente
+duplicantes. Validação deste marco em PRODUCT_VALIDATION.md.
