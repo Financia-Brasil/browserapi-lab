@@ -11,7 +11,7 @@ from .config import safe_name
 TIMING_KEYS = frozenset(('total_ms', 'browser_start_ms', 'page_open_ms', 'preflight_ms',
     'send_pipeline_ms', 'fill_ms', 'send_ms', 'response_wait_ms', 'parse_ms',
     'ttft_dom_ms', 'capture_overhead_ms', 'operation_wall_ms', 'manual_wait_ms'))
-OPERATIONS = frozenset(('configure','repair','check','ask','prepare','doctor','point_voice','point_send','use_existing'))
+OPERATIONS = frozenset(('configure','repair','check','ask','prepare','doctor','point_voice','point_send','use_existing','api'))
 STATUS = frozenset(REMEDIES) | {'success'}
 HEALTH = {'success':'online', 'login_required':'login_required', 'google_login_blocked':'auth_blocked',
           'rate_limit':'rate_limited', 'captcha':'human_required', 'timeout':'degraded',
@@ -47,6 +47,12 @@ class Telemetry:
         with self.lock:
             self.active = {'operation':operation, 'name':name, 'started':self.clock(), 'manual_wait_ms':0.0}
 
+    def source(self,name):
+        safe_name(name)
+        with self.lock:
+            if self.active:
+                self.active['name']=name
+
     def user_wait(self, milliseconds):
         with self.lock:
             if self.active and numeric(milliseconds):
@@ -69,6 +75,17 @@ class Telemetry:
                       'phase':phase if phase in ('done','error','cancelled') else 'error',
                       'status':status, 'timings':timings,
                       'at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()), 'observed':self.clock()}
+            attempts=[]
+            if isinstance(receipt.get('attempts'),list):
+                for item in receipt['attempts'][:8]:
+                    if not isinstance(item,dict) or not isinstance(item.get('status'),str) or item['status'] not in STATUS:
+                        continue
+                    try:
+                        name=safe_name(item.get('name'))
+                    except ValueError:
+                        continue
+                    attempts.append({'name':name,'status':item['status']})
+            record['attempts']=attempts
             self.records.append(record)
 
     def snapshot(self):
@@ -81,6 +98,8 @@ class Telemetry:
         durations = sorted(r['timings']['total_ms'] for r in requests if 'total_ms' in r['timings'])
         sources = {}
         for record in records:
+            for attempt in record['attempts']:
+                sources[attempt['name']]={'state':HEALTH.get(attempt['status'],'needs_attention'),'at':record['at'],'stale':self.clock()-record['observed']>300}
             if record['name'] is not None and record['status'] not in (None,'not_authorized'):
                 sources[record['name']] = {'state':HEALTH.get(record['status'],'needs_attention'),
                     'at':record['at'], 'stale':self.clock()-record['observed'] > 300}

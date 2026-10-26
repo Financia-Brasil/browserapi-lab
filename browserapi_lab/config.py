@@ -62,8 +62,17 @@ class ChatConfig:
     session_mode: str = 'dedicated'
     voice: str = ''
     voice_signature: str = ''
+    personal_installation: str = 'chrome'
+    personal_profile: str = ''
 
     def validate(self):
+        from .profiles import CHROME_INSTALLATIONS, profile_name
+        if self.personal_installation not in CHROME_INSTALLATIONS:
+            raise ValueError('Instalação pessoal inválida')
+        if not isinstance(self.personal_profile,str):
+            raise ValueError('Perfil inválido')
+        if self.personal_profile:
+            profile_name(self.personal_profile)
         safe_name(self.name)
         safe_url(self.url)
         if not isinstance(self.voice, str) or len(self.voice) > 1000:

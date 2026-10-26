@@ -120,6 +120,9 @@ class Panel:
         self.messages = deque(maxlen=60)
         self.telemetry = Telemetry()
         self.updater = None
+        self.closed = False
+        self.api_service = None
+        self.warm = None
         self.thread = threading.Thread(target=self._worker, name='BrowserAPI', daemon=True)
         self.thread.start()
 
@@ -172,8 +175,15 @@ class Panel:
             if provider not in (*PROVIDERS, 'custom'):
                 raise PanelInputError('Escolha um chat válido.')
             try:
+                from .profiles import inventory
+                selected=payload.get('personal_profile','')
+                profile=next((p for p in inventory() if p['id']==selected and p['connectable']),None) if selected else None
+                if selected and profile is None:
+                    raise ValueError('Perfil não encontrado')
                 config = ChatConfig(payload.get('name'), PROVIDERS.get(provider) or payload.get('url'),
-                                    provider=provider, browser=payload.get('browser'), session_mode=payload.get('session_mode', 'dedicated')).validate()
+                                    provider=provider, browser=payload.get('browser'), session_mode=payload.get('session_mode', 'dedicated'),
+                                    personal_installation=profile['installation'] if profile else 'chrome',
+                                    personal_profile=profile['directory'] if profile else '').validate()
             except (ValueError, TypeError):
                 raise PanelInputError('Confira o nome (letras, números, hífen ou sublinhado), a URL sem parâmetros e a sessão. Chrome já aberto exige Google Chrome.') from None
             # Formulário básico só oferece produtos conhecidos. Não executa caminho recebido via HTTP.
@@ -191,11 +201,17 @@ class Panel:
                                                 or not payload['message'].strip()
                                                 or len(payload['message']) > 32000):
                 raise PanelInputError('Digite uma mensagem de até 32 mil caracteres.')
-            task = (payload['operation'], (config.name, payload.get('message')))
+            selection=None
+            if payload['operation']=='use_existing' and payload.get('personal_profile'):
+                from .profiles import inventory
+                selection=next((p for p in inventory() if p['id']==payload['personal_profile'] and p['connectable']),None)
+                if selection is None:
+                    raise PanelInputError('Perfil não encontrado no inventário local.')
+            task = (payload['operation'], (config.name, payload.get('message'),selection))
         else:
             task = (payload['operation'], None)
         with self.lock:
-            if self.phase in ('running', 'waiting', 'updating'):
+            if self.closed or self.phase in ('running', 'waiting', 'updating'):
                 raise PanelInputError('Uma operação já está em andamento.')
             self.cancelled.clear()
             self.phase = 'running'
@@ -203,6 +219,17 @@ class Panel:
             self.receipt = None
             self.messages.clear()
             self.tasks.put(task)
+
+    def submit_api(self,job):
+        from .llm_api import APIError
+        with self.lock:
+            if self.closed or self.phase in ('running','waiting','updating'):
+                raise APIError('Uma operação já está ativa','busy',409)
+            self.cancelled.clear()
+            self.phase='running'
+            self.receipt=None
+            self.prompt=None
+            self.tasks.put(('api',job))
 
     def snapshot(self):
         with self.lock:
@@ -213,25 +240,47 @@ class Panel:
                     previous = status(self.store, name)
                     chats.append({'name': name, 'provider': config.provider, 'browser': config.browser, 'session_mode': config.session_mode,
                                   'compatible': previous.get('compatible_in_this_run', False),
-                                  'checked_at': previous.get('checked_at')})
+                                  'checked_at': previous.get('checked_at'), 'personal_installation':config.personal_installation,'personal_profile':config.personal_profile})
                 except (OSError, ValueError, TypeError):
                     chats.append({'name': name, 'compatible': False, 'invalid': True})
             return {'version': APP_VERSION, 'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
                     'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready(), 'telemetry': self.telemetry.snapshot(),
+                    'api_service': self.api_service.snapshot() if self.api_service else {'enabled':False,'available':False},
                     'updates': self.updater.snapshot() if self.updater else {'managed':False,'enabled':False,'status':'unmanaged','message':'Atualização automática disponível no aplicativo instalado.'}}
 
     def _worker(self):
         while True:
             task = self.tasks.get()
             if task is None:
+                if self.warm:
+                    self.warm.close()
                 return
             operation, value = task
+            if operation == 'api_close':
+                if self.warm:
+                    self.warm.close()
+                continue
             end_phase = 'error'
             try:
-                name = value.name if operation == 'configure' else value[0] if isinstance(value, tuple) else None
+                if operation != 'api' and self.warm:
+                    self.warm.close()
+                name = value.names[0] if operation == 'api' else value.name if operation == 'configure' else value[0] if isinstance(value, tuple) else None
                 self.telemetry.begin(operation, name)
                 common = dict(ask=self.ask, tell=self.tell, cancelled=self.cancelled.is_set)
-                if operation == 'prepare':
+                if operation == 'api':
+                    from .llm_api import WarmBrowser, APIError
+                    if self.warm is None:
+                        self.warm=WarmBrowser(self.store)
+                    value.observe=self.telemetry.source
+                    self.warm.run(value,self.cancelled.is_set)
+                    if value.result:
+                        if value.result.answer and len(value.result.answer)>1_000_000:
+                            value.result.answer=None
+                            value.error=APIError('Resposta excede limite local; consulte o navegador, não repita','response_too_large',502)
+                        self.telemetry.source(value.config.name)
+                        self.receipt=value.result.receipt(value.config)
+                        self.receipt['attempts']=[{'name':a['model'],'status':a['status']} for a in value.attempts]
+                elif operation == 'prepare':
                     self.installer(self.data_dir, self.tell, self.cancelled.is_set)
                 elif operation == 'doctor':
                     from .doctor import build_report
@@ -245,7 +294,9 @@ class Panel:
                                              picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
                 elif operation == 'use_existing':
                     if self.ask('Mudar este chat salvo para conectar ao Chrome já aberto, sem iniciar perfil separado? A conexão seguinte pedirá permissão e pode acessar todas as abas/contas. [s/N] ') == 's':
-                        config = replace(self.store.load(value[0]), browser='chrome', executable=None, session_mode='existing_chrome').validate()
+                        config = replace(self.store.load(value[0]), browser='chrome', executable=None, session_mode='existing_chrome',
+                                         personal_installation=value[2]['installation'] if len(value)>2 and value[2] else 'chrome',
+                                         personal_profile=value[2]['directory'] if len(value)>2 and value[2] else '').validate()
                         self.store.save(config)
                         self.tell('Modo salvo: Chrome já aberto. Abra o chat na conta desejada e autorize a conexão ao usar os botões de seleção. Nenhuma janela foi aberta nesta mudança.')
                     else:
@@ -278,8 +329,18 @@ class Panel:
                     self.telemetry.finish(self.receipt, end_phase)
                     self.phase = end_phase
                     self.prompt = None
+                    if operation == 'api':
+                        from .llm_api import APIError
+                        if value.result is None and value.error is None:
+                            value.error=APIError('Execução interrompida ou fonte não disponível; confira o navegador antes de repetir','execution_failed',409)
+                        value.prompt=''
+                        if value.owner:
+                            value.owner.complete(value)
+                        value.done.set()
 
     def close(self):
+        with self.lock:
+            self.closed = True
         self.cancel()
         self.tasks.put(None)
         self.thread.join(timeout=7)
@@ -343,6 +404,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (ASSETS / name).read_bytes(), mime)
         if not self.authorized():
             return self.send(403, {'error': 'Abra o programa pelo menu BrowserAPI para autorizar esta janela.'})
+        if self.path == '/api/profiles':
+            from .profiles import inventory
+            return self.send(200,{'profiles':inventory()})
         if self.path == '/api/state':
             return self.send(200, self.server.panel.snapshot())
         return self.send(404, {'error': 'Página não encontrada.'})
@@ -363,6 +427,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.panel.submit(payload)
             elif self.path == '/api/reply':
                 self.server.panel.reply(payload.get('id'), payload.get('value'))
+            elif self.path == '/api/service':
+                if self.server.panel.api_service is None:
+                    raise PanelInputError('Abra o aplicativo pelo menu para gerenciar a API.')
+                self.server.panel.api_service.configure(payload)
             elif self.path == '/api/updates':
                 updater = self.server.panel.updater
                 if updater is None or type(payload.get('enabled')) is not bool:
@@ -386,7 +454,7 @@ def main(argv=None):
     parser.add_argument('--config-dir', default=str(DEFAULT_CONFIG_DIR))
     args = parser.parse_args(argv)
     activate_private_runtime(DATA_DIR)
-    panel = Panel(ConfigStore(args.config_dir))
+    panel = Panel(ConfigStore(args.config_dir),DATA_DIR)
     server = LocalServer(panel)
     # Exclusão entre janelas do aplicativo. Um segundo início abre o painel existente.
     DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -416,10 +484,12 @@ def main(argv=None):
         ConfigStore.write_json(instance, {'url': server.url, 'token': server.token})
         if os.environ.get('BROWSERAPI_SUPERVISED') == '1':
             from .updates import Updater, UpdateStore
+            from .llm_api import APIService
+            panel.api_service=APIService(panel)
             store = UpdateStore(DATA_DIR)
             def restart_when_idle():
                 with panel.lock:
-                    if panel.phase in ('running','waiting','updating'):
+                    if panel.phase in ('running','waiting','updating') or (panel.api_service and panel.api_service.busy()):
                         return False
                     ConfigStore.write_json(DATA_DIR/'relaunch.json',{'port':server.server_port,'token':server.token})
                     panel.phase = 'updating'
@@ -438,6 +508,8 @@ def main(argv=None):
     finally:
         if updater:
             updater.close()
+        if panel.api_service:
+            panel.api_service.close()
         panel.close()
         server.server_close()
         instance.unlink(missing_ok=True)

@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "from": "0.3.1",
+  "to": "0.4.0",
+  "baseline_from_public_release": "f0d243e77d089a86e1d24dd5edb6c1dd264a4d84",
+  "target_runtime_sha256": "d134b5d0aa42281a4a9a643b5dd6faeba8be1530d6ade152adf6c45313b3d4c2",
+  "real_supervisor_and_two_gui_processes": true,
+  "same_port_and_token": true,
+  "automatic_idle_switch": true,
+  "startup_confirmation": true,
+  "messages_sent": 0,
+  "api_off_by_default": true,
+  "source_target_not_yet_published_at_test_time": true
+}

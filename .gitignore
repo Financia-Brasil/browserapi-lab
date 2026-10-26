@@ -43,3 +43,9 @@ screenshots/
 
 # Runtime publicado para atualização automática ABI 1
 !downloads/BrowserAPI-runtime.zip
+
+# Chaves locais, fingerprints privados e conteúdo RAG (nunca commitar)
+api-policy.json
+api-idempotency.json
+context.sqlite3*
+context-history.json

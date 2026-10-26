@@ -46,6 +46,7 @@ class ChatResult:
     timings: dict = field(default_factory=dict)
     request_id: str | None = None
     browser_version: str | None = None
+    send_state: str = 'not_sent'
 
     def receipt(self, config):
         title, action = REMEDIES.get(self.status, ('Resposta confirmada nesta execução', 'Modelo escolhido manualmente; repita check se a interface mudar.'))
@@ -53,7 +54,7 @@ class ChatResult:
             'schema_version': 1, 'name': config.name, 'provider': config.provider,
             'browser': config.browser, 'browser_version': self.browser_version, 'checked_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'config_fingerprint': config_fingerprint(config),
-            'status': self.status, 'compatible_in_this_run': self.compatible,
+            'status': self.status, 'send_state': self.send_state, 'compatible_in_this_run': self.compatible,
             'message': title, 'action': action, 'timings': self.timings,
             'performance': {
                 'capture_budget_ms': 900,
@@ -67,7 +68,12 @@ class ChatResult:
 
 def config_fingerprint(config):
     from dataclasses import asdict
-    return hashlib.sha256(json.dumps(asdict(config), sort_keys=True).encode()).hexdigest()
+    value=asdict(config)
+    if value.get('personal_installation')=='chrome':
+        value.pop('personal_installation',None)
+    if not value.get('personal_profile'):
+        value.pop('personal_profile',None)
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
 def browser_config(config, root, headless=False):
@@ -75,6 +81,7 @@ def browser_config(config, root, headless=False):
     return BrowserConfig(profile=config.name, profiles_root=root / 'profiles', headless=headless,
                          channel=config.browser if config.browser in ('chrome', 'msedge') else None,
                          attach_existing_chrome=config.session_mode == 'existing_chrome',
+                         existing_installation=config.personal_installation,
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
@@ -127,6 +134,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
     start = time.perf_counter()
     metrics = {}
     result = ChatResult('page_unavailable', timings=metrics)
+    send_state = 'not_sent'
     phase = 'preflight_ms'
     phase_start = start
     def stage(name):
@@ -163,6 +171,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             raise EOFError('Operação interrompida')
         mark_sent(page)
         def ready_to_activate():
+            nonlocal send_state
             deadline = time.monotonic() + min(3, config.timeout_ms / 1000)
             while True:
                 if cancelled and cancelled():
@@ -171,11 +180,15 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                 if control.count() == 1 and control.is_visible() and control.is_enabled():
                     if is_voice_control(control) or is_recorded_voice(control, config):
                         raise VoiceControlUnavailable()
+                    send_state = 'unknown'
                     return
                 if time.monotonic() >= deadline:
                     raise SendControlUnavailable()
                 page.wait_for_timeout(100)
         stage('send_pipeline_ms')
+        # Mesmo input/fill pode disparar handlers do site. Após editar o
+        # composer não garantimos ausência de envio, mesmo sem clicar.
+        send_state = 'unknown'
         sent = send_message(page, composer, button, prompt,
                             strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
                             activation=('click_send',), user_selector=config.user,
@@ -187,6 +200,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             if any(attempt.error == 'SendControlUnavailable' for attempt in sent.attempts):
                 return outcome('send_missing')
             return outcome('send_unconfirmed')
+        send_state = 'confirmed'
         def check_cancel(*_):
             if cancelled and cancelled():
                 raise EOFError('Operação interrompida')
@@ -236,6 +250,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         # Playwright inclui texto/HTML/URLs em exceções: não persistir o detalhe.
         return outcome('page_unavailable')
     finally:
+        result.send_state = send_state
         stage(None)
         metrics['total_ms'] = round((time.perf_counter() - start) * 1000, 3)
         try:

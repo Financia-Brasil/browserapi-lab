@@ -8,9 +8,12 @@ class ExistingChromeError(RuntimeError):
     pass
 
 
-def endpoint(config_home=None):
+def endpoint(config_home=None, installation='chrome'):
     root = Path(config_home) if config_home is not None else Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
-    path = root / 'google-chrome/DevToolsActivePort'
+    from .profiles import installation_root, CHROME_INSTALLATIONS
+    if installation not in CHROME_INSTALLATIONS:
+        raise ExistingChromeError('Esta instalação não suporta a conexão pessoal implementada.')
+    path = installation_root(installation,root) / 'DevToolsActivePort'
     try:
         if path.is_symlink() or path.stat().st_uid != os.getuid() or path.stat().st_size > 1024:
             raise ValueError()

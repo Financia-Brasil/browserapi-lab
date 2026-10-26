@@ -1,8 +1,9 @@
 # browserapi-lab
 
 Laboratório Python/Linux para validar automação de chats por navegador real.
-**Não é ainda uma API para agentes nem um serviço 24/7.** O aplicativo final
-OpenAI-compatible continua fora do escopo desta etapa.
+**Não é um serviço homologado 24/7.** A versão 0.4.0 acrescenta uma API local
+experimental e opt-in, com subconjunto textual de Chat Completions, não paridade
+completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 
 ## Janela para Ubuntu (experimental)
 
@@ -11,10 +12,12 @@ e montagem de instalador `.deb` com entrada no menu. A versão ubuntu4 inclui
 **Selecionar botão de voz**, **Digitar e selecionar Enviar / Enter** e mudança
 explícita de sessão em chats já salvos. A ubuntu5 integra a pergunta de voz
 no assistente completo e mostra as versões da interface e do programa. A versão
-atual **0.3.1** inclui dashboard, tempos por etapa e atualização automática
-com rollback, sem alterar as regras de autorização. Veja o [guia sem terminal](docs/UBUNTU.md).
+**0.3.1** entregou dashboard e atualização automática com rollback. O código
+**0.4.0** acrescenta inventário de perfis, API local, recuperação de contexto e
+histórico opcional, preservando o atualizador. O instalador estável só muda após
+os testes e a publicação automática da release. Veja o [guia sem terminal](docs/UBUNTU.md).
 Alvo inicial: Ubuntu 24.04+ com Python 3.11+. A instalação gráfica no desktop do
-usuário e os sites autenticados ainda não estão homologados; isso não é uma API pronta.
+usuário e os sites autenticados ainda não estão homologados; não é uma API de produção.
 
 
 ## Novo: escolher e verificar um chat

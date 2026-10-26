@@ -24,6 +24,7 @@ class TestChatWorkflow(BrowserTestCase):
         result = exchange(self.page, config, authorized=True, health_check=True)
         self.assertEqual(result.status, 'success')
         self.assertTrue(result.compatible)
+        self.assertEqual(result.send_state,'confirmed')
         self.assertEqual(result.answer, 'browserapi-ok')
         self.assertIsNotNone(result.timings['ttft_dom_ms'])
         self.assertLess(result.timings['capture_overhead_ms'], 2500)
@@ -37,6 +38,7 @@ class TestChatWorkflow(BrowserTestCase):
         self.page.locator('#composer').fill('rascunho privado')
         result = exchange(self.page,config,authorized=True,health_check=True)
         self.assertEqual(result.status,'draft_present')
+        self.assertEqual(result.send_state,'not_sent')
         self.assertGreater(result.timings['total_ms'],0)
         self.assertIn('preflight_ms',result.timings)
         self.assertNotIn('response_wait_ms',result.timings)
@@ -78,7 +80,9 @@ class TestChatWorkflow(BrowserTestCase):
                     document.querySelector('#composer-host').append(document.querySelector('#send').cloneNode(true));
             });
         }""")
-        self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'send_missing')
+        result=exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status,'send_missing')
+        self.assertEqual(result.send_state,'unknown')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
         self.assertTrue(self.page.locator('#composer').input_value())
         self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'draft_present')
