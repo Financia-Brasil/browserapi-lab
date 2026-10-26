@@ -162,3 +162,19 @@ Histórico de 1M tokens **não** é contexto nativo de 1M tokens do modelo.
 - [Plano de experimentos](docs/EXPERIMENT_PLAN.md)
 - [Decisões técnicas](docs/DECISIONS.md)
 - [Esquema dos resultados](docs/RESULTS_SCHEMA.md)
+
+
+## Atualização automática (0.3.0)
+
+O instalador atual inclui supervisor e atualizador: consulta releases estáveis
+do repositório, verifica integridade/compatibilidade e aplica código automaticamente
+quando não houver tarefa ativa. Mantém a aba, troca o processo com segurança e
+restaura a versão anterior se a nova falhar ao iniciar. Não há reenvio de mensagens.
+Ativação padrão visível e revogável na GUI; sem root. É necessária uma instalação
+inicial porque as versões antigas não tinham esse mecanismo. Não é preciso
+reinstalar cada próxima versão ABI 1. Veja [confiança, publicação e limites](docs/UPDATES.md).
+
+O workflow de publicação para main depende dos testes; patch automático, minor/
+major por incremento da base. Alterações nesta branch só afetam main depois de
+integradas. Inventário de perfis, API, RAG e roteamento não são implementados por
+este atualizador e continuam no plano, sem falsa alegação de entrega completa.

@@ -349,3 +349,22 @@ perfis instalados nem comprova a conta escolhida. Não há bloqueio de imagens,
 CSS ou scripts, headless novo, Fetch/XHR, RAG, atualizador ou failover neste marco.
 O relato anterior de Gemini em **9838 ms** foi do usuário, em perfil separado:
 não é teste de Chrome sincronizado feito pelo assistente nem benchmark comparativo.
+
+
+## 0.3.0 — uma instalação inicial, próximas atualizações automáticas
+
+Use o `.deb` 0.3.0 publicado em `downloads/BrowserAPI-Ubuntu.deb`. Instale pelo
+gerenciador gráfico e encerre a versão anterior/reinicie uma vez, pois ela não
+tinha supervisor de atualização. Abra BrowserAPI pelo menu e confira **Painel
+0.3.0 · programa 0.3.0**. A opção **Atualização automática** deve estar marcada.
+
+Depois disso, versões estáveis compatíveis do repositório oficial são buscadas,
+verificadas e aplicadas automaticamente com o programa livre. A aba reconecta;
+não é preciso novo `.deb` ou reiniciar o computador para atualizações ABI 1.
+Não fecha o Chrome pessoal nem repete mensagens. Pode desmarcar a opção no painel.
+
+O estado do download/aplicação/falha aparece na seção de atualização. Sem internet,
+o programa atual continua funcionando. Trocas de dependências do sistema ou do
+supervisor ainda requerem instalador, não autorização silenciosa de administrador.
+Código futuro é confiado ao editor GitHub indicado na GUI; SHA256 verifica
+integridade, não é assinatura independente. [Detalhes e limites](UPDATES.md).

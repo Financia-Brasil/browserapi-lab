@@ -11,7 +11,7 @@ engenharia e critérios de aceite, não uma afirmação de funcionalidades pront
 | M1 | Tempos por etapa e dashboard privado, limitado | Implementado em 0.2.0+ubuntu1; evidência de testes em PRODUCT_VALIDATION.md |
 | M2 | Descoberta/seleção segura de sessões e abas existentes | Planejado; conexão Chrome existente atual continua experimental |
 | M3 | Otimização medida: sessão aquecida, headless e recursos | Planejado; nenhum bloqueio ou replay de rede ligado |
-| M4 | Releases/atualizações e regras transacionais | Planejado; instalar pacote ainda exige encerrar runtime antigo |
+| M4 | Atualização automática de código ABI 1 | Implementada em 0.3.0; regras independentes permanecem planejadas; [contrato](UPDATES.md) |
 | M5 | API local compatível com subconjunto OpenAI e roteamento seguro | Planejado; não há endpoint de LLM neste marco |
 | M6 | Histórico pesquisável, RAG e orçamento de contexto | Planejado; não há contexto de 1M tokens implementado |
 
@@ -114,6 +114,10 @@ qualquer otimização por padrão. Uma única execução de Gemini em 9838 ms re
 pelo usuário não é baseline estatístico nem garantia de performance futura.
 
 ## M4 — distribuição e atualização sem misturar versões
+
+**Atualização 0.3.0:** parte de código/GUI implementada conforme [UPDATES.md](UPDATES.md).
+O texto abaixo registra o desenho original e metas adicionais, não substitui o
+contrato ABI 1. Assinatura independente e regras quentes não foram entregues.
 
 Proposta: testes em PR/branch; em main aprovado, workflow determina incremento
 SemVer a partir de sinal explícito/convenção validada, cria tag e release com
