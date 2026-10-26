@@ -229,7 +229,15 @@ class TestChatWorkflow(BrowserTestCase):
                 with ThreadPoolExecutor(max_workers=1) as worker:
                     worker.submit(exercise_connection).result(timeout=40)
             finally:
-                process.terminate()
+                # Somente o Chromium descartável criado acima pertence ao teste.
+                # SIGTERM só no pai podia deixar filhos escrevendo em Default
+                # durante TemporaryDirectory.cleanup (ENOTEMPTY no CI).
+                # Isso NÃO faz parte de BrowserSession nem fecha Chrome pessoal.
+                try:
+                    cleanup = self.session._pw.chromium.connect_over_cdp(address)
+                    cleanup.new_browser_cdp_session().send('Browser.close')
+                except Exception:
+                    process.terminate()
                 try:
                     process.wait(timeout=8)
                 except subprocess.TimeoutExpired:
