@@ -34,6 +34,17 @@ class PanelInputError(ValueError):
     """Mensagem controlada, segura para exibição; nunca exceção bruta do navegador/SO."""
 
 
+def activate_private_runtime(data_dir):
+    # Um supervisor iniciado antes de Preparar pode ainda usar o Python do
+    # sistema. Reativar os mesmos pacotes privados também em código atualizado
+    # por supervisores ABI 1 anteriores, sem pedir nova preparação ao usuário.
+    if os.geteuid() == 0:
+        return
+    packages = Path(data_dir)/'runtime/lib'/f'python{sys.version_info.major}.{sys.version_info.minor}'/'site-packages'
+    if packages.is_dir():
+        site.addsitedir(str(packages))
+
+
 def playwright_ready():
     return importlib.util.find_spec('playwright') is not None
 
@@ -374,6 +385,7 @@ def main(argv=None):
     parser.add_argument('--no-open', action='store_true')
     parser.add_argument('--config-dir', default=str(DEFAULT_CONFIG_DIR))
     args = parser.parse_args(argv)
+    activate_private_runtime(DATA_DIR)
     panel = Panel(ConfigStore(args.config_dir))
     server = LocalServer(panel)
     # Exclusão entre janelas do aplicativo. Um segundo início abre o painel existente.

@@ -28,7 +28,9 @@ def _supervise(argv=None):
             store.write(trial=active)
         trial = store.read().get('trial')
         try:
-            child = subprocess.Popen([sys.executable,'-c',code,str(root),*arguments],env=env,cwd=str(root))
+            python = data/'runtime/bin/python'
+            executable = str(python) if python.is_file() else sys.executable
+            child = subprocess.Popen([executable,'-c',code,str(root),*arguments],env=env,cwd=str(root))
         except OSError:
             if trial:
                 store.rollback()

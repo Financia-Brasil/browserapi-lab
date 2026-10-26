@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.3.0';
+const PANEL_VERSION = '0.3.1';
 const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('browserapi-token') || '';
 if (token) sessionStorage.setItem('browserapi-token', token);
