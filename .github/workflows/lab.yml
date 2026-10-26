@@ -16,6 +16,7 @@ defaults:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: lab-${{ github.ref }}
@@ -92,6 +93,15 @@ jobs:
       - name: Bateria de integracao com navegador
         id: testes
         run: xvfb-run -a python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
+
+      - name: Diagnóstico legível do PR (somente fixtures, repo de origem confiável)
+        if: failure() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          tail -100 results/ci/browser-tests.log > /tmp/browserapi-pr-test-report.txt
+          gh pr comment "$PR_NUMBER" --body-file /tmp/browserapi-pr-test-report.txt
 
       - name: Instalar pacote e verificar fora do checkout
         run: |
