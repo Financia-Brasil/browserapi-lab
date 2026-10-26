@@ -1,0 +1,1 @@
+../browserapi_lab/assets/chat_probe.js

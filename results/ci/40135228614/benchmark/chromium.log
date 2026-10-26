@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "env": {
+    "python": "3.11.17",
+    "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.43",
+    "cpu_count": 4,
+    "ram_total_kb": 16366640,
+    "playwright": "1.64.1",
+    "browser_channel": "chromium",
+    "browser_version": "156.0.8078.4",
+    "headed": false,
+    "ci": true
+  },
+  "iterations": 10,
+  "trials": 23,
+  "failures": 0,
+  "cold_start_ms": 422.8342380000072,
+  "profile_restart_ms": 416.7178669999885,
+  "one_hot_page_reused": true,
+  "browser_tree_rss_kb_approx": 830688,
+  "total_p50_ms": 2041.0977575000118,
+  "total_p95_ms": 2167.6661609999996,
+  "settle_overhead_p95_ms": 327.8999999999651,
+  "python_peak_rss_kb": 41780,
+  "performance_budget_ms": 2500,
+  "performance_pass": true,
+  "limits": [
+    "fixture sintética; não demonstra uso 24/7 ou sites reais",
+    "RSS inclui driver e memória compartilhada; não é pico do navegador",
+    "CPU medida somente do Python; sem CPU da árvore Chromium"
+  ],
+  "passed": true
+}

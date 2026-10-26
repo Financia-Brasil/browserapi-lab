@@ -1,0 +1,212 @@
+name: lab
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "results/**"
+      - "docs/**"
+      - "**.md"
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: "Nucleo Python (sem navegador)"
+    env:
+      BROWSERAPI_SKIP_BROWSER: "1"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Montar instalador Ubuntu e simular resolução de dependências
+        run: |
+          python scripts/build_deb.py
+          apt-get --simulate install ./dist/BrowserAPI-Ubuntu.deb
+
+      - name: Publicar instalador Ubuntu
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrowserAPI-Ubuntu
+          path: dist/BrowserAPI-Ubuntu.deb
+
+      - name: Auditoria do ambiente
+        run: python -m browserapi_lab.cli doctor --json results/ci/doctor-unit.json
+
+      - name: Testes do nucleo (unittest)
+        run: python -m unittest discover -s tests -v 2>&1 | tee results/ci/unit-tests.log
+
+      - name: Publicar artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-nucleo-${{ github.run_id }}
+          path: results/ci/
+          if-no-files-found: ignore
+
+  browser:
+    name: "Integracao real com Chromium"
+    env:
+      BROWSERAPI_REQUIRE_BROWSER: "1"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar Playwright e Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Auditoria do ambiente (com navegador)
+        run: python -m browserapi_lab.cli doctor --json results/ci/doctor-browser.json
+
+      - name: Bateria de integracao com navegador
+        id: testes
+        run: xvfb-run -a python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
+
+      - name: Diagnóstico legível do PR (somente fixtures, repo de origem confiável)
+        if: failure() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          tail -100 results/ci/browser-tests.log > /tmp/browserapi-pr-test-report.txt
+          gh pr comment "$PR_NUMBER" --body-file /tmp/browserapi-pr-test-report.txt
+
+      - name: Instalar pacote e verificar fora do checkout
+        run: |
+          pip install .
+          mkdir -p results/ci/benchmark
+          DEST="$PWD/results/ci/benchmark"
+          cd /tmp
+          browserapi-lab --help
+          browserapi-lab verify --iterations 10 --results "$DEST/chromium" | tee "$DEST/chromium.log"
+          browserapi-lab verify --iterations 3 --channel chrome --results "$DEST/chrome" | tee "$DEST/chrome.log"
+
+      - name: Navegador visivel com display virtual
+        run: |
+          DEST="$PWD/results/ci/benchmark"
+          cd /tmp
+          xvfb-run -a browserapi-lab verify --headed --iterations 1 --results "$DEST/headed" | tee "$DEST/headed.log"
+
+      - name: Resumo das execucoes
+        if: always()
+        run: |
+          mkdir -p results/ci
+          python - <<'PY'
+          import json, os, glob, time
+          from pathlib import Path
+
+          linhas = [
+              "# Evidencias de CI — browserapi-lab",
+              "",
+              f"- run: `{os.environ.get('GITHUB_RUN_ID', 'local')}`",
+              f"- commit: `{os.environ.get('GITHUB_SHA', 'local')}`",
+              f"- gerado em: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
+              "",
+          ]
+          for log in sorted(glob.glob("results/ci/*.log")):
+              texto = Path(log).read_text(encoding="utf-8", errors="replace")
+              resumo = [l for l in texto.splitlines() if l.startswith(("OK", "FAILED", "Ran ", "Skipped"))]
+              linhas.append(f"## `{log}`")
+              linhas.append("")
+              linhas.append("```")
+              linhas.extend(resumo[-6:] or ["(sem resumo)"])
+              linhas.append("```")
+              linhas.append("")
+          linhas.append("## Testes ignorados (motivo)")
+          linhas.append("")
+          for log in sorted(glob.glob("results/ci/*.log")):
+              texto = Path(log).read_text(encoding="utf-8", errors="replace")
+              for linha in texto.splitlines():
+                  if "skipped" in linha:
+                      linhas.append(f"- {linha.strip()}")
+          Path("results/ci/resumo.md").write_text("\n".join(linhas) + "\n", encoding="utf-8")
+          print("\n".join(linhas))
+          PY
+
+      - name: Publicar artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencias-navegador-${{ github.run_id }}
+          path: results/
+          if-no-files-found: ignore
+
+      # Logs e artefatos do Actions nao sao legiveis por ferramentas externas a
+      # esta organizacao; por isso as evidencias sao gravadas no proprio
+      # repositorio (resultados sanitizados apenas — ADR-009).
+      - name: Registrar evidencias no repositorio
+        if: always() && github.event_name == 'push' && github.ref_name == 'arena/ff33c6e6-browserapi-lab'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p "results/ci/${GITHUB_RUN_ID}"
+          cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
+          if [ -f results/ci/gui-flow.json ]; then cp results/ci/gui-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
+          if [ -f results/ci/product-flow.json ]; then cp results/ci/product-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
+          if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
+          git restore results/ci/resumo.md results/ci/doctor-browser.json
+          git add -f "results/ci/${GITHUB_RUN_ID}"
+          if git diff --cached --quiet; then
+            echo "nenhuma evidencia nova; nada a commitar"
+            exit 0
+          fi
+          git commit -m "ci: evidencias da execucao ${GITHUB_RUN_ID} [skip ci]"
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" \
+               && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "evidencias publicadas"
+              exit 0
+            fi
+            echo "tentativa ${tentativa} falhou; repetindo"
+            sleep $((tentativa * 5))
+          done
+          echo "falha ao publicar evidencias"
+          exit 1
+
+  release:
+    name: "Publicar atualização estável (main aprovada)"
+    needs: [unit, browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Montar e publicar release SemVer com integridade
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_release.py
