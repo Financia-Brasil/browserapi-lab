@@ -4,6 +4,8 @@ import http.client
 import json
 from pathlib import Path
 import tempfile
+import time
+import statistics
 from unittest.mock import patch
 
 from _harness import BrowserTestCase, FixtureServer, REPO_ROOT
@@ -11,7 +13,7 @@ from browserapi_lab.browser import BrowserSession
 from browserapi_lab.chat import ChatResult
 from browserapi_lab.config import ChatConfig, ConfigStore
 from browserapi_lab.gui import Panel
-from browserapi_lab.llm_api import APIService, WarmBrowser
+from browserapi_lab.llm_api import APIService, WarmBrowser, Job
 from browserapi_lab.setup import HYPOTHESES
 
 
@@ -70,3 +72,39 @@ class TestLLMAPIChromium(BrowserTestCase):
                         'idempotency_verified':True,'buffered_sse':True,'image_block_opt_in':True,'usage':None},indent=2)+'\n')
             finally:
                 api.close();panel.close();server.stop()
+
+    def test_measure_resource_modes_without_claiming_universal_speedup(self):
+        measurements=[]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);fixture=root/'fixture';fixture.mkdir()
+            source=(REPO_ROOT/'fixtures/fake_chat.html').read_text()
+            (fixture/'fake_chat.html').write_text(source.replace('</body>',
+                '<script>FakeChat.config({mode:"normal",delay:1});</script></body>'))
+            server=FixtureServer(fixture).start()
+            store=ConfigStore(root/'config')
+            config=ChatConfig('saved',server.url(),provider='fixture',timeout_ms=8000,stability_ms=400,**HYPOTHESES['fixture'])
+            store.save(config)
+            try:
+                for label,headless,light in [('visible',False,False),('headless',True,False),('headless_light',True,True)]:
+                    warm=WarmBrowser(store)
+                    samples=[]
+                    try:
+                        for i in range(3):
+                            job=Job('pergunta sintética '+str(i),['saved'],{'headless':headless,'lightweight':light}, {})
+                            start=time.perf_counter();warm.run(job,lambda:False)
+                            elapsed=(time.perf_counter()-start)*1000
+                            self.assertEqual(job.result.status,'success')
+                            self.assertEqual(job.result.send_state,'confirmed')
+                            samples.append({'elapsed_ms':round(elapsed,3),'timings':job.result.timings,
+                                            'reused':job.attempts[-1]['browser_reused']})
+                        measurements.append({'mode':label,'samples':samples,
+                            'warm_median_ms':round(statistics.median(s['elapsed_ms'] for s in samples[1:]),3)})
+                    finally:
+                        warm.close()
+            finally:
+                server.stop()
+        destination=REPO_ROOT/'results/ci/resource-modes.json'
+        destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_text(json.dumps({'scope':'synthetic_chromium_only','samples_per_mode':3,
+            'limitations':'No real site, memory/CPU measurement, statistical speedup or 4GB/24x7 claim',
+            'measurements':measurements},indent=2)+'\n')
