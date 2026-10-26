@@ -368,3 +368,13 @@ o programa atual continua funcionando. Trocas de dependências do sistema ou do
 supervisor ainda requerem instalador, não autorização silenciosa de administrador.
 Código futuro é confiado ao editor GitHub indicado na GUI; SHA256 verifica
 integridade, não é assinatura independente. [Detalhes e limites](UPDATES.md).
+
+
+## Versão recomendada atual: 0.3.1
+
+Use `downloads/BrowserAPI-Ubuntu.deb` 0.3.1 ou a release estável no GitHub.
+Instale graficamente e encerre o programa antigo/reinicie uma vez se vier de
+0.2.x ou anterior. Ao abrir pelo menu, confira **Painel 0.3.1 · programa 0.3.1**
+e **Atualização automática** marcada. Esta versão também preserva o runtime
+privado preparado durante a primeira sessão, inclusive após autoatualizar de
+0.3.0. Atualizações de código ABI 1 seguintes não requerem reinstalação manual.

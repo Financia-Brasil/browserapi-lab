@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "from": "0.3.0",
+  "to": "0.3.1",
+  "real_supervisor_and_two_gui_processes": true,
+  "same_port_and_token": true,
+  "automatic_idle_switch": true,
+  "startup_confirmation": true,
+  "messages_sent": 0,
+  "public_network_required": false,
+  "completed_at": "2026-10-26T03:39:03Z"
+}

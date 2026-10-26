@@ -288,3 +288,45 @@ usuário em perfil separado, não repetida pelo assistente. Tokens, CPU/RAM/trá
 API OpenAI, inventário de perfis, atualizador, contexto/RAG e failover não estão
 implementados. Nenhum bloqueio de recursos ou Fetch/XHR foi ativado. Plano e gates:
 [NEXT_ARCHITECTURE.md](NEXT_ARCHITECTURE.md).
+
+
+## Atualização automática — 0.3.1
+
+- Código do atualizador em `a6dcc75`, recuperação/CSP em `dfed84a`, preservação
+  do runtime privado em `d8bd409`.
+- [CI branch 40266147199](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40266147199):
+  **SUCCESS, 294 testes em 145,075 s, 1 ignorado**; instalado fora do checkout e
+  janela sob Xvfb aprovados. [PR 40266160123](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40266160123)
+  também aprovado. Local: **204 testes em 15,168 s, 16 ignorados** (sem browser).
+- [Primeira publicação em main 40265527657](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40265527657):
+  SUCCESS, incluindo job de release. Publicou `v0.3.0`, commit de release
+  `56b77e0f2909cf5f950bfc39753dc606b2320fe3`, após os testes. Download público
+  sem token, resolução de tag/commit, hash, identidade e extração do runtime
+  verificados de fato via o cliente do aplicativo (96883 bytes).
+- Provas locais completas em [local-updater-20261026](../results/ci/local-updater-20261026/):
+  supervisor real e dois processos GUI, atualização 0.3.0 → 0.3.1, mesma porta e
+  token, troca ociosa, confirmação após 30 segundos e zero mensagens de chat.
+  Segunda prova usa o supervisor da release pública 0.3.0 e cria uma venv após
+  sua abertura; worker atualizado importa um módulo de teste disponível somente
+  nessa venv. Não é apenas mock de Popen ou comparação de versão.
+- Testes unitários cobrem desativação persistida, pending não ativado após opt-out,
+  offline, hash/ABI inválidos, traversal/symlink, assets completos, rollback após
+  falha inicial, rejeição de versão defeituosa, staging interrompido, preferências
+  inválidas fail-closed, roteamento HTTP autenticado e bloqueio durante atualização.
+- GUI Chromium confirma recarga automática e manutenção da autorização. Sem
+  unsafe-eval, mudança de CSP ou reenvio. Estado ocioso validado com servidor real.
+
+Histórico de falhas preservado: 40263812348 detectou eval sob CSP no teste de
+navegação (corrigido com locator assertion); 40264132751 encontrou ENOTEMPTY na
+limpeza de Chromium descartável (encerramento gracioso somente no teste). O PR
+40264516455 também falhou; seus logs não puderam ser obtidos pela rota disponível,
+portanto a causa não é afirmada como diagnosticada. Acrescentou-se diagnóstico
+legível para PRs de origem confiável, e baterias completas posteriores passaram.
+Não se aumentou timeout de produção nem se adicionou retry de mensagem. Os
+resultados não demonstram estabilidade universal ou no computador do usuário.
+
+Confiança e limites: [UPDATES.md](UPDATES.md). Código/GUI ABI 1 se atualiza; sistema,
+Chrome, dependências incompatíveis e supervisor não são substituídos silenciosamente.
+Métricas em memória zeram com a troca de processo. Perfil pessoal/Google real,
+API de LLM, RAG/contexto, otimização de recursos e fallback continuam sem nova
+homologação/implementação por este marco; não são anunciados como entregues.

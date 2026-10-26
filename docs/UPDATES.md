@@ -1,4 +1,4 @@
-# Atualização automática — BrowserAPI 0.3.0
+# Atualização automática — BrowserAPI 0.3.1
 
 ## Contrato entregue
 
@@ -21,7 +21,7 @@ pede senha de administrador para autoatualizar código em dados do próprio usu�
 O diretório do sistema instalado pelo `.deb` não é modificado pelo atualizador.
 
 **Primeira migração:** versões anteriores não têm esse supervisor. É necessária
-uma instalação inicial de 0.3.0 e encerrar o runtime antigo (reiniciar pelo menu
+uma instalação inicial de uma versão 0.3.x e encerrar o runtime antigo (reiniciar pelo menu
 é o caminho gráfico simples). Isso não se repete nas atualizações ABI 1 seguintes.
 Executar diretamente `python -m browserapi_lab.gui`/o entrypoint antigo não passa
 pelo supervisor e não ativa autoatualização; a GUI informa que não é gerenciada.
@@ -84,3 +84,15 @@ apenas existir nesta branch não instala o workflow em outra branch.
 Não é atualização de regras durante um envio: toda atualização de código troca
 o worker/servidor em ponto ocioso, mantendo supervisor e aba. Regras independentes,
 inventário de perfis, otimizações, API e RAG continuam módulos distintos.
+
+
+## Correção 0.3.1 — preservar preparação na troca de processo
+
+Se o aplicativo foi aberto antes de Preparar, seu supervisor pode ainda usar o
+Python do sistema. Agora escolhe o runtime privado em cada nova geração; o worker
+também ativa os pacotes privados ao iniciar, inclusive quando seu supervisor é o
+0.3.0 anterior. Não pede uma nova preparação a cada atualização. Testado de fato
+com supervisor 0.3.0 obtido da release pública, venv criada depois da abertura,
+código 0.3.1 e módulo de prova presente somente nessa venv: atualização automática,
+mesma porta/token e confirmação de início após 30 segundos, sem mensagem de chat.
+Scripts/relatórios em results/ci/local-updater-20261026 (executar a partir do repo).

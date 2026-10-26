@@ -231,3 +231,24 @@ class TestUpdates(unittest.TestCase):
     def test_corrupt_preferences_fail_closed_not_reenable_updates(self):
         self.store.path.write_text('{broken')
         self.assertFalse(self.store.read()['enabled'])
+
+    def test_runtime_created_after_first_launch_is_reused_without_repreparing(self):
+        from browserapi_lab.gui import activate_private_runtime
+        packages=Path(self.tmp.name)/'runtime/lib'/f'python{sys.version_info.major}.{sys.version_info.minor}'/'site-packages'
+        packages.mkdir(parents=True)
+        before=list(sys.path)
+        try:
+            with patch('browserapi_lab.gui.os.geteuid',return_value=1000):
+                activate_private_runtime(self.tmp.name)
+            self.assertIn(str(packages),sys.path)
+        finally:
+            sys.path[:]=before
+        data=Path(self.tmp.name)/'browserapi-lab'
+        python=data/'runtime/bin/python'
+        python.parent.mkdir(parents=True)
+        python.write_text('fixture interpreter')
+        child=Mock()
+        child.wait.return_value=0
+        with patch.dict(os.environ,{'XDG_DATA_HOME':self.tmp.name}), patch('browserapi_lab.bootstrap.os.geteuid',return_value=1000), patch('browserapi_lab.bootstrap.subprocess.Popen',return_value=child) as spawn:
+            self.assertEqual(bootstrap._supervise(['--no-open']),0)
+        self.assertEqual(spawn.call_args.args[0][0],str(python))

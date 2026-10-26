@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "from": "0.3.0",
+  "to": "0.3.1",
+  "real_supervisor_and_two_gui_processes": true,
+  "same_port_and_token": true,
+  "automatic_idle_switch": true,
+  "startup_confirmation": true,
+  "messages_sent": 0,
+  "baseline_from_public_release": "56b77e0f2909cf5f950bfc39753dc606b2320fe3",
+  "private_runtime_created_after_launch": true,
+  "legacy_supervisor_compatibility": true,
+  "completed_at": "2026-10-26T03:54:01Z"
+}
