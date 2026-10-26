@@ -176,6 +176,7 @@ class TestWarmRouting(unittest.TestCase):
             class Page:
                 url='https://one.example/thread'
                 def is_closed(self):return False
+                def wait_for_load_state(self,*args,**kwargs):pass
             class Session:
                 def __init__(self,config):
                     self.context=SimpleNamespace(pages=[Page()]);self.context.pages[0].url='https://'+('one' if config.profile=='one' else 'two')+'.example/thread'
@@ -198,7 +199,7 @@ class TestWarmRouting(unittest.TestCase):
                 store.save(ChatConfig(name,url,**HYPOTHESES['fixture']))
             class Session:
                 def __init__(self,config):
-                    p=SimpleNamespace(url=store.load(config.profile).url,is_closed=lambda:False)
+                    p=SimpleNamespace(url=store.load(config.profile).url,is_closed=lambda:False,wait_for_load_state=lambda *a,**kw:None)
                     self.context=SimpleNamespace(pages=[p])
                 def start(self):pass
                 def close(self):pass

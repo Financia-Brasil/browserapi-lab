@@ -96,6 +96,9 @@ class WarmBrowser:
                     if len(matches)>1:
                         raise APIError('Deixe somente uma aba do chat aberta','ambiguous_tabs',409)
                     self.page=matches[0] if matches else self.session.page(config.url)
+                    # Abas restauradas podem ter URL final antes de o DOM estar
+                    # pronto; não navegar de novo nem perder a conversa existente.
+                    self.page.wait_for_load_state('domcontentloaded',timeout=config.timeout_ms)
                     self.key=key
                     page_ms=(time.perf_counter()-opened)*1000
                 except (EOFError,KeyboardInterrupt):

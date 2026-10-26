@@ -97,7 +97,7 @@ class TestLLMAPIChromium(BrowserTestCase):
                                 job=Job('pergunta sintética '+str(i),['saved'],{'headless':headless,'lightweight':light}, {})
                                 start=time.perf_counter();warm.run(job,lambda:False)
                                 elapsed=(time.perf_counter()-start)*1000
-                                self.assertEqual(job.result.status,'success')
+                                self.assertEqual(job.result.status,'success',f'{label}, sample {i}, attempts {job.attempts}')
                                 self.assertEqual(job.result.send_state,'confirmed')
                                 samples.append({'elapsed_ms':round(elapsed,3),'timings':job.result.timings,
                                                 'reused':job.attempts[-1]['browser_reused']})
