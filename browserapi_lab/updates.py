@@ -157,9 +157,15 @@ class UpdateStore:
                 if manifest['version'] not in (stage/'browserapi_lab/assets'/name).read_text():
                     raise ValueError('Interface divergente')
             if target.exists():
-                # Nunca modificar código que um processo pode estar usando.
-                raise ValueError('Versão já existe')
-            os.replace(stage,target)
+                # Recuperar queda entre rename e gravação do ponteiro, sem
+                # sobrescrever arquivos de uma versão possivelmente em uso.
+                for file in stage.rglob('*'):
+                    if file.is_file():
+                        existing = target/file.relative_to(stage)
+                        if not existing.is_file() or existing.read_bytes()!=file.read_bytes():
+                            raise ValueError('Versão já existe com conteúdo diferente')
+            else:
+                os.replace(stage,target)
             # TemporaryDirectory tolera a origem já movida.
         self.write(pending=manifest['version'])
 

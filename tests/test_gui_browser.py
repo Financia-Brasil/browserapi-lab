@@ -124,7 +124,9 @@ class TestGraphicalJourney(BrowserTestCase):
             if source.is_file():
                 (new_assets/source.name).write_text(source.read_text().replace('0.3.0','0.3.1'))
         with patch('browserapi_lab.gui.ASSETS',new_assets), patch('browserapi_lab.gui.APP_VERSION','0.3.1'):
-            self.page.wait_for_function("document.querySelector('#version-status').textContent.includes('Painel 0.3.1') && document.querySelector('#version-status').textContent.includes('programa 0.3.1')",timeout=10000)
+            # Locator assertion atravessa navegação sem eval de string sob CSP.
+            from playwright.sync_api import expect
+            expect(self.page.locator('#version-status')).to_have_text('Painel 0.3.1 · programa 0.3.1',timeout=10000)
             self.assertEqual(self.page.url,original_url)
             self.assertEqual(self.http.token,original_token)
             self.assertTrue(self.page.locator('#error').is_hidden())

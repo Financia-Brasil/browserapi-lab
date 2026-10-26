@@ -215,3 +215,19 @@ class TestUpdates(unittest.TestCase):
         handoff = json.loads((data/'relaunch.json').read_text())
         self.assertEqual(handoff,{'port':server.server_port,'token':server.token})
         self.assertFalse((data/'window.json').exists())
+
+    def test_orphan_stage_is_recovered_without_overwriting_active_files(self):
+        self.store.stage(self.meta,self.raw)
+        target=self.store.directory('0.3.1')/'browserapi_lab/gui.py'
+        before=target.stat().st_mtime_ns
+        self.store.write(pending=None)
+        self.store.stage(self.meta,self.raw)
+        self.assertEqual(self.store.read()['pending'],'0.3.1')
+        self.assertEqual(target.stat().st_mtime_ns,before)
+        target.write_text('different')
+        with self.assertRaises(ValueError):
+            self.store.stage(self.meta,self.raw)
+
+    def test_corrupt_preferences_fail_closed_not_reenable_updates(self):
+        self.store.path.write_text('{broken')
+        self.assertFalse(self.store.read()['enabled'])
