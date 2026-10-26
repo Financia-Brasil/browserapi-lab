@@ -1,6 +1,6 @@
 # BrowserAPI no Ubuntu — sem terminal
 
-Interface experimental para configuração e teste de chats. **Não é um serviço de API pronto.**
+Interface experimental para configuração e teste de chats. **Não é um serviço de produção homologado.** A partir de 0.4.0 existe API local opt-in experimental.
 
 ## Instalar e abrir
 
@@ -67,7 +67,7 @@ Depois, use **Testar agora** para uma nova verificação ou **Corrigir campos** 
 
 ## Privacidade e limites
 
-O painel escuta somente em `127.0.0.1`, com chave aleatória por execução e proteção de origem. Não é acessível pela rede e não oferece API OpenAI. A janela de controle abre no navegador padrão; o navegador selecionado no formulário é o que abre o chat automatizado.
+O painel escuta somente em `127.0.0.1`, com chave aleatória por execução e proteção de origem. Não é acessível pela rede e é distinto da API textual experimental, que usa porta e chave próprias; veja [API local](LOCAL_API.md). A janela de controle abre no navegador padrão; o navegador selecionado no formulário é o que abre o chat automatizado.
 
 Configurações, recibos e perfis exclusivos ficam em `~/.config/browserapi-lab/`. O ambiente de execução fica em `~/.local/share/browserapi-lab/` (ou em `$XDG_DATA_HOME/browserapi-lab/`). Esses diretórios podem conter sua sessão de login: não os compartilhe. O recibo não inclui mensagens, cookies ou credenciais. Mensagens/respostas exibidas no painel ficam temporariamente na memória até outra operação ou o processo encerrar.
 
@@ -378,3 +378,25 @@ Instale graficamente e encerre o programa antigo/reinicie uma vez se vier de
 e **Atualização automática** marcada. Esta versão também preserva o runtime
 privado preparado durante a primeira sessão, inclusive após autoatualizar de
 0.3.0. Atualizações de código ABI 1 seguintes não requerem reinstalação manual.
+
+
+## Novidades 0.4.0: perfis, API e contexto
+
+No modo **Meu Chrome já aberto e logado**, use **Listar perfis** e selecione a
+instalação/diretório pretendidos. Os nomes vêm de metadados locais; não comprovam
+conta Google, sincronização ou qual contexto o Chrome disponibiliza por CDP. Abra
+você mesmo esse perfil e deixe a aba correta aberta. Não copiamos credenciais,
+não fechamos outras abas e não lançamos outro processo sobre seu perfil pessoal.
+Chrome Beta/Unstable são selecionáveis; Chromium/Edge aparecem apenas no inventário.
+
+A seção **API local para agentes** fica desligada inicialmente. Só autorize chats
+que passaram pelo teste. A chave autoriza envios sem novas perguntas a cada chamada.
+O [guia da API](LOCAL_API.md) explica os campos aceitos, fallback conservador e
+limites: sem tools, sem contador de tokens, SSE bufferizado e sem contexto nativo
+de 1M. A aba do site permanece compartilhada entre chamadas.
+
+**Guardar histórico RAG** é uma escolha separada, desligada por padrão: salva
+texto NÃO criptografado localmente, com limite de 8 milhões de caracteres, não
+tokens. IDs separam recuperação local, não conversas remotas. É possível apagar
+o histórico ou revogar a chave pelo painel, sem usar terminal. Otimizações
+headless/bloqueio de recursos só se aplicam a perfil dedicado e são experimentais.

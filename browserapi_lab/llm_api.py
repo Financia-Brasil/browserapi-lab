@@ -1,7 +1,7 @@
 """API loopback opt-in; jobs no worker do painel, sem segundo browser/driver.
 
 Subconjunto textual OpenAI: modelos são aliases locais, usage desconhecido,
-SSE é bufferizado. Histórico/documentos recuperados somente em memória.
+SSE é bufferizado. Histórico persistente apenas com opt-in explícito.
 """
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -177,21 +177,19 @@ class APIService:
         if type(value.get('enabled')) is not bool:
             raise APIError('Escolha ativar ou desativar')
         if not value['enabled']:
-            if value.get('clear_history'):
-                with self.panel.lock:
-                    if self.busy() or self.panel.phase in ('running','waiting','updating'):
-                        raise APIError('Aguarde a tarefa antes de apagar histórico','busy',409)
-                self.history.clear()
-            if value.get('rotate'):
-                with self.panel.lock:
-                    if self.busy() or self.panel.phase in ('running','waiting','updating'):
-                        raise APIError('Aguarde a tarefa antes de revogar a chave','busy',409)
-                with self.lock:
+            # Mesmo lock-order do worker: painel → serviço. Não deixar uma nova
+            # submissão entrar entre checar ociosidade e apagar/revogar.
+            with self.panel.lock,self.lock:
+                if (value.get('clear_history') or value.get('rotate')) and (
+                        self.busy() or self.panel.phase in ('running','waiting','updating')):
+                    raise APIError('Aguarde a tarefa antes de apagar/revogar','busy',409)
+                if value.get('clear_history'):
+                    self.history.clear()
+                if value.get('rotate'):
                     self.state['key']=secrets.token_urlsafe(32)
                     self.ledger={}
                     ConfigStore.write_json(self.ledger_path,self.ledger)
                     self.ledger_error=False
-            with self.lock:
                 self.state['enabled']=False
                 self.cache.clear()
                 ConfigStore.write_json(self.path,self.state)
@@ -311,14 +309,17 @@ class APIService:
             messages=payload.get('messages')
             documents=payload.get('documents')
             scope=''
-            if documents is not None and not isinstance(documents,list):
+            if documents is not None and (not isinstance(documents,list) or len(documents)>100):
                 raise APIError('Documentos devem ser uma lista de textos')
             if self.state.get('remember'):
                 scope=self.history.scope(payload.get('conversation_id'))
                 prior=self.history.read(scope)
+                recent_indices=[]
                 if isinstance(messages,list) and len(messages)==1:
-                    messages=[{'role':r,'content':t} for r,t in prior if r!='document']+messages
-                documents=([t for r,t in prior if r=='document'] if prior else [])+(documents if isinstance(documents,list) else [])
+                    recent_indices=[i for i,(r,_) in enumerate(prior) if r!='document'][-4:]
+                    messages=[{'role':prior[i][0],'content':prior[i][1]} for i in recent_indices]+messages
+                cold='\n\n'.join(f'[histórico registro {i+1} ({r})]\n{t}' for i,(r,t) in enumerate(prior) if i not in recent_indices)
+                documents=([cold] if cold else [])+(documents or [])
             text,report=plan(messages,documents,retrieve=self.state.get('retrieval',False))
             report.update(history_persisted=bool(scope),history_limit_characters=self.history.limit if scope else None)
             options={k:self.state.get(k,False) for k in ('headless','lightweight','retrieval','fallback')}

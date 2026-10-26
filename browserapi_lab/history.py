@@ -68,8 +68,8 @@ class History:
         if not self.path.exists():
             return []
         with self.lock,self.connect() as db:
-            # Máximo de registros limita overhead mesmo com muitos textos vazios.
-            rows=db.execute('SELECT role,body FROM chunks WHERE scope=? ORDER BY id DESC LIMIT 1900',(scope,)).fetchall()
+            # Limite global de 10000 registros/8M caracteres; busca cobre o acervo retido.
+            rows=db.execute('SELECT role,body FROM chunks WHERE scope=? ORDER BY id DESC LIMIT 10000',(scope,)).fetchall()
             return list(reversed(rows))
 
     def stats(self):

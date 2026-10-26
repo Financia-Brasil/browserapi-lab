@@ -330,3 +330,19 @@ Chrome, dependências incompatíveis e supervisor não são substituídos silenc
 Métricas em memória zeram com a troca de processo. Perfil pessoal/Google real,
 API de LLM, RAG/contexto, otimização de recursos e fallback continuam sem nova
 homologação/implementação por este marco; não são anunciados como entregues.
+
+
+## Marco 0.4.0 — 2026-10-26
+
+API local opt-in, um worker/aba quente, perfis por metadados, telemetria por fonte,
+ledger de replay persistente e contexto lexical com janela recente/mapa extrativo.
+Histórico SQLite stdlib é opt-in e não criptografado, com capacidade global de
+8M caracteres/10 mil registros. IDs só isolam recuperação, não o chat do site.
+Contrato e limites: [LOCAL_API.md](LOCAL_API.md).
+
+Testes locais do núcleo passaram; a homologação de navegador desta versão é
+registrada pelo workflow `lab` no commit correspondente, não inferida dos testes
+sem navegador. Corpus sintético persistido >6M caracteres coberto por teste de
+recuperação; não equivale a medir 1M tokens. Nenhuma conta real/laptop do usuário
+foi usada. Permanecem sem prova: Chrome pessoal nativo nesse desktop, sites
+autenticados, vantagem das otimizações, 4 GB/24x7 e Fetch/XHR direto.

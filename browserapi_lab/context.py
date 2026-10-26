@@ -22,7 +22,7 @@ def plan(messages, documents=None, *, retrieve=False, budget=24000):
     if not isinstance(messages,list) or not 1<=len(messages)<=2000:
         raise ContextError('Informe de 1 a 2000 mensagens de texto')
     documents=[] if documents is None else documents
-    if not isinstance(documents,list) or len(documents)>100:
+    if not isinstance(documents,list) or len(documents)>101:
         raise ContextError('Documentos inválidos')
     normalized=[]
     for item in messages:

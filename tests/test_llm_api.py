@@ -120,6 +120,18 @@ class TestLocalAPI(unittest.TestCase):
         self.assertEqual(self.service.history.stats()['records'],0)
         self.assertEqual(len(self.service.cache),0)
 
+    def test_large_persisted_corpus_is_searched_after_another_request(self):
+        self.service.configure({'enabled':False})
+        self.service.configure({'enabled':True,'names':['saved'],'retrieval':True,'remember':True})
+        self.service.history.append('large','arquivo antigo','registrado',[
+            'ruido '*1_000_000+' Projeto jabuticaba: orçamento 123 reais.'])
+        body=self.body();body['conversation_id']='large'
+        body['messages'][0]['content']='Qual o orçamento do projeto jabuticaba?'
+        code,raw=self.request(body=body)
+        self.assertEqual(code,200,raw)
+        self.assertIn('123 reais',FakeWarm.prompts[-1])
+        self.assertLessEqual(len(FakeWarm.prompts[-1]),24000)
+
     def test_one_worker_and_busy_rejection_without_second_send(self):
         FakeWarm.entered=threading.Event();FakeWarm.block=threading.Event()
         first=[]
