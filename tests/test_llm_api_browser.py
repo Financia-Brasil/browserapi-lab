@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import time
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from _harness import BrowserTestCase, FixtureServer, REPO_ROOT
@@ -85,22 +86,27 @@ class TestLLMAPIChromium(BrowserTestCase):
             config=ChatConfig('saved',server.url(),provider='fixture',timeout_ms=8000,stability_ms=400,**HYPOTHESES['fixture'])
             store.save(config)
             try:
-                for label,headless,light in [('visible',False,False),('headless',True,False),('headless_light',True,True)]:
-                    warm=WarmBrowser(store)
-                    samples=[]
-                    try:
-                        for i in range(3):
-                            job=Job('pergunta sintética '+str(i),['saved'],{'headless':headless,'lightweight':light}, {})
-                            start=time.perf_counter();warm.run(job,lambda:False)
-                            elapsed=(time.perf_counter()-start)*1000
-                            self.assertEqual(job.result.status,'success')
-                            self.assertEqual(job.result.send_state,'confirmed')
-                            samples.append({'elapsed_ms':round(elapsed,3),'timings':job.result.timings,
-                                            'reused':job.attempts[-1]['browser_reused']})
-                        measurements.append({'mode':label,'samples':samples,
-                            'warm_median_ms':round(statistics.median(s['elapsed_ms'] for s in samples[1:]),3)})
-                    finally:
-                        warm.close()
+                # O harness já tem Playwright no thread principal. Assim como
+                # no app, todos os modos medidos pertencem a um único worker.
+                def measure():
+                    for label,headless,light in [('visible',False,False),('headless',True,False),('headless_light',True,True)]:
+                        warm=WarmBrowser(store)
+                        samples=[]
+                        try:
+                            for i in range(3):
+                                job=Job('pergunta sintética '+str(i),['saved'],{'headless':headless,'lightweight':light}, {})
+                                start=time.perf_counter();warm.run(job,lambda:False)
+                                elapsed=(time.perf_counter()-start)*1000
+                                self.assertEqual(job.result.status,'success')
+                                self.assertEqual(job.result.send_state,'confirmed')
+                                samples.append({'elapsed_ms':round(elapsed,3),'timings':job.result.timings,
+                                                'reused':job.attempts[-1]['browser_reused']})
+                            measurements.append({'mode':label,'samples':samples,
+                                'warm_median_ms':round(statistics.median(s['elapsed_ms'] for s in samples[1:]),3)})
+                        finally:
+                            warm.close()
+                with ThreadPoolExecutor(max_workers=1) as worker:
+                    worker.submit(measure).result(timeout=90)
             finally:
                 server.stop()
         destination=REPO_ROOT/'results/ci/resource-modes.json'
