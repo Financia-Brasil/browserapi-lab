@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.2.0+ubuntu1';
+const PANEL_VERSION = '0.3.0';
 const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('browserapi-token') || '';
 if (token) sessionStorage.setItem('browserapi-token', token);
@@ -18,7 +18,7 @@ async function api(path, body) {
   return value;
 }
 function incompatible() { return !!state && state.version !== PANEL_VERSION; }
-function busy() { return pending || !!(state && ['running','waiting'].includes(state.phase)); }
+function busy() { return pending || !!(state && ['running','waiting','updating'].includes(state.phase)); }
 function controls() {
   for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy() || incompatible();
   $('ask').disabled = busy() || incompatible() || !selected;
@@ -133,11 +133,20 @@ function renderMetrics(value) {
   }
 }
 function render(value) {
+  if (value.updates?.managed && value.version !== PANEL_VERSION && sessionStorage.getItem('browserapi-reloaded-version') !== value.version) {
+    sessionStorage.setItem('browserapi-reloaded-version', value.version);
+    location.reload();
+    return;
+  }
+  $('updates-status').textContent = [value.updates?.message,value.updates?.rollback_notice].filter(Boolean).join(' ') || 'Atualização não gerenciada.';
+  $('auto-update').checked = !!value.updates?.enabled;
+  $('auto-update').disabled = !value.updates?.managed;
+
   const oldPrompt = state?.prompt?.id;
   state = value;
   $('version-status').textContent = `Painel ${PANEL_VERSION} · programa ${state.version || 'antigo (sem identificação)'}`;
   if (incompatible()) error('O painel e o programa em execução são de versões diferentes. Não prossiga com os campos. Reinicie o computador e abra BrowserAPI pelo menu; fechar só a aba não encerra a versão antiga.');
-  const labels = {idle:'Pronto',running:'Trabalhando…',waiting:'Aguardando você',done:'Concluído',error:'Precisa de atenção',cancelled:'Interrompido'};
+  const labels = {idle:'Pronto',running:'Trabalhando…',waiting:'Aguardando você',done:'Concluído',error:'Precisa de atenção',cancelled:'Interrompido',updating:'Aplicando atualização…'};
   $('phase').textContent = labels[state.phase] || state.phase;
   $('prepared-label').textContent = state.prepared ? 'Componente de automação disponível. O teste confirma o navegador.' : 'Primeira vez? Clique em Preparar BrowserAPI.';
   renderChats(state.chats);
@@ -171,3 +180,5 @@ async function poll() {
   setTimeout(poll, 650);
 }
 poll();
+
+$('auto-update').addEventListener('change', async () => { try { await api('updates',{enabled:$('auto-update').checked}); await refresh(); } catch (err) { error(err.message); } });

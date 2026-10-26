@@ -40,3 +40,6 @@ screenshots/
 
 # Instalador publicado a pedido do usuário
 !downloads/BrowserAPI-Ubuntu.deb
+
+# Runtime publicado para atualização automática ABI 1
+!downloads/BrowserAPI-runtime.zip

@@ -109,6 +109,27 @@ class TestGraphicalJourney(BrowserTestCase):
         self.wait_question('Apontar resposta do assistente')
         self.page.click('#no')
 
+    def test_managed_update_reloads_interface_without_reinstall_or_new_token(self):
+        class Managed:
+            def snapshot(self):
+                return {'managed':True,'enabled':True,'message':'Atualização automática ativa.'}
+        self.panel.updater=Managed()
+        self.open_panel()
+        self.assertTrue(self.page.locator('#auto-update').is_checked())
+        original_url=self.page.url
+        original_token=self.http.token
+        new_assets=Path(self.temp.name)/'new-assets'
+        new_assets.mkdir()
+        for source in (REPO_ROOT/'browserapi_lab/assets').iterdir():
+            if source.is_file():
+                (new_assets/source.name).write_text(source.read_text().replace('0.3.0','0.3.1'))
+        with patch('browserapi_lab.gui.ASSETS',new_assets), patch('browserapi_lab.gui.APP_VERSION','0.3.1'):
+            self.page.wait_for_function("document.querySelector('#version-status').textContent.includes('Painel 0.3.1') && document.querySelector('#version-status').textContent.includes('programa 0.3.1')",timeout=10000)
+            self.assertEqual(self.page.url,original_url)
+            self.assertEqual(self.http.token,original_token)
+            self.assertTrue(self.page.locator('#error').is_hidden())
+            self.assertTrue(self.page.locator('#auto-update').is_checked())
+
     def test_pattern_and_console_have_no_invalid_regex_or_favicon_error(self):
         failures = []
         self.page.on('pageerror', lambda error: failures.append(str(error)))

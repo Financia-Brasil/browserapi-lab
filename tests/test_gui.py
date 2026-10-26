@@ -58,6 +58,20 @@ class TestPanel(unittest.TestCase):
         connection.close()
         return result
 
+    def test_auto_update_setting_is_authenticated_and_updating_blocks_tasks(self):
+        from browserapi_lab.updates import UpdateStore, Updater
+        store = UpdateStore(Path(self.tmp.name)/'update-data')
+        self.panel.updater = Updater(store,'0.3.0',lambda:False)
+        self.assertEqual(self.request('/api/updates',method='POST',token=False,body={'enabled':False})[0],403)
+        self.assertTrue(store.read().get('enabled',True))
+        self.assertEqual(self.request('/api/updates',method='POST',body={'enabled':False})[0],200)
+        self.assertFalse(store.read()['enabled'])
+        self.assertEqual(self.request('/api/updates',method='POST',body={'enabled':'false'})[0],400)
+        self.assertTrue(json.loads(self.request()[2])['updates']['managed'])
+        with self.panel.lock:
+            self.panel.phase='updating'
+        self.assertEqual(self.request('/api/task',method='POST',body={'operation':'doctor'})[0],400)
+
     def test_static_is_allowlisted_and_has_security_headers(self):
         code, headers, body = self.request('/', token=False)
         self.assertEqual(code, 200)

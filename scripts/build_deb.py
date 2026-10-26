@@ -32,10 +32,10 @@ if os.geteuid() == 0:
 if python.is_file():
     os.execv(str(python), [str(python), str(root / 'open_window.py')])
 sys.path.insert(0, str(root))
-from browserapi_lab.gui import main
+from browserapi_lab.bootstrap import main
 raise SystemExit(main())
 '''
-BOOTSTRAP = '''from browserapi_lab.gui import main
+BOOTSTRAP = '''from browserapi_lab.bootstrap import main
 raise SystemExit(main())
 '''
 DESKTOP = '''[Desktop Entry]
@@ -50,7 +50,8 @@ StartupNotify=false
 '''
 
 
-def build(output):
+def build(output, version=None):
+    runtime_version = version or VERSION
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='browserapi-deb-') as tmp:
@@ -62,11 +63,15 @@ def build(output):
         package.mkdir(parents=True)
         for source in sorted((ROOT / 'browserapi_lab').glob('*.py')):
             shutil.copyfile(source, package / source.name)
+            if source.name == 'version.py':
+                (package/source.name).write_text(source.read_text().replace(VERSION,runtime_version))
         assets = package / 'assets'
         assets.mkdir()
         for source in sorted((ROOT / 'browserapi_lab/assets').iterdir()):
             if source.suffix in ('.html', '.js', '.css'):
                 shutil.copyfile(source, assets / source.name)
+                if source.name in ('panel.html','panel.js'):
+                    (assets/source.name).write_text(source.read_text().replace(VERSION,runtime_version))
         (app / 'open_window.py').write_text(BOOTSTRAP)
         bin_dir = stage / 'usr/bin'
         bin_dir.mkdir(parents=True)
@@ -83,7 +88,7 @@ def build(output):
             shutil.copyfile(ROOT / 'LICENSE', docs / 'copyright')
         size = sum(path.stat().st_size for path in stage.rglob('*') if path.is_file()) // 1024
         (control / 'control').write_text(
-            f'Package: browserapi-lab\nVersion: {VERSION}\nSection: net\nPriority: optional\n'
+            f'Package: browserapi-lab\nVersion: {runtime_version}\nSection: net\nPriority: optional\n'
             f'Architecture: all\nDepends: {DEPENDENCIES}\nInstalled-Size: {size}\n'
             'Maintainer: BrowserAPI Lab <noreply@github.com>\n'
             'Homepage: https://github.com/Financia-Brasil/browserapi-lab\n'

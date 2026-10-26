@@ -108,6 +108,7 @@ class Panel:
         self.receipt = None
         self.messages = deque(maxlen=60)
         self.telemetry = Telemetry()
+        self.updater = None
         self.thread = threading.Thread(target=self._worker, name='BrowserAPI', daemon=True)
         self.thread.start()
 
@@ -183,7 +184,7 @@ class Panel:
         else:
             task = (payload['operation'], None)
         with self.lock:
-            if self.phase in ('running', 'waiting'):
+            if self.phase in ('running', 'waiting', 'updating'):
                 raise PanelInputError('Uma operação já está em andamento.')
             self.cancelled.clear()
             self.phase = 'running'
@@ -205,7 +206,8 @@ class Panel:
                 except (OSError, ValueError, TypeError):
                     chats.append({'name': name, 'compatible': False, 'invalid': True})
             return {'version': APP_VERSION, 'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
-                    'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready(), 'telemetry': self.telemetry.snapshot()}
+                    'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready(), 'telemetry': self.telemetry.snapshot(),
+                    'updates': self.updater.snapshot() if self.updater else {'managed':False,'enabled':False,'status':'unmanaged','message':'Atualização automática disponível no aplicativo instalado.'}}
 
     def _worker(self):
         while True:
@@ -276,7 +278,10 @@ class LocalServer(ThreadingHTTPServer):
     daemon_threads = True
     def __init__(self, panel, port=0):
         self.panel = panel
-        self.token = secrets.token_urlsafe(32)
+        managed = os.environ.get('BROWSERAPI_SUPERVISED') == '1'
+        port = int(os.environ.get('BROWSERAPI_MANAGED_PORT','0')) if managed else port
+        self.token = os.environ.get('BROWSERAPI_MANAGED_TOKEN') if managed else None
+        self.token = self.token or secrets.token_urlsafe(32)
         super().__init__(('127.0.0.1', port), Handler)
 
     @property
@@ -347,6 +352,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.panel.submit(payload)
             elif self.path == '/api/reply':
                 self.server.panel.reply(payload.get('id'), payload.get('value'))
+            elif self.path == '/api/updates':
+                updater = self.server.panel.updater
+                if updater is None or type(payload.get('enabled')) is not bool:
+                    raise ValueError()
+                updater.store.write(enabled=payload['enabled'])
+                updater.wake.set()
             elif self.path == '/api/cancel':
                 self.server.panel.cancel()
             else:
@@ -387,19 +398,39 @@ def main(argv=None):
             return 0
         except Exception:
             return 1
+    restarting = threading.Event()
+    updater = None
     try:
         ConfigStore.write_json(instance, {'url': server.url, 'token': server.token})
-        if not args.no_open:
+        if os.environ.get('BROWSERAPI_SUPERVISED') == '1':
+            from .updates import Updater, UpdateStore
+            store = UpdateStore(DATA_DIR)
+            def restart_when_idle():
+                with panel.lock:
+                    if panel.phase in ('running','waiting','updating'):
+                        return False
+                    ConfigStore.write_json(DATA_DIR/'relaunch.json',{'port':server.server_port,'token':server.token})
+                    panel.phase = 'updating'
+                    restarting.set()
+                    threading.Thread(target=server.shutdown,daemon=True).start()
+                    return True
+            updater = Updater(store,APP_VERSION,restart_when_idle)
+            panel.updater = updater
+            updater.start()
+            ConfigStore.write_json(DATA_DIR/'started.json',{'boot':os.environ.get('BROWSERAPI_BOOT_ID')})
+        if not args.no_open and os.environ.get('BROWSERAPI_NO_OPEN') != '1':
             webbrowser.open(server.entry_url)
         server.serve_forever(poll_interval=.25)
     except KeyboardInterrupt:
         pass
     finally:
+        if updater:
+            updater.close()
         panel.close()
         server.server_close()
         instance.unlink(missing_ok=True)
         lock.release()
-    return 0
+    return 75 if restarting.is_set() else 0
 
 
 if __name__ == '__main__':
