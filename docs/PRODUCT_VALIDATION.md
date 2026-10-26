@@ -346,3 +346,20 @@ sem navegador. Corpus sintético persistido >6M caracteres coberto por teste de
 recuperação; não equivale a medir 1M tokens. Nenhuma conta real/laptop do usuário
 foi usada. Permanecem sem prova: Chrome pessoal nativo nesse desktop, sites
 autenticados, vantagem das otimizações, 4 GB/24x7 e Fetch/XHR direto.
+
+
+Evidência final do marco: CI de branch **40350990553** aprovado, **317 testes em
+182,279 s, 1 ignorado**; PR **40350998872** também aprovado com instalação fora
+do checkout, Chromium/Chrome e modo visível. A comparação sintética de modos não
+mostrou ganho quente nesta amostra; headless/filtro continuam desligados por
+padrão. Dados e limites em [LOCAL_API.md](LOCAL_API.md). Prova de processo real
+do atualizador público 0.3.1 → 0.4.0: [resultado](../results/ci/local-updater-040/result.json),
+mesma porta/acesso, confirmação de inicialização, zero mensagens e API inicialmente
+desligada. Isso não homologa contas reais nem a sessão nativa do Chrome pessoal.
+
+
+Publicação concluída: [CI main 40352704573](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40352704573)
+aprovado, release [v0.4.0](https://github.com/Financia-Brasil/browserapi-lab/releases/tag/v0.4.0),
+commit de release `08548ab854af4bc658ed5362ce676aca17a35f89`. ZIP publicado idêntico
+ao runtime da prova real de atualização; 33 arquivos DEB/ZIP idênticos e digests
+dos quatro assets conferidos. [Verificação publicada](../results/ci/local-updater-040/published-verification.json).

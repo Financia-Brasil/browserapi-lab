@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "release": "0.4.0",
+  "release_commit": "08548ab854af4bc658ed5362ce676aca17a35f89",
+  "source": "3c43f45e01c27e4f65915a1819a0f89275579c83",
+  "runtime_sha256": "d134b5d0aa42281a4a9a643b5dd6faeba8be1530d6ade152adf6c45313b3d4c2",
+  "runtime_bytes": 112604,
+  "packaged_files": 33,
+  "published_target_identical_to_real_updater_test": true,
+  "all_download_checksums_verified": true,
+  "new_modules_match_source": true,
+  "deb_runtime_all_33_files_identical": true,
+  "github_release_asset_digests_match": true
+}

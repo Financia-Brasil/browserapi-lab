@@ -115,3 +115,22 @@ O Chrome pessoal nunca recebe essas otimizações nem é iniciado em duplicidade
 
 As atualizações automáticas do canal estável permanecem ativas, com espera por tarefas
 HTTP e rollback de inicialização. Detalhes e limites: [guia Ubuntu](UBUNTU.md).
+
+
+### Medição sintética registrada (2026-10-26)
+
+CI [40350990553](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40350990553),
+[amostras completas](../results/ci/40350990553/resource-modes.json): Chromium em
+runner de CI, três chamadas por modo (uma fria, duas quentes). Tempos abaixo são
+da chamada completa, incluindo a resposta sintética, **não só captura/startup**.
+
+| Modo | Chamada fria | Mediana das duas quentes |
+|---|---:|---:|
+| Visível | 2929 ms | 1989 ms |
+| Headless | 2579 ms | 2014 ms |
+| Headless + filtro | 2624 ms | 2025 ms |
+
+Nesta amostra pequena não houve ganho de latência quente com headless/filtro.
+Por isso não ativamos otimizações automaticamente. Não é comparação estatística,
+medição de conta real nem prova de economia de RAM/CPU. O teste também verificou
+reúso e confirmação de envio nos três modos.

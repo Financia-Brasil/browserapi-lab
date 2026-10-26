@@ -1,5 +1,7 @@
 # browserapi-lab
 
+**Versão publicada: 0.4.0** · [Baixar instalador Ubuntu](https://github.com/Financia-Brasil/browserapi-lab/releases/download/v0.4.0/BrowserAPI-Ubuntu.deb) · Atualização automática pelo aplicativo, sem reinstalar a cada versão.
+
 Laboratório Python/Linux para validar automação de chats por navegador real.
 **Não é um serviço homologado 24/7.** A versão 0.4.0 acrescenta uma API local
 experimental e opt-in, com subconjunto textual de Chat Completions, não paridade
