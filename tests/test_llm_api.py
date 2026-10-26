@@ -125,8 +125,8 @@ class TestLocalAPI(unittest.TestCase):
         self.service.configure({'enabled':True,'names':['saved'],'retrieval':True,'remember':True})
         self.service.history.append('large','arquivo antigo','registrado',[
             'ruido '*1_000_000+' Projeto jabuticaba: orçamento 123 reais.'])
-        with self.service.history.lock,self.service.history.connect() as db:
-            db.executemany('INSERT INTO chunks(scope,role,body,chars) VALUES (?,?,?,?)',[('large','assistant','noise',5)]*2100)
+        with self.service.history.lock:
+            self.service.history._write(self.service.history._read()+[['large','assistant','noise']]*2100)
         body=self.body();body['conversation_id']='large'
         body['messages'][0]['content']='Qual o orçamento do projeto jabuticaba?'
         code,raw=self.request(body=body)

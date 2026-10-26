@@ -64,7 +64,7 @@ Não há tokenizer do provedor nem garantia de preservar todas as relações do 
 
 Por padrão, não há histórico de conteúdo em disco. Marcar **Guardar histórico RAG**
 exige recuperação habilitada e autoriza explicitamente armazenamento **em texto
-NÃO criptografado**, em SQLite da biblioteca padrão, sem servidor/dependência adicional.
+NÃO criptografado**, em arquivo JSON privado, sem banco de dados ou dependência adicional.
 Guarda apenas o último pedido do usuário, a resposta bem-sucedida e os documentos
 fornecidos; não guarda mensagens system/developer como registros de histórico.
 Textos podem conter dados sensíveis: permissões 0600 não substituem criptografia de disco.
@@ -81,7 +81,7 @@ conversa remota. Não use com usuários ou dados que exijam separação de conte
 `history_saved:false` indica falha de gravação sem repetir o envio já concluído.
 
 **Apagar histórico local** exige ociosidade, desliga a API, limpa as respostas em
-memória, apaga registros e compacta o SQLite. Não apaga a conversa do provedor,
+memória, remove o arquivo de registros. Não apaga a conversa do provedor,
 backups, cópias externas nem garante apagamento forense do armazenamento físico.
 
 ## Retries e fallback sem duplicar mensagens

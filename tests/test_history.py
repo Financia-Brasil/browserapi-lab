@@ -18,7 +18,7 @@ class TestHistory(unittest.TestCase):
             self.assertFalse(history.stats()['encrypted'])
             history.clear()
             self.assertEqual(history.stats()['records'],0)
-            self.assertNotIn(b'private question',history.path.read_bytes())
+            self.assertFalse(history.path.exists())
 
     def test_capacity_evicts_oldest_not_unbounded_and_scope_validated(self):
         with tempfile.TemporaryDirectory() as tmp:

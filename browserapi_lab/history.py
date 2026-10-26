@@ -1,19 +1,20 @@
-"""Histórico RAG opt-in, SQLite stdlib. Texto local NÃO criptografado.
+"""Histórico RAG opt-in em arquivo JSON privado, sem banco/dependência adicional.
 
-Diretório privado/arquivo 0600 não substituem criptografia de disco. Sem cookies,
-credenciais ou instruções de sistema. Limite global em caracteres, não tokens.
+Texto NÃO criptografado. Permissões não substituem criptografia de disco.
+Limite global em caracteres, não tokens. Escritas atômicas pelo ConfigStore.
 """
-from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import re
-import sqlite3
 import threading
+
+from .config import ConfigStore
 
 
 class History:
     def __init__(self,data_dir,limit=8_000_000):
-        self.path=Path(data_dir)/'history'/'context.sqlite3'
+        self.path=Path(data_dir)/'history'/'context-history.json'
         self.limit=limit
         self.lock=threading.RLock()
 
@@ -23,66 +24,66 @@ class History:
             raise ValueError('Histórico exige conversation_id de 1 a 64 letras/números/_/-')
         return value
 
-    @contextmanager
-    def connect(self):
-        self.path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        if self.path.is_symlink():
+    def _read(self):
+        if self.path.is_symlink() or self.path.parent.is_symlink():
             raise ValueError('Histórico inválido')
-        # Criar antes de conectar impede exposição por umask permissiva.
-        fd=os.open(self.path,os.O_CREAT|os.O_RDWR,0o600)
-        os.close(fd)
-        os.chmod(self.path,0o600)
-        connection=sqlite3.connect(self.path,timeout=2)
-        try:
-            connection.execute('PRAGMA secure_delete=ON')
-            version=connection.execute('PRAGMA user_version').fetchone()[0]
-            if version not in (0,1):
-                raise ValueError('Versão do histórico incompatível')
-            connection.execute('CREATE TABLE IF NOT EXISTS chunks (id INTEGER PRIMARY KEY, scope TEXT NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL, chars INTEGER NOT NULL)')
-            connection.execute('CREATE INDEX IF NOT EXISTS by_scope ON chunks(scope,id)')
-            connection.execute('PRAGMA user_version=1')
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+        if not self.path.exists():
+            return []
+        if not self.path.is_file() or self.path.stat().st_uid!=os.getuid() or self.path.stat().st_size>50_000_000:
+            raise ValueError('Histórico inválido')
+        with self.path.open('rb') as stream:
+            raw=stream.read(50_000_001)
+        if len(raw)>50_000_000:
+            raise ValueError('Histórico excede capacidade')
+        value=json.loads(raw)
+        if not isinstance(value,dict) or value.get('schema')!=1 or not isinstance(value.get('records'),list):
+            raise ValueError('Histórico incompatível')
+        records=value['records']
+        if len(records)>10000:
+            raise ValueError('Histórico excede capacidade')
+        total=0
+        for record in records:
+            if not isinstance(record,list) or len(record)!=3 or record[1] not in ('user','assistant','document') or not isinstance(record[2],str):
+                raise ValueError('Histórico inválido')
+            self.scope(record[0])
+            total+=len(record[2])
+        if total>self.limit:
+            raise ValueError('Histórico excede capacidade')
+        return records
+
+    def _write(self,records):
+        if self.path.is_symlink() or self.path.parent.is_symlink():
+            raise ValueError('Histórico inválido')
+        self.path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        ConfigStore.write_json(self.path,{'schema':1,'records':records})
 
     def append(self,scope,question,answer,documents=()):
         self.scope(scope)
-        records=[('user',question),('assistant',answer),*[('document',d) for d in documents]]
-        if any(not isinstance(text,str) for _,text in records):
+        new=[(scope,'user',question),(scope,'assistant',answer),*[(scope,'document',d) for d in documents]]
+        if any(not isinstance(text,str) for _,_,text in new):
             raise ValueError('Histórico aceita somente texto')
-        if any(len(text)>self.limit for _,text in records):
+        if any(len(text)>self.limit for _,_,text in new):
             raise ValueError('Registro excede capacidade local')
-        with self.lock,self.connect() as db:
-            for role,text in records:
-                db.execute('INSERT INTO chunks(scope,role,body,chars) VALUES (?,?,?,?)',(scope,role,text,len(text)))
-            count,total=db.execute('SELECT COUNT(*),COALESCE(SUM(chars),0) FROM chunks').fetchone()
-            while total>self.limit or count>10000:
-                identifier,size=db.execute('SELECT id,chars FROM chunks ORDER BY id LIMIT 1').fetchone()
-                db.execute('DELETE FROM chunks WHERE id=?',(identifier,))
-                total-=size
-                count-=1
+        with self.lock:
+            records=self._read()+new
+            total=sum(len(r[2]) for r in records)
+            start=0
+            while total>self.limit or len(records)-start>10000:
+                total-=len(records[start][2]);start+=1
+            self._write(records[start:])
 
     def read(self,scope):
         self.scope(scope)
-        if not self.path.exists():
-            return []
-        with self.lock,self.connect() as db:
-            # Limite global de 10000 registros/8M caracteres; busca cobre o acervo retido.
-            rows=db.execute('SELECT role,body FROM chunks WHERE scope=? ORDER BY id DESC LIMIT 10000',(scope,)).fetchall()
-            return list(reversed(rows))
+        with self.lock:
+            return [(role,text) for identifier,role,text in self._read() if identifier==scope]
 
     def stats(self):
-        if not self.path.exists():
-            return {'records':0,'characters':0,'encrypted':False}
-        with self.lock,self.connect() as db:
-            count,chars=db.execute('SELECT COUNT(*),COALESCE(SUM(chars),0) FROM chunks').fetchone()
-            return {'records':count,'characters':chars,'encrypted':False}
+        with self.lock:
+            records=self._read()
+            return {'records':len(records),'characters':sum(len(r[2]) for r in records),'encrypted':False}
 
     def clear(self):
-        if not self.path.exists():
-            return
-        with self.lock,self.connect() as db:
-            db.execute('DELETE FROM chunks')
-            db.commit()
-            db.execute('VACUUM')
+        with self.lock:
+            if self.path.is_symlink() or self.path.parent.is_symlink():
+                raise ValueError('Histórico inválido')
+            self.path.unlink(missing_ok=True)
