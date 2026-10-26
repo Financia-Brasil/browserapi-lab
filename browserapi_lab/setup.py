@@ -166,6 +166,8 @@ def blocked_login_receipt(page, config, store, tell, timings=None):
 def authorize_session(config, ask, tell):
     if config.session_mode != 'existing_chrome':
         return True
+    if config.personal_profile:
+        tell('Perfil indicado por você: '+config.personal_installation+' / '+config.personal_profile+'. Abra esse perfil e confira a conta na aba. CDP não comprova a identidade do perfil/conta.')
     tell('Modo perfil pessoal: use Chrome 144+ já aberto e habilite Depuração remota em chrome://inspect/#remote-debugging.')
     tell('O Chrome pedirá sua permissão. Esta conexão pode acessar todas as abas/contas desse navegador; só prossiga se confiar no programa. Não copiamos cookies nem abrimos outro processo no seu perfil.')
     tell('Deixe somente uma aba do chat escolhido aberta. O programa não fecha o Chrome ao desconectar.')

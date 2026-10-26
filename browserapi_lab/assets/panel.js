@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.3.1';
+const PANEL_VERSION = '0.4.0';
 const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('browserapi-token') || '';
 if (token) sessionStorage.setItem('browserapi-token', token);
@@ -38,7 +38,7 @@ $('configuration').addEventListener('submit', event => {
     error('Esse nome já está salvo. Use Corrigir campos, ou escolha outro nome para um novo navegador/chat.'); return;
   }
   task('configure', {name: $('name').value, browser: $('browser').value,
-                     provider: $('provider').value, session_mode: $('session-mode').value, url: $('url').value});
+                     provider: $('provider').value, personal_profile:$('personal-profile').value, session_mode: $('session-mode').value, url: $('url').value});
 });
 $('session-mode').addEventListener('change', () => {
   const personal = $('session-mode').value === 'existing_chrome';
@@ -83,10 +83,11 @@ function renderChats(chats) {
     const info = document.createElement('small');
     info.textContent = chat.invalid ? 'Configuração inválida. Crie outra com um nome diferente.' :
       `${chat.browser}${chat.session_mode === 'existing_chrome' ? ' · Chrome já aberto (configurado)' : ' · perfil separado'} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
+    if (chat.personal_profile) info.textContent += ` · perfil indicado: ${chat.personal_installation}/${chat.personal_profile} (conta não verificada)`;
     box.append(info);
     for (const [caption, operation] of [['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send'],['Testar agora','check'],['Corrigir campos','repair']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';
-      button.onclick = () => task(operation, {name: chat.name}); box.append(button);
+      button.onclick = () => task(operation, {name: chat.name, ...(operation==='use_existing' ? {personal_profile:$('personal-profile').value}: {})}); box.append(button);
     }
     $('chats').append(box);
   }
@@ -171,6 +172,7 @@ function render(value) {
     $('result-timing').textContent = receipt.timings?.total_ms !== undefined ? `Tempo observado: ${Math.round(receipt.timings.total_ms)} ms (inclui espera da resposta).` : '';
   }
   renderMetrics(value);
+  renderService(value);
   controls();
 }
 async function refresh() { render(await api('state')); }
@@ -182,3 +184,55 @@ async function poll() {
 poll();
 
 $('auto-update').addEventListener('change', async () => { try { await api('updates',{enabled:$('auto-update').checked}); await refresh(); } catch (err) { error(err.message); } });
+
+$('scan-profiles').onclick=async()=>{
+  try {
+    const data=await api('profiles');
+    $('personal-profile').replaceChildren(new Option('Chrome padrão · verificar manualmente',''));
+    for(const p of data.profiles){
+      const option=new Option(`${p.installation} · ${p.label} (${p.directory})${p.connectable ? '' : ' · só inventário'}`,p.id);
+      option.disabled=!p.connectable; $('personal-profile').append(option);
+    }
+    $('profiles-note').textContent=`${data.profiles.length} perfis encontrados. Indicação não comprova conta/contexto; abra o perfil escolhido e confira a aba. Não iniciamos outro processo no perfil.`;
+  } catch(err){error(err.message);}
+};
+let serviceSignature='';
+function renderService(value){
+  const a=value.api_service || {};
+  $('api-status').textContent=a.message || 'API não disponível neste modo de execução.';
+  $('api-toggle').textContent=a.enabled ? 'Desativar API' : 'Autorizar e iniciar API';
+  $('api-toggle').disabled=!a.available || incompatible() || (!a.enabled && busy());
+  $('api-url').value=a.url || ''; $('api-key').value=a.key || '';
+  const signature=JSON.stringify([a.enabled,a.names,a.headless,a.lightweight,a.retrieval,a.fallback,a.remember,a.personal_consent,value.chats]);
+  if(signature!==serviceSignature){
+    serviceSignature=signature;
+    const old=[...$('api-models').selectedOptions].map(o=>o.value);
+    $('api-models').replaceChildren();
+    for(const chat of value.chats){
+      const option=new Option(`${chat.name}${chat.compatible ? '' : ' · testar primeiro'}`,chat.name);
+      option.disabled=!chat.compatible;
+      option.selected=(a.names?.length ? a.names : old.length ? old : [value.chats.find(c=>c.compatible)?.name]).includes(chat.name);
+      $('api-models').append(option);
+    }
+    for(const [id,key] of [['api-headless','headless'],['api-lightweight','lightweight'],['api-retrieval','retrieval'],['api-fallback','fallback'],['api-personal','personal_consent'],['api-remember','remember']]) $(id).checked=!!a[key];
+  }
+  for(const id of ['api-models','api-headless','api-lightweight','api-retrieval','api-fallback','api-personal','api-remember']) $(id).disabled=!!a.enabled || busy() || incompatible();
+}
+$('api-show').onclick=()=>{$('api-key').type=$('api-key').type==='password' ? 'text':'password';};
+$('api-toggle').onclick=async()=>{
+  const active=!!state?.api_service?.enabled;
+  if(!active && !confirm('Autorizar agentes com esta chave a enviar mensagens pelos chats selecionados, sem confirmação por chamada? Mantenha login/modelo corretos. Não compartilhe a chave.')) return;
+  try {
+    await api('service',{enabled:!active,names:[...$('api-models').selectedOptions].map(o=>o.value),headless:$('api-headless').checked,lightweight:$('api-lightweight').checked,retrieval:$('api-retrieval').checked,fallback:$('api-fallback').checked,personal_consent:$('api-personal').checked,remember:$('api-remember').checked});
+    await refresh();
+  } catch(err){error(err.message);}
+};
+
+$('api-clear').onclick=async()=>{
+  if(!confirm('Apagar histórico RAG e desativar a API? Não apaga conversas no provedor nem cópias fora do programa. Aguarde tarefas em andamento.')) return;
+  try{await api('service',{enabled:false,clear_history:true});await refresh();}catch(err){error(err.message);}
+};
+$('api-rotate').onclick=async()=>{
+  if(!confirm('Revogar a chave e o registro de idempotência? Reconfigure os agentes. Isso não desfaz envios; não repita pedidos antigos sem conferir a página.')) return;
+  try{await api('service',{enabled:false,rotate:true});await refresh();}catch(err){error(err.message);}
+};

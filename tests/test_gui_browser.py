@@ -122,15 +122,38 @@ class TestGraphicalJourney(BrowserTestCase):
         new_assets.mkdir()
         for source in (REPO_ROOT/'browserapi_lab/assets').iterdir():
             if source.is_file():
-                (new_assets/source.name).write_text(source.read_text().replace('0.3.1','0.3.2'))
-        with patch('browserapi_lab.gui.ASSETS',new_assets), patch('browserapi_lab.gui.APP_VERSION','0.3.2'):
+                (new_assets/source.name).write_text(source.read_text().replace(__import__('browserapi_lab.version',fromlist=['APP_VERSION']).APP_VERSION,'99.0.0'))
+        with patch('browserapi_lab.gui.ASSETS',new_assets), patch('browserapi_lab.gui.APP_VERSION','99.0.0'):
             # Locator assertion atravessa navegação sem eval de string sob CSP.
             from playwright.sync_api import expect
-            expect(self.page.locator('#version-status')).to_have_text('Painel 0.3.2 · programa 0.3.2',timeout=10000)
+            expect(self.page.locator('#version-status')).to_have_text('Painel 99.0.0 · programa 99.0.0',timeout=10000)
             self.assertEqual(self.page.url,original_url)
             self.assertEqual(self.http.token,original_token)
             self.assertTrue(self.page.locator('#error').is_hidden())
             self.assertTrue(self.page.locator('#auto-update').is_checked())
+
+    def test_api_controls_explicit_opt_in_key_and_disable(self):
+        from browserapi_lab.llm_api import APIService
+        from browserapi_lab.chat import ChatResult
+        from playwright.sync_api import expect
+        config=self.seed()
+        self.store.save_status(config.name,ChatResult('success',True).receipt(config))
+        service=APIService(self.panel,port=0);self.panel.api_service=service
+        try:
+            self.open_panel()
+            expect(self.page.locator('#api-toggle')).to_have_text('Autorizar e iniciar API')
+            self.assertEqual(self.page.locator('#api-key').get_attribute('type'),'password')
+            self.page.once('dialog',lambda dialog:dialog.accept())
+            self.page.click('#api-toggle')
+            expect(self.page.locator('#api-toggle')).to_have_text('Desativar API')
+            self.assertIsNotNone(service.server)
+            self.assertEqual(service.state['names'],['saved'])
+            self.assertEqual(self.page.locator('#api-key').input_value(),service.state['key'])
+            self.page.click('#api-toggle')
+            expect(self.page.locator('#api-toggle')).to_have_text('Autorizar e iniciar API')
+            self.assertIsNone(service.server)
+        finally:
+            service.close();self.panel.api_service=None
 
     def test_pattern_and_console_have_no_invalid_regex_or_favicon_error(self):
         failures = []

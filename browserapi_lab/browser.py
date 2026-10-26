@@ -49,6 +49,7 @@ class BrowserConfig:
     locale: str = "pt-BR"
     screenshot_on_error: bool = False
     attach_existing_chrome: bool = False
+    existing_installation: str = "chrome"
 
     @property
     def profile_dir(self) -> Path:
@@ -119,7 +120,7 @@ class BrowserSession:
             self._pw = sync_playwright().start()
             if self.config.attach_existing_chrome:
                 from .existing_chrome import endpoint, ExistingChromeError
-                self._attached_browser = self._pw.chromium.connect_over_cdp(endpoint(), timeout=60000)
+                self._attached_browser = self._pw.chromium.connect_over_cdp(endpoint() if self.config.existing_installation == "chrome" else endpoint(installation=self.config.existing_installation), timeout=60000)
                 contexts = self._attached_browser.contexts
                 if len(contexts) != 1:
                     raise ExistingChromeError('A conexão não identificou um único contexto do Chrome. Desconectamos sem fechar seu navegador.')

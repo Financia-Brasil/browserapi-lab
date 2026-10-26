@@ -167,13 +167,14 @@ jobs:
       # esta organizacao; por isso as evidencias sao gravadas no proprio
       # repositorio (resultados sanitizados apenas — ADR-009).
       - name: Registrar evidencias no repositorio
-        if: always() && github.event_name == 'push' && github.ref_name == 'arena/ff33c6e6-browserapi-lab'
+        if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p "results/ci/${GITHUB_RUN_ID}"
           cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
           if [ -f results/ci/gui-flow.json ]; then cp results/ci/gui-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
+          if [ -f results/ci/llm-api-flow.json ]; then cp results/ci/llm-api-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/product-flow.json ]; then cp results/ci/product-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
           git restore results/ci/resumo.md results/ci/doctor-browser.json
