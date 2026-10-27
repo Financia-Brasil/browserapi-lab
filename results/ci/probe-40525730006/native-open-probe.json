@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-27T14:55:01+00:00",
+  "outcome": "FAIL",
+  "error": "ExistingChromeError: O Chrome não abriu o chat no perfil escolhido a tempo. Nenhuma mensagem foi enviada; confira o perfil aberto e tente de novo.",
+  "steps": [
+    {
+      "t": 12.49,
+      "step": "chrome_started"
+    },
+    {
+      "t": 23.77,
+      "step": "handoff_diagnostic",
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opens_requested_page": {
+        "about_blank_with_fragment": false,
+        "chrome_version": false,
+        "chrome_inspect": false,
+        "http_loopback": true
+      }
+    },
+    {
+      "t": 24.9,
+      "step": "session",
+      "directory": "Default",
+      "identity": "5D176934",
+      "verified_tag": "Default",
+      "seconds": 1.12
+    }
+  ],
+  "scope": "Chrome descartável em pasta temporária; não é o seu Chrome nem uma conta real.",
+  "chrome": "Google Chrome 156.0.8078.47",
+  "display_available": true,
+  "handoff": [
+    {
+      "label": "about_blank_with_fragment",
+      "target": "about:blank",
+      "directory": "Default",
+      "lock": "runnervm48cm3-2128",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "",
+      "seconds": 0.32,
+      "new_targets": [
+        "chrome://newtab/"
+      ]
+    },
+    {
+      "label": "chrome_version",
+      "target": "chrome://version/",
+      "directory": "Default",
+      "lock": "runnervm48cm3-2128",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[2355:2355:0100/000000.120986:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[2356:2356:0100/000000.129517:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.07,
+      "new_targets": []
+    },
+    {
+      "label": "chrome_inspect",
+      "target": "chrome://inspect/",
+      "directory": "Default",
+      "lock": "runnervm48cm3-2128",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[2573:2573:0100/000000.193050:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[2572:2572:0100/000000.193623:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.06,
+      "new_targets": []
+    },
+    {
+      "label": "http_loopback",
+      "target": "http://127.0.0.1:40053/browserapi-handoff-http",
+      "directory": "Default",
+      "lock": "runnervm48cm3-2128",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[2589:2589:0100/000000.258731:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[2590:2590:0100/000000.259148:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.06,
+      "new_targets": [
+        "http://127.0.0.1:40053/browserapi-handoff-http"
+      ]
+    }
+  ],
+  "process_states": {
+    "total": 18,
+    "zumbis": 0
+  },
+  "launch_opens_requested_page": {
+    "about_blank_with_fragment": false,
+    "chrome_version": false,
+    "chrome_inspect": false,
+    "http_loopback": true
+  },
+  "chrome_log_filtered": [
+    "",
+    "DevTools listening on ws://127.0.0.1:35565/devtools/browser/9ebc4184-f45d-4ecd-8e9d-57b5e5df1ff5",
+    "[2128:2128:1027/145523.280598:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2128:2128:1027/145548.357156:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2128:2128:1027/145548.377220:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type."
+  ]
+}
