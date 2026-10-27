@@ -242,6 +242,7 @@ async function scanProfiles(){
 function profileNote(){
   const p=profileRows.find(p=>p.id===$('personal-profile').value);
   $('profiles-note').textContent=!p?'Nenhum perfil disponível. Abra seu Chrome normalmente e atualize a lista. Não criaremos um perfil vazio no lugar.':
+    p.openable===false?'Perfil encontrado, mas o executável do Chrome não está disponível. Abra-o pelo menu do computador e depois conecte.':
     p.endpoint_available?'Conexão local encontrada. Ainda é necessário autorizar no Chrome e conferir a conta.':
     'Perfil encontrado. Abra-o e configure a permissão antes de conectar (Chrome 144+).';
   profileControls();
@@ -275,6 +276,7 @@ function renderService(value){
   $('api-toggle').textContent=a.enabled ? 'Desativar API' : 'Autorizar e iniciar API';
   $('api-toggle').disabled=!a.available || incompatible() || (!a.enabled && busy());
   $('api-url').value=a.url || ''; $('api-key').value=a.key || '';
+  $('copy-api-url').disabled=!a.url; $('copy-api-key').disabled=!a.key; $('api-show').disabled=!a.key;
   const signature=JSON.stringify([a.enabled,a.names,a.headless,a.lightweight,a.retrieval,a.fallback,a.remember,a.personal_consent,value.chats]);
   if(signature!==serviceSignature){
     serviceSignature=signature;
