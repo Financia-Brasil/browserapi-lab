@@ -1,0 +1,62 @@
+name: probe-perfis
+
+# Experimento informativo e rápido (sem baixar navegador): o fluxo real do produto
+# contra o Google Chrome instalado no runner. Não substitui a bateria do lab.yml.
+on:
+  push:
+    branches: ["arena/**"]
+    paths:
+      - "scripts/native_open_probe.py"
+      - ".github/workflows/probe.yml"
+      - "browserapi_lab/browser.py"
+      - "browserapi_lab/profiles.py"
+      - "browserapi_lab/existing_chrome.py"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+concurrency:
+  group: probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: "Dois perfis no Google Chrome real"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar o pacote Playwright (sem baixar navegador)
+        run: pip install -r requirements.txt
+      - name: Experimento
+        continue-on-error: true
+        run: |
+          mkdir -p results/ci/probe
+          xvfb-run -a python scripts/native_open_probe.py --output results/ci/probe/native-open-probe 2>&1 | tee results/ci/probe/native-open-probe.log
+      - name: Registrar evidência no repositório
+        if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          destination="results/ci/probe-${GITHUB_RUN_ID}"
+          mkdir -p "$destination"
+          cp results/ci/probe/* "$destination/"
+          git add -f "$destination"
+          if git diff --cached --quiet; then echo "nada a registrar"; exit 0; fi
+          git commit -m "ci: probe de perfis ${GITHUB_RUN_ID} [skip ci]"
+          for tentativa in 1 2 3 4 5; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "evidência publicada"
+              exit 0
+            fi
+            sleep $((tentativa * 5))
+          done
+          exit 1

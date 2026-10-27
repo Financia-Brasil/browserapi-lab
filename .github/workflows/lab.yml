@@ -7,6 +7,8 @@ on:
       - "results/**"
       - "docs/**"
       - "**.md"
+      - "scripts/native_open_probe.py"
+      - ".github/workflows/probe.yml"
   pull_request:
   workflow_dispatch:
 

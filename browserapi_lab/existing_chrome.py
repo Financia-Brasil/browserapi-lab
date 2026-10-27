@@ -70,6 +70,8 @@ def verify_profile(context, expected, probe=None):
                 'Abra o perfil desejado pelo avatar do Chrome, confira a Depuração remota e reconecte. '
                 'Se o Chrome continuar concedendo outro perfil, este modo não consegue usar esse perfil nesta versão. '
                 'Não copie o perfil nem refaça os campos do chat para resolver isso.')
+        # Identidade real da aba (browserContextId): é o que prende o chat a ESTE perfil.
+        return target_context_id(context, probe)
     except ProfileMismatchError:
         raise
     except Exception:

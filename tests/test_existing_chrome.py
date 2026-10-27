@@ -283,7 +283,9 @@ class TestProfileIdentity(unittest.TestCase):
     def test_verified_directory_not_profile_label(self):
         from browserapi_lab.existing_chrome import verify_profile
         context, page = self.probe('/fixtures/google-chrome/Profile 1')
-        verify_profile(context, Path('/fixtures/google-chrome/Profile 1'))
+        identity = verify_profile(context, Path('/fixtures/google-chrome/Profile 1'))
+        # Sem este valor nenhuma aba do chat pode ser ligada ao perfil confirmado.
+        self.assertEqual(identity, 'verified-fixture')
         page.close.assert_called_once_with()
         page.locator.assert_called_once_with('#profile_path')
         context.close.assert_not_called()

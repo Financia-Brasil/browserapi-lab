@@ -64,6 +64,55 @@ def write_wrapper(path, binary, user_data_dir):
     return str(path)
 
 
+NOISE = ('dbus', 'object_proxy', 'XNNPACK', 'TensorFlow')
+
+
+def interesting_log(path, limit=40):
+    """Linhas do log do Chrome sem o ruído de D-Bus de um runner sem sessão."""
+    lines = [line for line in path.read_text(errors='replace').splitlines() if not any(n in line for n in NOISE)]
+    return lines[-limit:]
+
+
+def target_urls(port):
+    """URLs das abas pelo endpoint HTTP do Chrome descartável (modo padrão, sem aprovação)."""
+    import urllib.request
+    with urllib.request.urlopen('http://127.0.0.1:%s/json/list' % port, timeout=5) as response:
+        return [item.get('url', '') for item in json.loads(response.read()) if item.get('type') == 'page']
+
+
+def link(path):
+    try:
+        return os.readlink(path)
+    except OSError as error:
+        return 'ausente (%s)' % error.strerror
+
+
+def process_states():
+    """Estados dos processos chrome: um processo zumbi ('Z') ou ausente explicaria um hand-off recusado."""
+    output = subprocess.run(['ps', '-eo', 'pid,ppid,stat,comm'], capture_output=True, text=True, timeout=10).stdout
+    rows = [line.split(None, 3) for line in output.splitlines()[1:] if 'chrome' in line]
+    return {'total': len(rows), 'zumbis': sum(1 for row in rows if 'Z' in row[2])}
+
+
+def handoff(wrapper, root, port, target, directory='Default'):
+    """Pedido nativo com a saída VISÍVEL (open_profile() descarta stdout/stderr)."""
+    before = target_urls(port)
+    begun = time.perf_counter()
+    info = {'target': target.split('#')[0], 'directory': directory,
+            'lock': link(root / 'SingletonLock'), 'socket_exists': 'ausente' not in link(root / 'SingletonSocket')}
+    try:
+        done = subprocess.run([wrapper, '--profile-directory=' + directory, target],
+                              capture_output=True, text=True, timeout=45)
+        info.update(exit_code=done.returncode, stdout=done.stdout[-300:], stderr=done.stderr[-900:])
+    except subprocess.TimeoutExpired as error:
+        info.update(exit_code='timeout', stdout=(error.stdout or b'')[-300:].decode(errors='replace'),
+                    stderr=(error.stderr or b'')[-900:].decode(errors='replace'))
+    info['seconds'] = round(time.perf_counter() - begun, 2)
+    time.sleep(2)
+    info['new_targets'] = [url.split('#')[0] for url in target_urls(port) if url not in before]
+    return info
+
+
 def finish(result, output):
     destination = Path(str(output) + '.json')
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -115,6 +164,13 @@ def run(output):
         note('chrome_started')
 
         wrapper = write_wrapper(tmp / 'chrome-wrapper.sh', binary, root)
+        port = (root / 'DevToolsActivePort').read_text().splitlines()[0]
+        # Diagnóstico ANTES do fluxo do produto: URL neutra e URL interna, com saída visível.
+        result['handoff'] = [handoff(wrapper, root, port, 'about:blank#browserapi-neutral'),
+                             handoff(wrapper, root, port, 'chrome://version/#browserapi-' + '0' * 32)]
+        result['process_states'] = process_states()
+        note('handoff_diagnostic', exit_codes=[item['exit_code'] for item in result['handoff']],
+             opened=[bool(item['new_targets']) for item in result['handoff']])
         # O código do produto lê a pasta de configuração do ambiente.
         os.environ['XDG_CONFIG_HOME'] = str(config_home)
         from browserapi_lab.browser import BrowserConfig, BrowserSession
@@ -196,7 +252,7 @@ def run(output):
                 os.killpg(chrome.pid, signal.SIGKILL)  # processo e filhos criados por este experimento
                 chrome.wait()
         if result['outcome'] != 'PASS' and log_path.exists():
-            result['chrome_log_tail'] = log_path.read_text(errors='replace')[-2000:]
+            result['chrome_log_filtered'] = interesting_log(log_path)
         if server is not None:
             server.shutdown()
         shutil.rmtree(tmp, ignore_errors=True)
