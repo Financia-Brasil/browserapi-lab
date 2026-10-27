@@ -141,6 +141,7 @@ class TestGraphicalJourney(BrowserTestCase):
         service=APIService(self.panel,port=0);self.panel.api_service=service
         try:
             self.open_panel()
+            self.page.locator('[data-view=api]').click()
             expect(self.page.locator('#api-toggle')).to_have_text('Autorizar e iniciar API')
             self.assertEqual(self.page.locator('#api-key').get_attribute('type'),'password')
             self.page.once('dialog',lambda dialog:dialog.accept())
@@ -212,6 +213,7 @@ class TestGraphicalJourney(BrowserTestCase):
     def test_buttons_voice_send_and_switch_saved_session_are_visible(self):
         self.seed()
         self.open_panel()
+        self.page.locator('#chats details summary').click()
         self.assertEqual(self.page.get_by_role('button',name='Selecionar botão de voz').count(),1)
         self.assertEqual(self.page.get_by_role('button',name='Digitar e selecionar Enviar / Enter').count(),1)
         with patch('browserapi_lab.browser.BrowserSession.start') as launch:
@@ -227,6 +229,7 @@ class TestGraphicalJourney(BrowserTestCase):
         # A hipótese é local à fixture, não evidência de compatibilidade com sites reais.
         with patch.dict(HYPOTHESES, {'custom':HYPOTHESES['fixture']}), patch('browserapi_lab.gui.configure',side_effect=self.configure_with_simulated_person):
             self.open_panel()
+            self.page.select_option('#session-mode','dedicated')
             self.page.select_option('#browser','chromium')
             self.page.select_option('#provider','custom')
             self.page.fill('#name','graphical')
@@ -306,6 +309,7 @@ class TestGraphicalJourney(BrowserTestCase):
         self.store.save(config)
         self.panel.tell('<img src=x onerror="window.secretLeaked=true">')
         self.open_panel()
+        self.page.locator('.operation-log summary').click()
         self.assertIn('<img',self.page.locator('#log').inner_text())
         self.assertEqual(self.page.locator('#log img').count(),0)
         self.assertFalse(self.page.evaluate('Boolean(window.secretLeaked)'))
@@ -317,3 +321,41 @@ class TestGraphicalJourney(BrowserTestCase):
         self.wait_phase('Concluído')
         self.assertEqual(self.store.status('saved')['status'],'composer_missing')
         self.assertIn('Corrigir campos',self.page.locator('#result-action').inner_text())
+
+    def test_redesign_profile_opening_navigation_and_responsive_evidence(self):
+        import datetime
+        from playwright.sync_api import expect
+        profile={'id':'chrome:Profile 1','label':'Pessoal','installation':'chrome',
+                 'directory':'Profile 1','connectable':True,'account_verified':False,
+                 'openable':True,'endpoint_available':False}
+        with patch('browserapi_lab.profiles.connection_inventory',return_value=[profile]), patch('browserapi_lab.profiles.open_profile') as native, patch('browserapi_lab.browser.BrowserSession.start') as automation:
+            self.page.set_viewport_size({'width':1440,'height':1040})
+            self.open_panel()
+            expect(self.page.locator('#personal-profile')).to_have_value('chrome:Profile 1')
+            self.page.click('#open-profile')
+            expect(self.page.locator('#profile-feedback')).to_contain_text('Isso ainda não conectou')
+            native.assert_called_with('chrome:Profile 1','https://gemini.google.com/app')
+            self.page.click('#open-permission')
+            expect(self.page.locator('#profile-feedback')).to_contain_text('habilite Depuração remota')
+            native.assert_called_with('chrome:Profile 1','chrome://inspect/#remote-debugging')
+            automation.assert_not_called()
+            self.page.wait_for_function('document.fonts.status === "loaded"')
+            evidence=REPO_ROOT/'results/ci/ui-redesign';evidence.mkdir(parents=True,exist_ok=True)
+            self.page.screenshot(path=str(evidence/'desktop.png'),full_page=True)
+            self.page.locator('[data-view=settings]').click()
+            expect(self.page.locator('#updates-card')).to_be_visible()
+            self.page.locator('[data-view=api]').click()
+            expect(self.page.locator('#api-card')).to_be_visible()
+            self.assertTrue(self.page.locator('#api-headless').is_hidden())
+            self.page.locator('[data-view=connections]').click()
+            self.page.set_viewport_size({'width':375,'height':812})
+            self.page.screenshot(path=str(evidence/'mobile.png'),full_page=True)
+            self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+            self.page.locator('#session-mode').focus()
+            self.page.keyboard.press('Tab');self.page.keyboard.press('Shift+Tab')
+            self.assertEqual(self.page.locator('#session-mode').evaluate('el=>getComputedStyle(el).outlineStyle'),'solid')
+            (evidence/'checks.json').write_text(json.dumps({'captured_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'desktop':[1440,1040],'mobile':[375,812],'horizontal_overflow':False,
+                'native_profile_open_request':True,'automation_not_started_by_open_action':True,
+                'permission_target_allowlisted':True,'api_advanced_collapsed':True,
+                'keyboard_focus_visible':True,'scope':'Synthetic UI only; no personal Chrome or account used.'},indent=2)+'\n')

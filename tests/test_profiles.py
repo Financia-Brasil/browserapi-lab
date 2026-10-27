@@ -54,3 +54,30 @@ class TestProfiles(unittest.TestCase):
         self.assertEqual(config_fingerprint(config),hashlib.sha256(json.dumps(old,sort_keys=True).encode()).hexdigest())
         config.personal_profile='Profile 1'
         self.assertNotEqual(config_fingerprint(config),hashlib.sha256(json.dumps(old,sort_keys=True).encode()).hexdigest())
+
+    def test_open_existing_profile_is_native_not_a_second_automation_profile(self):
+        from browserapi_lab.profiles import open_profile
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'google-chrome';root.mkdir();(root/'Profile 1').mkdir()
+            with patch('browserapi_lab.profiles.chrome_binary',return_value='/usr/bin/google-chrome'), patch('subprocess.Popen') as launch:
+                open_profile('chrome:Profile 1','https://gemini.google.com/app',tmp)
+                args=launch.call_args.args[0]
+                self.assertEqual(args,['/usr/bin/google-chrome','--profile-directory=Profile 1','https://gemini.google.com/app'])
+                self.assertFalse(launch.call_args.kwargs.get('shell',False))
+                self.assertNotIn('--user-data-dir',' '.join(args))
+                self.assertNotIn('--remote-debugging',' '.join(args))
+                launch.reset_mock()
+                for identifier,target in [('chrome:../Profile 1','https://example.com'),('chrome:Profile 1','file:///etc/passwd'),('chrome:Profile 1','chrome://flags')]:
+                    with self.assertRaises(ValueError):open_profile(identifier,target,tmp)
+                launch.assert_not_called()
+                open_profile('chrome:Profile 1','chrome://inspect/#remote-debugging',tmp)
+                self.assertEqual(launch.call_args.args[0][-1],'chrome://inspect/#remote-debugging')
+
+    def test_open_missing_binary_is_actionable_without_creating_profile(self):
+        from browserapi_lab.profiles import open_profile
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'google-chrome';root.mkdir();(root/'Default').mkdir()
+            with patch('browserapi_lab.profiles.chrome_binary',return_value=None),patch('subprocess.Popen') as launch:
+                with self.assertRaisesRegex(ValueError,'instalação do Chrome'):
+                    open_profile('chrome:Default','https://example.com',tmp)
+                launch.assert_not_called()

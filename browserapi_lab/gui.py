@@ -399,14 +399,17 @@ class Handler(BaseHTTPRequestHandler):
         static = {'/': ('panel.html', 'text/html; charset=utf-8'),
                   '/panel.js': ('panel.js', 'text/javascript; charset=utf-8'),
                   '/panel.css': ('panel.css', 'text/css; charset=utf-8')}
+        if self.path in ('/inter.ttf','/mono.ttf'):
+            from .font_assets import content
+            return self.send(200,content('inter' if self.path=='/inter.ttf' else 'mono'),'font/ttf')
         if self.path in static:
             name, mime = static[self.path]
             return self.send(200, (ASSETS / name).read_bytes(), mime)
         if not self.authorized():
             return self.send(403, {'error': 'Abra o programa pelo menu BrowserAPI para autorizar esta janela.'})
         if self.path == '/api/profiles':
-            from .profiles import inventory
-            return self.send(200,{'profiles':inventory()})
+            from .profiles import connection_inventory
+            return self.send(200,{'profiles':connection_inventory()})
         if self.path == '/api/state':
             return self.send(200, self.server.panel.snapshot())
         return self.send(404, {'error': 'Página não encontrada.'})
@@ -425,6 +428,26 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError()
             if self.path == '/api/task':
                 self.server.panel.submit(payload)
+            elif self.path == '/api/profile':
+                from .profiles import open_profile
+                panel=self.server.panel
+                with panel.lock:
+                    if panel.closed or panel.phase in ('running','waiting','updating') or (panel.api_service and (panel.api_service.busy() or panel.api_service.server)):
+                        raise PanelInputError('Termine a operação e desative a API antes de abrir outra aba do perfil.')
+                    destination=payload.get('destination')
+                    if destination=='permission':
+                        target='chrome://inspect/#remote-debugging'
+                    elif destination=='chat':
+                        provider=payload.get('provider')
+                        if provider not in (*PROVIDERS,'custom'):
+                            raise PanelInputError('Escolha o chat que deseja abrir.')
+                        target=PROVIDERS.get(provider) or payload.get('url')
+                    else:
+                        raise PanelInputError('Ação de perfil inválida.')
+                    try:
+                        open_profile(payload.get('profile'),target)
+                    except ValueError as error:
+                        raise PanelInputError(str(error)) from None
             elif self.path == '/api/reply':
                 self.server.panel.reply(payload.get('id'), payload.get('value'))
             elif self.path == '/api/service':

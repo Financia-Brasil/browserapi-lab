@@ -61,3 +61,54 @@ def inventory(config_home=None):
             except (OSError,ValueError):
                 continue
     return found
+
+
+CHROME_BINARIES = {
+    'chrome': ('google-chrome', 'google-chrome-stable'),
+    'chrome-beta': ('google-chrome-beta',),
+    'chrome-unstable': ('google-chrome-unstable',),
+}
+
+
+def chrome_binary(installation):
+    import shutil
+    return next((path for name in CHROME_BINARIES.get(installation,())
+                 if (path := shutil.which(name))),None)
+
+
+def connection_inventory(config_home=None):
+    """Estado do arquivo de endpoint, não prova de conexão/conta nem probe HTTP."""
+    from .existing_chrome import endpoint, ExistingChromeError
+    rows=inventory(config_home)
+    for row in rows:
+        row['openable']=bool(chrome_binary(row['installation']))
+        row['endpoint_available']=False
+        if row['connectable']:
+            try:
+                endpoint(config_home,installation=row['installation'])
+                row['endpoint_available']=True
+            except ExistingChromeError:
+                pass
+    return rows
+
+
+def open_profile(identifier, target, config_home=None):
+    """Pedido nativo ao Chrome: usa ProcessSingleton, não Playwright/user_data_dir.
+
+    Sem shell, sem flags CDP, sem cópia de credenciais. Só perfis já inventariados.
+    Chrome encaminha o pedido à instância existente ou abre a instalação normal.
+    O retorno confirma o pedido ao SO, NÃO uma conexão CDP nem a conta correta.
+    """
+    import subprocess
+    from .config import safe_url
+    profile=next((row for row in inventory(config_home) if row['id']==identifier and row['connectable']),None)
+    if profile is None:
+        raise ValueError('Escolha um perfil do Chrome encontrado neste computador.')
+    binary=chrome_binary(profile['installation'])
+    if binary is None:
+        raise ValueError('Esta instalação do Chrome não foi encontrada. Atualize a lista ou instale o Chrome pelo gerenciador gráfico.')
+    if target!='chrome://inspect/#remote-debugging':
+        safe_url(target)
+    subprocess.Popen([binary,'--profile-directory='+profile['directory'],target],
+                     stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                     close_fds=True,start_new_session=True)
