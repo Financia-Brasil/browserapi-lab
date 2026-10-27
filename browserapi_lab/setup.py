@@ -216,7 +216,7 @@ def authorize_session(config, ask, tell):
             if selected is None:
                 raise ExistingChromeError('O perfil escolhido não está disponível. Atualize a lista e escolha seu perfil novamente.')
             open_profile(selected['id'], 'chrome://inspect/#remote-debugging')
-            ask('No Chrome que abriu, habilite Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
+            ask('No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
             endpoint(installation=config.personal_installation)
     return True
 

@@ -1,7 +1,10 @@
 """Conexão consentida ao Chrome existente. Sem lançar/copiar o perfil pessoal."""
+import http.server
 import os
 from pathlib import Path
 import re
+import secrets
+import threading
 import time
 
 
@@ -29,6 +32,45 @@ def endpoint(config_home=None, installation='chrome'):
         raise ExistingChromeError('Não encontramos a conexão consentida do Chrome. Abra seu Chrome 144+, habilite Depuração remota em chrome://inspect/#remote-debugging e tente de novo. Algumas versões podem não disponibilizar essa conexão.') from None
 
 
+
+class _ProofHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802 - API do http.server
+        body = ('<!doctype html><meta charset="utf-8"><title>BrowserAPI</title>'
+                '<p>BrowserAPI está verificando o perfil do Chrome. Esta aba fecha sozinha.</p>').encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+class ProofPage:
+    """Página local inócua só para o Chrome nativo abrir a aba de prova do perfil.
+
+    Pedidos de linha de comando aceitam apenas http(s) e exatamente about:blank: o Chrome
+    descarta chrome:// (url_util.cc, ValidateLaunchUrlWebSafe) e aceitou o pedido com
+    código 0 sem abrir nada no Chrome 155. Escuta só em 127.0.0.1, em porta efêmera, e
+    termina logo após a prova. O código único no caminho distingue a nossa aba das pessoais.
+    """
+
+    def __enter__(self):
+        self._server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), _ProofHandler)
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        self.url = 'http://127.0.0.1:%d/browserapi-proof-%s' % (self._server.server_address[1], secrets.token_hex(16))
+        return self
+
+    def __exit__(self, *exc_info):
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=5)
+
+
 class ProfileMismatchError(ExistingChromeError):
     """Não prosseguir no contexto concedido para outro perfil."""
 
@@ -44,7 +86,8 @@ def verify_profile(context, expected, probe=None):
     try:
         if probe is None:
             probe = context.new_page()
-            probe.goto('chrome://version/', wait_until='domcontentloaded', timeout=10000)
+        # O Chrome descarta chrome:// em pedidos de linha de comando; a navegação por CDP é permitida.
+        probe.goto('chrome://version/', wait_until='domcontentloaded', timeout=10000)
         if probe.url.partition('#')[0] != 'chrome://version/':
             raise ValueError('not a browser-owned page')
         stage = 'ler identificação do perfil'

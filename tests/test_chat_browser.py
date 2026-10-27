@@ -320,8 +320,8 @@ class TestChatWorkflow(BrowserTestCase):
                             attached.page(self.server.url())
                         duplicate.close()  # só a duplicata criada acima
                     # Proof tab (nonce) + chat tab: exatamente 2 pedidos por sessão nova.
-                    self.assertEqual([target.startswith('chrome://version/#browserapi-')
-                                      for _, target in holder['opened']], [True, False, True])
+                    self.assertEqual(['/browserapi-proof-' in target for _, target in holder['opened']],
+                                     [True, False, True])
             self.in_worker(exercise_connection)
 
     def test_same_origin_tab_in_another_browser_context_is_never_used(self):
@@ -399,7 +399,7 @@ class TestChatWorkflow(BrowserTestCase):
                         session.start()
             self.in_worker(exercise_mismatch)
             self.assertEqual(len(holder['opened']), 1, 'Somente a aba de prova pode ter sido pedida')
-            self.assertTrue(holder['opened'][0][1].startswith('chrome://version/#browserapi-'))
+            self.assertIn('/browserapi-proof-', holder['opened'][0][1])
 
     def test_manual_voice_then_type_then_select_send_without_sending(self):
         config = self.prepare()

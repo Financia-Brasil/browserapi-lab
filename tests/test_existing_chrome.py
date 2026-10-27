@@ -234,7 +234,8 @@ class TestAttachedStart(unittest.TestCase):
             session._start_attached(time.perf_counter())
         self.assertEqual([call[0] for call in calls], ['connect', 'open', 'verify'])
         self.assertEqual(calls[1][1], 'chrome:Profile 1')
-        self.assertRegex(calls[1][2], r'^chrome://version/#browserapi-[0-9a-f]{32}$')
+        # Só http(s) chega ao Chrome por linha de comando; chrome:// seria descartado.
+        self.assertRegex(calls[1][2], r'^http://127\.0\.0\.1:\d+/browserapi-proof-[0-9a-f]{32}$')
         self.assertEqual(calls[2][1], '/fixtures/google-chrome/Profile 1')
         self.assertIs(calls[2][2], proof)
         context.wait_for_event.assert_called_with('page', timeout=250)
@@ -327,3 +328,52 @@ class TestProfileIdentity(unittest.TestCase):
             config = ChatConfig('x', 'https://example.com', browser='chrome',
                                 session_mode='existing_chrome', personal_profile='Profile 1')
             self.assertEqual(browser_config(config, Path(tmp)).existing_profile, 'Profile 1')
+
+
+class TestProofPage(unittest.TestCase):
+    def fetch(self, url):
+        import urllib.request
+        with urllib.request.urlopen(url, timeout=5) as response:
+            return response.status, response.headers, response.read().decode()
+
+    def test_serves_a_harmless_page_on_loopback_only_and_stops_afterwards(self):
+        import urllib.error
+        from browserapi_lab.existing_chrome import ProofPage
+        with ProofPage() as page:
+            self.assertRegex(page.url, r'^http://127\.0\.0\.1:\d+/browserapi-proof-[0-9a-f]{32}$')
+            self.assertEqual(page._server.server_address[0], '127.0.0.1')
+            status, headers, body = self.fetch(page.url)
+            self.assertEqual(status, 200)
+            self.assertIn('no-store', headers['Cache-Control'])
+            self.assertNotIn('<script', body.lower())
+        with self.assertRaises((urllib.error.URLError, ConnectionError)):
+            self.fetch(page.url)
+
+    def test_each_proof_has_its_own_nonce(self):
+        from browserapi_lab.existing_chrome import ProofPage
+        with ProofPage() as first, ProofPage() as second:
+            self.assertNotEqual(first.url.rsplit('/', 1)[1], second.url.rsplit('/', 1)[1])
+
+    def test_proof_url_is_accepted_by_the_native_open_policy_and_chrome_urls_are_not(self):
+        from browserapi_lab.config import safe_url
+        from browserapi_lab.existing_chrome import ProofPage
+        with ProofPage() as page:
+            self.assertEqual(safe_url(page.url), page.url)
+        for rejected in ('chrome://version/#browserapi-' + '0' * 32, 'about:blank#x', 'data:text/html,x'):
+            with self.assertRaises(ValueError):
+                safe_url(rejected)
+
+
+class TestProofNavigation(unittest.TestCase):
+    def test_provided_probe_is_navigated_by_cdp_because_chrome_drops_chrome_urls_from_launches(self):
+        from unittest.mock import Mock
+        from browserapi_lab.existing_chrome import verify_profile
+        page = Mock(url='chrome://version/')
+        page.locator.return_value.inner_text.return_value = '/fixtures/google-chrome/Default'
+        context = Mock()
+        context.new_cdp_session.return_value.send.return_value = {'targetInfo': {'browserContextId': 'identity'}}
+        self.assertEqual(verify_profile(context, '/fixtures/google-chrome/Default', probe=page), 'identity')
+        page.goto.assert_called_once()
+        self.assertEqual(page.goto.call_args.args[0], 'chrome://version/')
+        context.new_page.assert_not_called()   # usa a aba pedida, não cria outra
+        page.close.assert_called_once_with()

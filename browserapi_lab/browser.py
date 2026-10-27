@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -172,7 +171,7 @@ class BrowserSession:
         agrupa abas de todos os perfis no contexto padrão, então cada passo abaixo
         usa a identidade CDP real (browserContextId) da aba que nós pedimos.
         """
-        from .existing_chrome import ExistingChromeError, endpoint, verify_profile
+        from .existing_chrome import ExistingChromeError, ProofPage, endpoint, verify_profile
         from .profiles import installation_root, open_profile, profile_name
         installation = self.config.existing_installation
         if not self.config.existing_profile:
@@ -185,22 +184,23 @@ class BrowserSession:
         if len(contexts) != 1:
             raise ExistingChromeError('A conexão não identificou um único contexto do Chrome. Desconectamos sem fechar seu navegador.')
         ctx = contexts[0]
-        # Pedido nativo ao processo existente (sem cópia nem novo user_data_dir).
-        # O nonce distingue a nossa aba de todas as abas pessoais já abertas.
-        proof_url = 'chrome://version/#browserapi-' + secrets.token_hex(16)
-        open_profile(installation + ':' + directory, proof_url)
-        deadline = time.monotonic() + 20
-        probe = None
-        while probe is None:
-            probe = next((p for p in list(ctx.pages) if p.url == proof_url), None)
-            if probe is None:
-                if time.monotonic() >= deadline:
-                    raise ExistingChromeError(
-                        'O Chrome não abriu a verificação do perfil escolhido. Nenhum chat foi aberto ou preenchido. '
-                        'Abra esse perfil pelo avatar do Chrome, confira a Depuração remota e reconecte. '
-                        'Se continuar, esta versão do Chrome não permite escolher esse perfil por este modo.')
-                self._pump(ctx)
-        self._profile_context_id = verify_profile(ctx, installation_root(installation) / directory, probe=probe)
+        # Pedido nativo ao processo existente (sem cópia nem novo user_data_dir). O Chrome só
+        # aceita http(s) em pedidos de linha de comando: a aba de prova é uma página local
+        # com código único no caminho, que distingue a nossa aba de todas as pessoais.
+        with ProofPage() as proof:
+            open_profile(installation + ':' + directory, proof.url)
+            deadline = time.monotonic() + 20
+            probe = None
+            while probe is None:
+                probe = next((p for p in list(ctx.pages) if p.url == proof.url), None)
+                if probe is None:
+                    if time.monotonic() >= deadline:
+                        raise ExistingChromeError(
+                            'O Chrome não abriu a verificação do perfil escolhido. Nenhum chat foi aberto ou preenchido. '
+                            'Abra esse perfil pelo avatar do Chrome, confira a Depuração remota e reconecte. '
+                            'Se continuar, esta versão do Chrome não permite escolher esse perfil por este modo.')
+                    self._pump(ctx)
+            self._profile_context_id = verify_profile(ctx, installation_root(installation) / directory, probe=probe)
         self._context = ctx
         self._context.set_default_timeout(self.config.timeout_ms)
         self._cold_start_ms = (time.perf_counter() - started) * 1000

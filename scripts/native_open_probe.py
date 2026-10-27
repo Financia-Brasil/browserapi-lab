@@ -166,11 +166,21 @@ def run(output):
         wrapper = write_wrapper(tmp / 'chrome-wrapper.sh', binary, root)
         port = (root / 'DevToolsActivePort').read_text().splitlines()[0]
         # Diagnóstico ANTES do fluxo do produto: URL neutra e URL interna, com saída visível.
-        result['handoff'] = [handoff(wrapper, root, port, 'about:blank#browserapi-neutral'),
-                             handoff(wrapper, root, port, 'chrome://version/#browserapi-' + '0' * 32)]
+        # Ordem fixa (a primeira observação, em 2026-10-27, foi nesta ordem). Uma URL descartada
+        # pode reaparecer como página inicial (chrome://newtab/) se ainda não houver janela.
+        launches = (('about_blank_with_fragment', 'about:blank#browserapi-neutral'),
+                    ('chrome_version', 'chrome://version/#browserapi-' + '0' * 32),
+                    ('chrome_inspect', 'chrome://inspect/#remote-debugging'),
+                    ('http_loopback', url + 'browserapi-handoff-http'))
+        result['handoff'] = []
+        for label, target in launches:
+            result['handoff'].append(dict(label=label, **handoff(wrapper, root, port, target)))
         result['process_states'] = process_states()
+        result['launch_opens_requested_page'] = {
+            item['label']: [u for u in item['new_targets'] if u.split('#')[0] == item['target']] != []
+            for item in result['handoff']}
         note('handoff_diagnostic', exit_codes=[item['exit_code'] for item in result['handoff']],
-             opened=[bool(item['new_targets']) for item in result['handoff']])
+             opens_requested_page=result['launch_opens_requested_page'])
         # O código do produto lê a pasta de configuração do ambiente.
         os.environ['XDG_CONFIG_HOME'] = str(config_home)
         from browserapi_lab.browser import BrowserConfig, BrowserSession

@@ -283,7 +283,7 @@ async function openProfile(destination){
   pending=true;controls();profileFeedback('Pedindo ao Chrome para abrir o perfil…');
   try{
     await api('profile',{profile:$('personal-profile').value,destination,provider:$('provider').value,url:$('url').value});
-    profileFeedback(destination==='permission'?'No Chrome, habilite Depuração remota. Depois volte, atualize a lista e conecte.':'Chrome solicitado. Confira sua conta e clique em Conectar.');
+    profileFeedback(destination==='permission'?'No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e conecte.':'Chrome solicitado. Confira sua conta e clique em Conectar.');
   }catch(err){profileFeedback(err.message,true);}
   finally{pending=false;controls();}
 }

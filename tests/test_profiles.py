@@ -68,7 +68,7 @@ class TestProfiles(unittest.TestCase):
                 self.assertNotIn('--user-data-dir',' '.join(args))
                 self.assertNotIn('--remote-debugging',' '.join(args))
                 launch.reset_mock()
-                for identifier,target in [('chrome:../Profile 1','https://example.com'),('chrome:Profile 1','file:///etc/passwd'),('chrome:Profile 1','chrome://flags')]:
+                for identifier,target in [('chrome:../Profile 1','https://example.com'),('chrome:Profile 1','file:///etc/passwd'),('chrome:Profile 1','chrome://flags'),('chrome:Profile 1','chrome://version/#browserapi-'+'0'*32)]:
                     with self.assertRaises(ValueError):open_profile(identifier,target,tmp)
                 launch.assert_not_called()
                 open_profile('chrome:Profile 1','chrome://inspect/#remote-debugging',tmp)
