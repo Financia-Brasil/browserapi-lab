@@ -21,7 +21,7 @@ async function api(path, body) {
 function incompatible() { return !!state && state.version !== PANEL_VERSION; }
 function busy() { return pending || !!(state && ['running','waiting','updating'].includes(state.phase)); }
 function controls() {
-  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy() || incompatible();
+  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode','scan-profiles','prepare-shortcut']) $(id).disabled = busy() || incompatible();
   $('ask').disabled = busy() || incompatible() || !selected;
   $('composer-panel').hidden=!selected;
   $('selected-label').textContent=selected || '';
@@ -65,6 +65,7 @@ $('prepare-shortcut').onclick=()=>{navigate('settings');$('prepare').focus();};
 function sessionFields(){
   const personal=$('session-mode').value==='existing_chrome';
   $('personal-fields').hidden=!personal;
+  (personal ? $('personal-fields') : $('common-chat-slot')).insertBefore($('chat-fields'),personal ? document.querySelector('.profile-actions') : null);
   $('dedicated-fields').hidden=personal;
   $('configure').textContent=personal?'Conectar e configurar →':'Abrir e configurar →';
   if(personal){$('browser').value='chrome';if(!profileRows.length)scanProfiles();}

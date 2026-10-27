@@ -109,6 +109,15 @@ def open_profile(identifier, target, config_home=None):
         raise ValueError('Esta instalação do Chrome não foi encontrada. Atualize a lista ou instale o Chrome pelo gerenciador gráfico.')
     if target!='chrome://inspect/#remote-debugging':
         safe_url(target)
-    subprocess.Popen([binary,'--profile-directory='+profile['directory'],target],
-                     stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-                     close_fds=True,start_new_session=True)
+    try:
+        process=subprocess.Popen([binary,'--profile-directory='+profile['directory'],target],
+                                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                 close_fds=True,start_new_session=True)
+        try:
+            code=process.wait(timeout=.8)
+        except subprocess.TimeoutExpired:
+            return  # Chrome continua aberto; não encerrar nem assumir conexão.
+        if code!=0:
+            raise ValueError('O Chrome recusou a abertura. Abra esse perfil pelo avatar do Chrome e tente conectar novamente.')
+    except OSError:
+        raise ValueError('Não foi possível abrir esta instalação do Chrome. Abra-a pelo menu e atualize a lista.') from None

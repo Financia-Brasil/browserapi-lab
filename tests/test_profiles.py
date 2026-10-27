@@ -60,6 +60,7 @@ class TestProfiles(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'google-chrome';root.mkdir();(root/'Profile 1').mkdir()
             with patch('browserapi_lab.profiles.chrome_binary',return_value='/usr/bin/google-chrome'), patch('subprocess.Popen') as launch:
+                launch.return_value.wait.return_value=0
                 open_profile('chrome:Profile 1','https://gemini.google.com/app',tmp)
                 args=launch.call_args.args[0]
                 self.assertEqual(args,['/usr/bin/google-chrome','--profile-directory=Profile 1','https://gemini.google.com/app'])
@@ -72,6 +73,9 @@ class TestProfiles(unittest.TestCase):
                 launch.assert_not_called()
                 open_profile('chrome:Profile 1','chrome://inspect/#remote-debugging',tmp)
                 self.assertEqual(launch.call_args.args[0][-1],'chrome://inspect/#remote-debugging')
+                launch.return_value.wait.return_value=1
+                with self.assertRaisesRegex(ValueError,'recusou'):
+                    open_profile('chrome:Profile 1','https://example.com',tmp)
 
     def test_open_missing_binary_is_actionable_without_creating_profile(self):
         from browserapi_lab.profiles import open_profile
