@@ -179,7 +179,10 @@ function render(value) {
   $('auto-update').disabled = !value.updates?.managed;
 
   const oldPrompt = state?.prompt?.id;
+  const previousPhase = state?.phase;
   state = value;
+  if (state.phase === 'error') error(state.messages[state.messages.length - 1] || 'Não foi possível conectar. Tente novamente.');
+  else if (previousPhase === 'error') error('');
   $('version-status').textContent = `Painel ${PANEL_VERSION} · programa ${state.version || 'antigo (sem identificação)'}`;
   if (incompatible()) error('O painel e o programa em execução são de versões diferentes. Não prossiga com os campos. Reinicie o computador e abra BrowserAPI pelo menu; fechar só a aba não encerra a versão antiga.');
   const labels = {idle:'Pronto',running:'Trabalhando…',waiting:'Aguardando você',done:'Concluído',error:'Precisa de atenção',cancelled:'Interrompido',updating:'Aplicando atualização…'};

@@ -366,6 +366,13 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.locator('[data-view=api]').click()
             expect(self.page.locator('#api-card')).to_be_visible()
             self.assertTrue(self.page.locator('#api-headless').is_hidden())
+            with self.panel.lock:
+                self.panel.tell('Permissão do Chrome necessária. Conecte novamente para configurar.')
+                self.panel.phase='error'
+            expect(self.page.locator('#error')).to_contain_text('Permissão do Chrome necessária')
+            with self.panel.lock:
+                self.panel.phase='idle'
+            expect(self.page.locator('#error')).to_be_hidden()
             self.page.locator('[data-view=connections]').click()
             self.page.set_viewport_size({'width':375,'height':812})
             self.page.screenshot(path=str(evidence/'mobile.png'),full_page=True)
