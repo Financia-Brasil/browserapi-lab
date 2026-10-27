@@ -1,0 +1,39 @@
+test_chromium_available_e_boleano (test_browser.TestDeteccaoDeAmbiente.test_chromium_available_e_boleano) ... ok
+test_motivo_quando_indisponivel (test_browser.TestDeteccaoDeAmbiente.test_motivo_quando_indisponivel) ... skipped 'há navegador neste ambiente'
+test_pid_inexistente (test_browser.TestRss.test_pid_inexistente) ... ok
+test_rss_do_proprio_processo (test_browser.TestRss.test_rss_do_proprio_processo) ... ok
+test_aba_quente_e_reutilizada (test_browser.TestSessao.test_aba_quente_e_reutilizada) ... ok
+test_abre_e_fecha (test_browser.TestSessao.test_abre_e_fecha) ... ok
+test_arvore_de_processos_tem_rss (test_browser.TestSessao.test_arvore_de_processos_tem_rss) ... ok
+test_persistencia_apos_fechamento (test_browser.TestSessao.test_persistencia_apos_fechamento)
+E-SESS-1: o perfil sobrevive a fechar e reabrir. ... ok
+test_segundo_processo_e_recusado (test_browser.TestSessao.test_segundo_processo_e_recusado)
+E-SESS-3: nunca dois processos no mesmo user_data_dir. ... ok
+test_check_status_and_ask_from_real_cli (test_chat_browser.TestCLIRealBrowser.test_check_status_and_ask_from_real_cli) ... ok
+test_ambiguous_send_after_fill_never_clicks_or_retries (test_chat_browser.TestChatWorkflow.test_ambiguous_send_after_fill_never_clicks_or_retries) ... ok
+test_ask_returns_markdown_without_health_prompt (test_chat_browser.TestChatWorkflow.test_ask_returns_markdown_without_health_prompt) ... ok
+test_authorized_health_contract (test_chat_browser.TestChatWorkflow.test_authorized_health_contract) ... ok
+test_blocked_states_and_remedies (test_chat_browser.TestChatWorkflow.test_blocked_states_and_remedies) ... ok
+test_broken_selector_repair_then_success (test_chat_browser.TestChatWorkflow.test_broken_selector_repair_then_success) ... ok
+test_configure_wizard_with_explicit_confirmation (test_chat_browser.TestChatWorkflow.test_configure_wizard_with_explicit_confirmation) ... ok
+test_connect_existing_browser_does_not_close_or_reload_it (test_chat_browser.TestChatWorkflow.test_connect_existing_browser_does_not_close_or_reload_it) ... ok
+test_draft_not_overwritten (test_chat_browser.TestChatWorkflow.test_draft_not_overwritten) ... ok
+test_failure_is_timed_without_sending_or_inventing_later_stages (test_chat_browser.TestChatWorkflow.test_failure_is_timed_without_sending_or_inventing_later_stages) ... ok
+test_google_refusal_english_no_send (test_chat_browser.TestChatWorkflow.test_google_refusal_english_no_send) ... ok
+test_google_refusal_stops_before_pointing_or_sending (test_chat_browser.TestChatWorkflow.test_google_refusal_stops_before_pointing_or_sending) ... ok
+test_manual_teaching_cancel_preserves_user_draft_and_removes_guard (test_chat_browser.TestChatWorkflow.test_manual_teaching_cancel_preserves_user_draft_and_removes_guard) ... ok
+test_manual_voice_then_type_then_select_send_without_sending (test_chat_browser.TestChatWorkflow.test_manual_voice_then_type_then_select_send_without_sending) ... ok
+test_microphone_is_never_activated (test_chat_browser.TestChatWorkflow.test_microphone_is_never_activated) ... ok
+test_no_authorization_no_send (test_chat_browser.TestChatWorkflow.test_no_authorization_no_send) ... ok
+test_old_answer_does_not_confirm_new_response (test_chat_browser.TestChatWorkflow.test_old_answer_does_not_confirm_new_response) ... ok
+test_picker_selects_composer_and_prevents_send (test_chat_browser.TestChatWorkflow.test_picker_selects_composer_and_prevents_send) ... ok
+test_preview_draft_cleanup_preserves_changes_and_never_sends (test_chat_browser.TestChatWorkflow.test_preview_draft_cleanup_preserves_changes_and_never_sends) ... ok
+test_real_picker_rejects_voice_then_selects_send (test_chat_browser.TestChatWorkflow.test_real_picker_rejects_voice_then_selects_send) ... ok
+test_recorded_voice_state_blocks_even_without_voice_label (test_chat_browser.TestChatWorkflow.test_recorded_voice_state_blocks_even_without_voice_label) ... ok
+test_repair_message_containers_by_real_pointing (test_chat_browser.TestChatWorkflow.test_repair_message_containers_by_real_pointing) ... ok
+test_same_button_changes_from_microphone_to_send (test_chat_browser.TestChatWorkflow.test_same_button_changes_from_microphone_to_send) ... ok
+test_send_absent_until_composer_input (test_chat_browser.TestChatWorkflow.test_send_absent_until_composer_input) ... ok
+test_send_hidden_until_composer_input (test_chat_browser.TestChatWorkflow.test_send_hidden_until_composer_input) ... ok
+test_unrelated_page_mutations_do_not_block_completion (test_chat_browser.TestChatWorkflow.test_unrelated_page_mutations_do_not_block_completion) ... ok
+test_wrong_origin_never_sends (test_chat_browser.TestChatWorkflow.test_wrong_origin_never_sends) ... ok
+test_ten_checks_same_chat_with_capture_budget (test_chat_browser.TestProductHealthBenchmark.test_ten_checks_same_chat_with_capture_budget) ... 
