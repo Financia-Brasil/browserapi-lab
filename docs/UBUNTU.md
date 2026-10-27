@@ -439,3 +439,23 @@ Isso remove somente a conexão e seu recibo no BrowserAPI; não apaga conta,
 conversas, perfil do Chrome ou histórico RAG da API. Desative a API e termine
 qualquer tarefa antes de excluir. O diretório **Default/Profile N** aparece antes
 do nome do perfil para diferenciá-los; isso não comprova qual conta foi conectada.
+
+## 0.6.1 — o perfil escolhido é o perfil usado
+
+1. Em **Conectar um chat**, escolha o perfil e o chat e clique em **Conectar**. A pasta (`Default` ou `Profile N`) aparece
+   primeiro na lista; ela não diz qual conta está dentro.
+2. Quando o Chrome pedir a permissão de depuração, clique em **Permitir**.
+3. O BrowserAPI pede ao Chrome uma aba de verificação **no perfil escolhido**, confere a pasta e abre o chat nesse
+   mesmo perfil. Se aparecer “Perfil confirmado pelo Chrome: Profile N”, a pasta bateu. A conta do site (avatar,
+   modelo) continua sendo conferência sua.
+
+Se algo parar, **nada foi escrito ou enviado**:
+
+- **“O Chrome concedeu outro perfil, não o escolhido”** — abra esse perfil pelo avatar do Chrome e conecte de novo.
+  Se continuar, esta versão do Chrome não deixa usar esse perfil por este modo. Não copie perfis para contornar.
+- **“Página diferente da configurada”** — mostra o endereço esperado e o aberto. A Arena agora é `arena.ai`; ao
+  conectar um chat antigo (`lmarena.ai`) o programa pergunta se pode migrar e mantém os campos já apontados.
+- **“Mais de uma aba do chat neste perfil”** — deixe só uma aba do chat naquele perfil.
+
+Não homologado no seu Chrome nem no Linux Lite. Detalhes e fontes: `docs/PROFILE_BINDING_061.md` e
+`pesquisa/2026-10-27-perfis-cdp-e-origem.md`.
