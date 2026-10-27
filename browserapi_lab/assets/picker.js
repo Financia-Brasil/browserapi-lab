@@ -17,7 +17,7 @@
   document.body.append(marks,banner);
   let chosen=null, selector='', fragile=false, history=[];
   const message=['mensagem do usuário','resposta do assistente'].includes(role);
-  const editable='textarea,input:not([type=hidden]):not([type=password]):not([type=submit]):not([type=button]),[contenteditable]:not([contenteditable=false]),[role=textbox]';
+  const editable='textarea:not([readonly]):not(:disabled),input:not([type]):not([readonly]):not(:disabled),input[type=text]:not([readonly]):not(:disabled),input[type=search]:not([readonly]):not(:disabled),[contenteditable]:not([contenteditable=false]),[role=textbox]';
   const clickable='button,[role=button],input[type=submit]';
   const visible=el=>{
     if (!el || el===document.body || el===document.documentElement || banner.contains(el) || marks.contains(el)) return false;
