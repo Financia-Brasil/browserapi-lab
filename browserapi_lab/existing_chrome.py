@@ -33,19 +33,19 @@ class ProfileMismatchError(ExistingChromeError):
     """Não prosseguir no contexto concedido para outro perfil."""
 
 
-def verify_profile(context, expected):
+def verify_profile(context, expected, probe=None):
     """Prova local do diretório pelo Chrome, antes de acessar qualquer chat.
 
     A permissão/endpoint identifica uma instalação, não a opção do inventário.
     Não ler cookies, contas, argumentos de processo ou outras abas. Só fechar a
     aba interna que criamos; nunca persistir o caminho pessoal lido.
     """
-    probe = None
     stage = 'abrir página interna'
     try:
-        probe = context.new_page()
-        probe.goto('chrome://version/', wait_until='domcontentloaded', timeout=10000)
-        if probe.url != 'chrome://version/':
+        if probe is None:
+            probe = context.new_page()
+            probe.goto('chrome://version/', wait_until='domcontentloaded', timeout=10000)
+        if probe.url.partition('#')[0] != 'chrome://version/':
             raise ValueError('not a browser-owned page')
         stage = 'ler identificação do perfil'
         # WebUI pode bloquear eval usado por wait_for_function (CSP). Ler só
@@ -65,6 +65,7 @@ def verify_profile(context, expected):
                 'Abra o perfil desejado pelo avatar, confira Depuração remota e reconecte. '
                 'Se o Chrome continuar concedendo outro perfil, este modo não suporta a seleção nessa versão. '
                 'Não copie o perfil nem repita a configuração dos campos para resolver isso.')
+        return target_context_id(context, probe)
     except ProfileMismatchError:
         raise
     except Exception:
@@ -75,5 +76,24 @@ def verify_profile(context, expected):
         if probe is not None:
             try:
                 probe.close()
+            except Exception:
+                pass
+
+
+def target_context_id(context, page):
+    """Identidade real do target CDP, mesmo se Playwright agrupar perfis."""
+    session = None
+    try:
+        session = context.new_cdp_session(page)
+        value = session.send('Target.getTargetInfo')['targetInfo'].get('browserContextId')
+        if not isinstance(value, str) or not value or len(value) > 256:
+            raise ValueError()
+        return value
+    except Exception:
+        raise ExistingChromeError('O Chrome não informou a identidade da aba. Paramos sem abrir ou preencher o chat.') from None
+    finally:
+        if session is not None:
+            try:
+                session.detach()
             except Exception:
                 pass

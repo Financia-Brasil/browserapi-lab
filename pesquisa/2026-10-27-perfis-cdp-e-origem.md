@@ -34,6 +34,23 @@ Todas as datas de acesso abaixo: 2026-10-27. Código local é evidência do prod
 - **F8 · fato local testado · implementação 2026-10-27, commit 6de2131** · tests/test_navigation.py e browserapi_lab/chat.py · “sender.assert_not_called()” / “self.assertNotIn('response_wait_ms', result.timings)”. Execução do núcleo: 243 testes, 20,017 s, OK, 17 skips de classes com navegador. O teste reproduz endereço configurado lmarena.ai vs efetivo arena.ai; nenhuma chamada ao sender. Suporta H2 como mecanismo e mata H3. Não demonstra o redirecionamento no computador pessoal.
 - **F9 · teste contrafactual registrado, execução em navegador pendente** · tests/test_chat_browser.py::test_removing_origin_guard_allows_send_to_wrong_destination_counterexample · altera origem configurada para unrelated.example mantendo fixture local, verifica bloqueio, desliga guard só no teste e verifica envio. Nunca executar em conta pessoal. Não antecipar resultado da Actions 40515014165.
 
+### Rodada 3 — estreitamento do “perfil padrão” e vínculo por target
+F10 — Chromium, main, publication unknown, accessed 2026-10-27, via gh API.
+https://github.com/chromium/chromium/blob/main/chrome/browser/devtools/devtools_browser_context_manager.cc
+“Profile* profile = ProfileManager::GetLastUsedProfile();”
+“auto* last_profile = ProfileManager::GetLastUsedProfileIfLoaded();”
+GetBrowserContexts enumerates otr_profiles_, not personal profile inventory. This narrows “default” to last used in inspected revision; do not equate with directory Default. Trunk is not user's Chrome version.
+F11 — Chromium, main, publication unknown, accessed 2026-10-27.
+https://github.com/chromium/chromium/blob/main/chrome/browser/devtools/remote_debugging_server.cc
+“return local_state->GetBoolean(prefs::kDevToolsRemoteDebuggingEnabled);”
+The permission server enablement is installation Local State. No basis for asking to disable remote debugging separately in each personal profile.
+F12 — Chromium, main, publication unknown, accessed 2026-10-27.
+https://github.com/chromium/chromium/blob/main/content/browser/devtools/protocol/target_handler.cc
+“target_info->SetBrowserContextId(host->GetBrowserContext()->UniqueId());”
+Each target carries the actual BrowserContext identity. A default-context probe does NOT alone prove an arbitrary existing chat tab belongs to it. Required: bind a browser-owned nonce tab opened natively in selected profile, prove its Profile Path, retain browserContextId only in memory and filter chat targets by it; no arbitrary context[0].
+
+A investigação adicional mudou o desenho: não só verificar uma nova aba no contexto padrão (isso não prova o perfil de uma aba antiga). Abrir nativamente uma aba chrome://version com nonce no perfil escolhido, reencontrá-la no CDP, verificar o diretório real e reter o browserContextId. Filtrar/revalidar a identidade das abas antes de navegar. Seleção nativa é tentativa verificada, nunca garantia sem prova. Teste de alternância entre dois perfis descartáveis adicionado; pendente CI.
+
 ## 3. ACH — cruzamento por evidência
 As hipóteses cobrem eixos diferentes e **não são mutuamente exclusivas**. Esta matriz audita inconsistências, não calcula probabilidades posteriores de causas exclusivas. ⊕ compatível/favorável; ⊖ inconsistente; 0 não decide.
 

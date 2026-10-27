@@ -229,7 +229,7 @@ class TestChatWorkflow(BrowserTestCase):
             home = Path(tmp)
             profile = home/'google-chrome'
             process = subprocess.Popen([self.session._pw.chromium.executable_path,
-                '--headless=new','--no-sandbox','--remote-debugging-port=0',
+                '--no-sandbox','--remote-debugging-port=0',
                 '--user-data-dir='+str(profile),'about:blank'], stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             try:
                 deadline = time.monotonic()+20
@@ -239,8 +239,13 @@ class TestChatWorkflow(BrowserTestCase):
                     self.page.wait_for_timeout(100)
                 address = endpoint(home)
                 config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True, existing_profile='Default')
+                fixture_binary = self.session._pw.chromium.executable_path
+                def native_open(identifier, target):
+                    subprocess.run([fixture_binary, '--no-sandbox',
+                        '--user-data-dir='+str(profile), '--profile-directory='+identifier.split(':', 1)[1], target],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=True)
                 def exercise_connection():
-                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address), patch('browserapi_lab.profiles.installation_root', return_value=profile):
+                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address), patch('browserapi_lab.profiles.installation_root', return_value=profile), patch('browserapi_lab.profiles.open_profile', side_effect=native_open):
                         with BrowserSession(config) as attached:
                             count = len(attached.context.pages)
                             page = attached.page(self.server.url())
@@ -259,9 +264,19 @@ class TestChatWorkflow(BrowserTestCase):
                             attached.new_page(self.server.url())
                             with self.assertRaises(RuntimeError):
                                 attached.page(self.server.url())
+                            # Remover apenas a duplicata criada pela fixture acima.
+                            attached.context.pages[-1].close()
+                        from dataclasses import replace
+                        with BrowserSession(replace(config, existing_profile='Profile 1')) as second:
+                            other_profile = second.page(self.server.url())
+                            self.assertIsNone(other_profile.evaluate('window.__fixtureSession'))
+                            other_profile.evaluate("window.__fixtureSession = 'separate-profile'")
+                        with BrowserSession(config) as first:
+                            original = first.page(self.server.url())
+                            self.assertEqual(original.evaluate('window.__fixtureSession'), 'still-here')
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=1) as worker:
-                    worker.submit(exercise_connection).result(timeout=40)
+                    worker.submit(exercise_connection).result(timeout=90)
             finally:
                 # Somente o Chromium descartável criado acima pertence ao teste.
                 # SIGTERM só no pai podia deixar filhos escrevendo em Default

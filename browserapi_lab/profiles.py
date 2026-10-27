@@ -107,7 +107,8 @@ def open_profile(identifier, target, config_home=None):
     binary=chrome_binary(profile['installation'])
     if binary is None:
         raise ValueError('Esta instalação do Chrome não foi encontrada. Atualize a lista ou instale o Chrome pelo gerenciador gráfico.')
-    if target!='chrome://inspect/#remote-debugging':
+    native_proof = bool(re.fullmatch(r'chrome://version/#browserapi-[0-9a-f]{32}', target))
+    if target!='chrome://inspect/#remote-debugging' and not native_proof:
         safe_url(target)
     try:
         process=subprocess.Popen([binary,'--profile-directory='+profile['directory'],target],

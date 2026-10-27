@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,6 +107,7 @@ class BrowserSession:
         self._lock = ProfileLock(Path(self.config.profiles_root) / '.attached-chrome') if self.config.attach_existing_chrome else ProfileLock(self.config.profile_dir)
         self._pw: Any = None
         self._context: Any = None
+        self._profile_context_id: Optional[str] = None
         self._started_at: Optional[float] = None
         self._cold_start_ms: Optional[float] = None
 
@@ -120,18 +122,23 @@ class BrowserSession:
         try:
             self._pw = sync_playwright().start()
             if self.config.attach_existing_chrome:
-                from .existing_chrome import endpoint, ExistingChromeError
-                self._attached_browser = self._pw.chromium.connect_over_cdp(endpoint() if self.config.existing_installation == "chrome" else endpoint(installation=self.config.existing_installation), timeout=60000)
-                contexts = self._attached_browser.contexts
-                if len(contexts) != 1:
-                    raise ExistingChromeError('A conexão não identificou um único contexto do Chrome. Desconectamos sem fechar seu navegador.')
-                from .existing_chrome import verify_profile
-                from .profiles import installation_root, profile_name
+                from .existing_chrome import endpoint, ExistingChromeError, verify_profile
+                from .profiles import installation_root, profile_name, open_profile
                 if not self.config.existing_profile:
                     raise ExistingChromeError('Escolha um perfil na lista antes de conectar. Não assumimos que o Chrome concedeu a conta desejada.')
-                expected = installation_root(self.config.existing_installation) / profile_name(self.config.existing_profile)
-                verify_profile(contexts[0], expected)
-                self._context = contexts[0]
+                directory = profile_name(self.config.existing_profile)
+                proof_url = 'chrome://version/#browserapi-' + secrets.token_hex(16)
+                # Pedido nativo ao processo existente, não uma cópia/novo user_data_dir.
+                # O nonce distingue nossa aba de todas as abas pessoais já abertas.
+                open_profile(self.config.existing_installation + ':' + directory, proof_url)
+                self._attached_browser = self._pw.chromium.connect_over_cdp(endpoint() if self.config.existing_installation == "chrome" else endpoint(installation=self.config.existing_installation), timeout=60000)
+                proofs = [p for c in self._attached_browser.contexts for p in c.pages if p.url == proof_url]
+                if len(proofs) != 1:
+                    raise ExistingChromeError('O Chrome não expôs a aba de verificação do perfil escolhido. Nenhum chat foi aberto ou preenchido. Abra o perfil desejado pelo avatar, confira Depuração remota e reconecte. Se continuar, esta versão não permite selecionar esse perfil por este modo.')
+                probe = proofs[0]
+                expected = installation_root(self.config.existing_installation) / directory
+                self._profile_context_id = verify_profile(probe.context, expected, probe=probe)
+                self._context = probe.context
                 self._context.set_default_timeout(self.config.timeout_ms)
                 self._cold_start_ms = (time.perf_counter() - started) * 1000
                 return self
@@ -181,7 +188,12 @@ class BrowserSession:
             from .existing_chrome import ExistingChromeError
             if not url:
                 raise ValueError('Informe o chat escolhido antes de acessar abas pessoais.')
-            matches = [p for p in pages if p.url.startswith(('http://', 'https://')) and origin(p.url) == origin(url)]
+            from .existing_chrome import target_context_id
+            if not self._profile_context_id:
+                raise ExistingChromeError('O perfil desta conexão não foi verificado. Reconecte antes de acessar o chat.')
+            matches = [p for p in pages if p.url.startswith(('http://', 'https://'))
+                       and origin(p.url) == origin(url)
+                       and target_context_id(ctx, p) == self._profile_context_id]
             if len(matches) > 1:
                 raise ExistingChromeError('Mais de uma aba do chat está aberta. Deixe somente uma para conectar; nenhuma aba foi fechada pelo programa.')
             if matches:
@@ -190,7 +202,7 @@ class BrowserSession:
             # chat in this existing context; never launch another profile.
             from .config import safe_url
             safe_url(url)
-            page = ctx.new_page()
+            page = self.new_page()
             # Navigation failure is surfaced, never retried by creating more tabs.
             page.goto(url, wait_until='domcontentloaded')
             return page
@@ -201,6 +213,14 @@ class BrowserSession:
 
     def new_page(self, url: Optional[str] = None) -> Any:
         page = self.context.new_page()
+        if self.config.attach_existing_chrome:
+            from .existing_chrome import target_context_id, ExistingChromeError
+            try:
+                if not self._profile_context_id or target_context_id(self.context, page) != self._profile_context_id:
+                    raise ExistingChromeError('O Chrome mudou o perfil da nova aba. Paramos antes de navegar. Reconecte ao perfil escolhido.')
+            except Exception:
+                page.close()  # somente a aba vazia criada acima
+                raise
         if url:
             page.goto(url, wait_until="domcontentloaded")
         return page
@@ -211,6 +231,7 @@ class BrowserSession:
                 self._context.close()
         finally:
             self._context = None
+            self._profile_context_id = None
             try:
                 if self._pw is not None:
                     try:

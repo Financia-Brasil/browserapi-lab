@@ -49,12 +49,18 @@ class TestExistingChrome(unittest.TestCase):
                 unused.assert_not_called()
 
 class TestSimplifiedConnection(unittest.TestCase):
+    def setUp(self):
+        mocked = patch('browserapi_lab.existing_chrome.target_context_id', return_value='verified-fixture')
+        mocked.start()
+        self.addCleanup(mocked.stop)
+
     def test_missing_chat_opens_once_in_existing_context_without_touching_other_tabs(self):
         from unittest.mock import Mock
         from browserapi_lab.browser import BrowserSession, BrowserConfig
         session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
         unrelated = Mock(url='https://unrelated.example/')
         context = Mock(pages=[unrelated])
+        session._profile_context_id = 'verified-fixture'
         session._context = context
         page = session.page('https://example.com/chat')
         context.new_page.assert_called_once_with()
@@ -65,6 +71,7 @@ class TestSimplifiedConnection(unittest.TestCase):
         from unittest.mock import Mock
         from browserapi_lab.browser import BrowserSession, BrowserConfig
         session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._profile_context_id = 'verified-fixture'
         session._context = Mock(pages=[Mock(url='https://example.com/a'),Mock(url='https://example.com/b')])
         with self.assertRaises(ExistingChromeError):
             session.page('https://example.com/chat')
@@ -74,11 +81,39 @@ class TestSimplifiedConnection(unittest.TestCase):
         from unittest.mock import Mock
         from browserapi_lab.browser import BrowserSession, BrowserConfig
         session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._profile_context_id = 'verified-fixture'
         session._context = Mock(pages=[])
         session._context.new_page.return_value.goto.side_effect = RuntimeError('navigation refused')
         with self.assertRaises(RuntimeError):
             session.page('https://example.com/chat')
         session._context.new_page.assert_called_once_with()
+
+    def test_other_profile_same_site_is_not_reused(self):
+        from unittest.mock import Mock
+        from browserapi_lab.browser import BrowserSession, BrowserConfig
+        session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._profile_context_id = 'chosen'
+        wrong = Mock(url='https://example.com/chat')
+        context = Mock(pages=[wrong])
+        session._context = context
+        with patch('browserapi_lab.existing_chrome.target_context_id', side_effect=['other', 'chosen']):
+            result = session.page('https://example.com/chat')
+        self.assertIs(result, context.new_page.return_value)
+        wrong.goto.assert_not_called()
+        wrong.close.assert_not_called()
+
+    def test_profile_switch_before_new_tab_never_navigates(self):
+        from unittest.mock import Mock
+        from browserapi_lab.browser import BrowserSession, BrowserConfig
+        session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._profile_context_id = 'chosen'
+        context = Mock(pages=[])
+        session._context = context
+        with patch('browserapi_lab.existing_chrome.target_context_id', return_value='other'):
+            with self.assertRaises(ExistingChromeError):
+                session.page('https://example.com/chat')
+        context.new_page.return_value.goto.assert_not_called()
+        context.new_page.return_value.close.assert_called_once_with()
 
     def test_first_connection_opens_permission_for_selected_profile_only_after_consent(self):
         from browserapi_lab.setup import authorize_session
@@ -100,6 +135,7 @@ class TestProfileIdentity(unittest.TestCase):
         page.locator.return_value.inner_text.return_value = actual
         context = Mock()
         context.new_page.return_value = page
+        context.new_cdp_session.return_value.send.return_value = {'targetInfo':{'browserContextId':'verified-fixture'}}
         return context, page
 
     def test_verified_directory_not_profile_label(self):
