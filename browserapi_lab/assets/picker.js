@@ -79,7 +79,7 @@
       const box=document.createElement('div');
       Object.assign(box.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',boxSizing:'border-box',border:'2px solid '+(chosen?'#146c50':'#2563eb'),background:chosen?'#146c501a':'transparent',borderRadius:'4px',pointerEvents:'none'});
       const badge=document.createElement('button');badge.type='button';badge.textContent=String(index+1);badge.setAttribute('aria-label','Selecionar área '+(index+1));
-      Object.assign(badge.style,{pointerEvents:'auto',position:'absolute',left:'0',top:'0',minWidth:'28px',minHeight:'28px',border:'0',borderRadius:'4px',background:chosen?'#146c50':'#2563eb',color:'#fff',font:'bold 13px system-ui',cursor:'pointer'});
+      Object.assign(badge.style,{pointerEvents:'auto',position:'absolute',left:r.left<14?'0':'-14px',top:r.top<14?'0':'-14px',minWidth:'28px',minHeight:'28px',border:'0',borderRadius:'4px',background:chosen?'#146c50':'#2563eb',color:'#fff',font:'bold 13px system-ui',cursor:'pointer'});
       badge.onclick=()=>preview(normalize(el));box.append(badge);marks.append(box);
     });
   }
