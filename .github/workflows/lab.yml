@@ -198,6 +198,45 @@ jobs:
           echo "falha ao publicar evidencias"
           exit 1
 
+  ui-review:
+    name: "Revisão visual e navegação (desktop + 375px)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      BROWSERAPI_REQUIRE_BROWSER: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Preparar ambiente visual do runner
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium
+          python -m browserapi_lab.cli doctor --json results/ci/ui-doctor.json
+      - name: Navegação e capturas sintéticas
+        run: xvfb-run -a python -m unittest discover -s tests -p test_gui_browser.py -v 2>&1 | tee results/ci/ui-review.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: revisao-visual-${{ github.run_id }}
+          path: |
+            results/ci/ui-redesign/
+            results/ci/ui-review.log
+      - name: Registrar revisão visual no repositório
+        if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          DEST="results/ci/ui-review-${GITHUB_RUN_ID}"
+          mkdir -p "$DEST"
+          cp results/ci/ui-review.log "$DEST/"
+          if [ -d results/ci/ui-redesign ]; then cp -r results/ci/ui-redesign "$DEST/"; fi
+          git add -f "$DEST"
+          git commit -m "ci: revisão visual ${GITHUB_RUN_ID} [skip ci]"
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
   release:
     name: "Publicar atualização estável (main aprovada)"
     needs: [unit, browser]
