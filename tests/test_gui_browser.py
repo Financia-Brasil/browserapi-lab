@@ -354,7 +354,28 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.locator('#session-mode').focus()
             self.page.keyboard.press('Tab');self.page.keyboard.press('Shift+Tab')
             self.assertEqual(self.page.locator('#session-mode').evaluate('el=>getComputedStyle(el).outlineStyle'),'solid')
+            self.page.set_viewport_size({'width':1440,'height':1040})
+            native.side_effect=ValueError('O Chrome recusou a abertura. Abra esse perfil pelo avatar do Chrome e tente conectar novamente.')
+            self.page.click('#open-profile')
+            expect(self.page.locator('#profile-feedback')).to_have_attribute('data-error','true')
+            self.page.screenshot(path=str(evidence/'error.png'),full_page=True)
+            self.page.locator('#personal-profile').dispatch_event('change')
+            self.seed()
+            expect(self.page.locator('#chat-count')).to_have_text('1')
+            self.page.screenshot(path=str(evidence/'saved-chat.png'),full_page=True)
+            assets=REPO_ROOT/'browserapi_lab/assets'
+            latest_mtime=max((assets/name).stat().st_mtime for name in ('panel.html','panel.js','panel.css'))
+            def luminance(color):
+                values=[int(color[i:i+2],16)/255 for i in (1,3,5)]
+                return sum(v*k for v,k in zip([x/12.92 if x<=.04045 else ((x+.055)/1.055)**2.4 for x in values],[.2126,.7152,.0722]))
+            contrasts=[]
+            for foreground,background,minimum in [('#1b3029','#ffffff',4.5),('#596b63','#ffffff',4.5),('#596b63','#f6f8f7',4.5),('#ffffff','#146c50',4.5),('#146c50','#edf6f0',4.5),('#60746a','#ffffff',4.5),('#81978b','#ffffff',3)]:
+                a,b=sorted([luminance(foreground),luminance(background)])
+                ratio=(b+.05)/(a+.05);self.assertGreaterEqual(ratio,minimum)
+                contrasts.append({'foreground':foreground,'background':background,'ratio':round(ratio,2),'required':minimum})
+            (evidence/'contrasts.json').write_text(json.dumps(contrasts,indent=2)+'\n')
             (evidence/'checks.json').write_text(json.dumps({'captured_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'latest_asset_mtime_utc':datetime.datetime.fromtimestamp(latest_mtime,datetime.timezone.utc).isoformat(),
                 'desktop':[1440,1040],'mobile':[375,812],'horizontal_overflow':False,
                 'native_profile_open_request':True,'automation_not_started_by_open_action':True,
                 'permission_target_allowlisted':True,'api_advanced_collapsed':True,
