@@ -171,7 +171,7 @@ def run(output):
         launches = (('about_blank_with_fragment', 'about:blank#browserapi-neutral'),
                     ('chrome_version', 'chrome://version/#browserapi-' + '0' * 32),
                     ('chrome_inspect', 'chrome://inspect/#remote-debugging'),
-                    ('http_loopback', url + 'browserapi-handoff-http'))
+                    ('http_loopback', url.replace('127.0.0.1', 'localhost') + 'browserapi-handoff-http'))  # outra origem: não conta como aba do chat
         result['handoff'] = []
         for label, target in launches:
             result['handoff'].append(dict(label=label, **handoff(wrapper, root, port, target)))
@@ -222,8 +222,10 @@ def run(output):
         from browserapi_lab.existing_chrome import endpoint
         with sync_playwright() as pw:
             browser = pw.chromium.connect_over_cdp(endpoint())
-            targets = [t for t in browser.new_browser_cdp_session().send('Target.getTargets')['targetInfos']
-                       if t['type'] == 'page' and t['url'].startswith(url)]
+            everything = browser.new_browser_cdp_session().send('Target.getTargets')['targetInfos']
+            result['targets_seen'] = [{'url': t['url'].split('#')[0][:80], 'context': t['browserContextId'][:8]}
+                                      for t in everything if t['type'] == 'page']
+            targets = [t for t in everything if t['type'] == 'page' and t['url'] in (url, url.rstrip('/'))]
             result['probe_tabs'] = len(targets)
             result['probe_tab_context_ids'] = len({t['browserContextId'] for t in targets})
             result['playwright_contexts'] = len(browser.contexts)
@@ -261,6 +263,12 @@ def run(output):
             except subprocess.TimeoutExpired:
                 os.killpg(chrome.pid, signal.SIGKILL)  # processo e filhos criados por este experimento
                 chrome.wait()
+        if result['outcome'] != 'PASS' and chrome is not None and chrome.poll() is None:
+            try:
+                port_now = (root / 'DevToolsActivePort').read_text().splitlines()[0]
+                result['pages_at_failure'] = [u.split('#')[0][:80] for u in target_urls(port_now)]
+            except Exception:  # noqa: BLE001 - diagnóstico opcional
+                pass
         if result['outcome'] != 'PASS' and log_path.exists():
             result['chrome_log_filtered'] = interesting_log(log_path)
         if server is not None:

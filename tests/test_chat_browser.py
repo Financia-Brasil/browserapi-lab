@@ -300,12 +300,12 @@ class TestChatWorkflow(BrowserTestCase):
                     with session as attached:
                         count = len(attached.context.pages)
                         page = attached.page(self.server.url())
-                        # A aba de prova foi fechada: sobra só a aba do chat.
-                        self.assertEqual(len(attached.context.pages), count + 1)
+                        # A aba de prova virou a aba do chat: nenhuma aba a mais.
+                        self.assertEqual(len(attached.context.pages), count)
                         self.assertTrue(page.url.startswith(self.server.url()))
                         self.assertEqual(page._browserapi_verified_profile, 'Default')
                         self.assertIs(attached.page(self.server.url()), page)
-                        self.assertEqual(len(attached.context.pages), count + 1)
+                        self.assertEqual(len(attached.context.pages), count)
                         page.evaluate("window.__fixtureSession = 'still-here'")
                         other = attached.context.new_page()
                         other.goto('data:text/html,unrelated-fixture')
@@ -319,9 +319,10 @@ class TestChatWorkflow(BrowserTestCase):
                         with self.assertRaises(RuntimeError):
                             attached.page(self.server.url())
                         duplicate.close()  # só a duplicata criada acima
-                    # Proof tab (nonce) + chat tab: exatamente 2 pedidos por sessão nova.
+                    # Um único pedido por sessão: a aba de prova é reaproveitada como aba do chat
+                    # na primeira; na segunda o chat já existia e a aba de prova é fechada.
                     self.assertEqual(['/browserapi-proof-' in target for _, target in holder['opened']],
-                                     [True, False, True])
+                                     [True, True])
             self.in_worker(exercise_connection)
 
     def test_same_origin_tab_in_another_browser_context_is_never_used(self):

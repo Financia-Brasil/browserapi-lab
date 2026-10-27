@@ -75,7 +75,7 @@ class ProfileMismatchError(ExistingChromeError):
     """Não prosseguir no contexto concedido para outro perfil."""
 
 
-def verify_profile(context, expected, probe=None):
+def verify_profile(context, expected, probe=None, keep_probe=False):
     """Prova local do diretório pelo Chrome, antes de acessar qualquer chat.
 
     A permissão/endpoint identifica uma instalação, não a opção do inventário.
@@ -83,6 +83,7 @@ def verify_profile(context, expected, probe=None):
     aba interna que criamos; nunca persistir o caminho pessoal lido.
     """
     stage = 'abrir página interna'
+    succeeded = False
     try:
         if probe is None:
             probe = context.new_page()
@@ -114,7 +115,9 @@ def verify_profile(context, expected, probe=None):
                 'Se o Chrome continuar concedendo outro perfil, este modo não consegue usar esse perfil nesta versão. '
                 'Não copie o perfil nem refaça os campos do chat para resolver isso.')
         # Identidade real da aba (browserContextId): é o que prende o chat a ESTE perfil.
-        return target_context_id(context, probe)
+        identity = target_context_id(context, probe)
+        succeeded = True
+        return identity
     except ProfileMismatchError:
         raise
     except Exception:
@@ -122,7 +125,9 @@ def verify_profile(context, expected, probe=None):
             'Não foi possível verificar o perfil recebido do Chrome (' + stage + '). Nenhum chat foi aberto ou preenchido. '
             'Confira se a página interna chrome://version abre normalmente e reconecte; não assumimos outro perfil.') from None
     finally:
-        if probe is not None:
+        # Com keep_probe, a aba só fica aberta se a prova deu certo: fechar a única janela
+        # de um perfil logo antes de abrir o chat pode derrubar o perfil (visto no Chrome 156).
+        if probe is not None and not (keep_probe and succeeded):
             try:
                 probe.close()
             except Exception:

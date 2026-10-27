@@ -174,6 +174,58 @@ class TestSimplifiedConnection(unittest.TestCase):
         context.new_page.return_value.close.assert_called_once_with()
 
 
+    def proof_tab(self):
+        from unittest.mock import Mock
+        proof = Mock(url='chrome://version/')
+        proof.is_closed.return_value = False
+        return proof
+
+    def test_proof_tab_becomes_the_chat_tab_without_a_second_native_open(self):
+        proof = self.proof_tab()
+        session = self.session([proof], profile='Profile 1')
+        session._proof_page = proof
+        with identities({}), patch('browserapi_lab.profiles.open_profile') as native:
+            page = session.page('https://example.com/chat')
+        self.assertIs(page, proof)
+        proof.goto.assert_called_once_with('https://example.com/chat', wait_until='domcontentloaded')
+        native.assert_not_called()
+        proof.close.assert_not_called()
+        self.assertEqual(page._browserapi_verified_profile, 'Profile 1')
+        self.assertIsNone(session._proof_page)
+
+    def test_existing_chat_in_the_profile_wins_and_the_proof_tab_is_released(self):
+        from unittest.mock import Mock
+        proof = self.proof_tab()
+        mine = Mock(url='https://example.com/thread')
+        session = self.session([proof, mine])
+        session._proof_page = proof
+        with identities({mine: 'chosen'}), patch('browserapi_lab.profiles.open_profile') as native:
+            self.assertIs(session.page('https://example.com/chat'), mine)
+        proof.close.assert_called_once_with()
+        proof.goto.assert_not_called()
+        native.assert_not_called()
+        self.assertIsNone(session._proof_page)
+
+    def test_failed_navigation_keeps_the_proof_tab_registered_for_cleanup(self):
+        proof = self.proof_tab()
+        proof.goto.side_effect = RuntimeError('navegação recusada')
+        session = self.session([proof])
+        session._proof_page = proof
+        with self.assertRaises(RuntimeError):
+            session.page('https://example.com/chat')
+        self.assertIs(session._proof_page, proof)
+        session._release_proof()
+        proof.close.assert_called_once_with()
+        self.assertIsNone(session._proof_page)
+
+    def test_close_releases_an_unused_proof_tab(self):
+        proof = self.proof_tab()
+        session = self.session([proof])
+        session._proof_page = proof
+        session.close()
+        proof.close.assert_called_once_with()
+
+
 class TestAttachedStart(unittest.TestCase):
     def prepare(self, profile='Profile 1'):
         from unittest.mock import Mock
@@ -224,8 +276,8 @@ class TestAttachedStart(unittest.TestCase):
         session._pw.chromium.connect_over_cdp.side_effect = connect
         session._pw.chromium.connect_over_cdp.return_value = Mock(contexts=[context])
 
-        def verify(ctx, expected, probe=None):
-            calls.append(('verify', str(expected), probe))
+        def verify(ctx, expected, probe=None, keep_probe=False):
+            calls.append(('verify', str(expected), probe, keep_probe))
             return 'context-profile-1'
         with fake_playwright(), patch('browserapi_lab.existing_chrome.endpoint', return_value='ws://127.0.0.1:1/devtools/browser/x'), \
                 patch('browserapi_lab.profiles.installation_root', return_value=Path('/fixtures/google-chrome')), \
@@ -238,6 +290,9 @@ class TestAttachedStart(unittest.TestCase):
         self.assertRegex(calls[1][2], r'^http://127\.0\.0\.1:\d+/browserapi-proof-[0-9a-f]{32}$')
         self.assertEqual(calls[2][1], '/fixtures/google-chrome/Profile 1')
         self.assertIs(calls[2][2], proof)
+        # A aba de prova fica aberta (vira a aba do chat); fechar a única janela do perfil o derruba.
+        self.assertTrue(calls[2][3])
+        self.assertIs(session._proof_page, proof)
         context.wait_for_event.assert_called_with('page', timeout=250)
         self.assertEqual(session._profile_context_id, 'context-profile-1')
         self.assertIs(session._context, context)
@@ -270,6 +325,25 @@ class TestAttachedStart(unittest.TestCase):
             self.assertTrue(authorize_session(config,ask,lambda _:None))
             native.assert_called_once_with('selected','chrome://inspect/#remote-debugging')
             self.assertEqual(len(questions),2)
+    def test_failed_profile_proof_leaves_no_identity_and_no_registered_tab(self):
+        from unittest.mock import Mock
+        from browserapi_lab.existing_chrome import ProfileMismatchError
+        session, context = self.prepare()
+        proof = Mock()
+        context.pages.append(proof)
+
+        def native_open(identifier, target):
+            proof.url = target
+        with fake_playwright(), patch('browserapi_lab.existing_chrome.endpoint', return_value='ws://127.0.0.1:1/devtools/browser/x'), \
+                patch('browserapi_lab.profiles.installation_root', return_value=Path('/fixtures/google-chrome')), \
+                patch('browserapi_lab.profiles.open_profile', side_effect=native_open), \
+                patch('browserapi_lab.existing_chrome.verify_profile', side_effect=ProfileMismatchError('outro perfil')):
+            with self.assertRaises(ProfileMismatchError):
+                session._start_attached(0)
+        self.assertIsNone(session._profile_context_id)
+        self.assertIsNone(session._proof_page)
+        self.assertIsNone(session._context)
+
 
 class TestProfileIdentity(unittest.TestCase):
     def probe(self, actual):
@@ -376,4 +450,22 @@ class TestProofNavigation(unittest.TestCase):
         page.goto.assert_called_once()
         self.assertEqual(page.goto.call_args.args[0], 'chrome://version/')
         context.new_page.assert_not_called()   # usa a aba pedida, não cria outra
+        page.close.assert_called_once_with()
+
+    def test_keep_probe_stays_open_only_when_the_proof_succeeds(self):
+        from unittest.mock import Mock
+        from browserapi_lab.existing_chrome import verify_profile, ProfileMismatchError
+
+        def probe(path):
+            page = Mock(url='chrome://version/')
+            page.locator.return_value.inner_text.return_value = path
+            context = Mock()
+            context.new_cdp_session.return_value.send.return_value = {'targetInfo': {'browserContextId': 'identity'}}
+            return context, page
+        context, page = probe('/fixtures/google-chrome/Default')
+        verify_profile(context, '/fixtures/google-chrome/Default', probe=page, keep_probe=True)
+        page.close.assert_not_called()
+        context, page = probe('/fixtures/google-chrome/Default')
+        with self.assertRaises(ProfileMismatchError):
+            verify_profile(context, '/fixtures/google-chrome/Profile 1', probe=page, keep_probe=True)
         page.close.assert_called_once_with()

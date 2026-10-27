@@ -107,6 +107,7 @@ class BrowserSession:
         self._pw: Any = None
         self._context: Any = None
         self._profile_context_id: Optional[str] = None
+        self._proof_page: Any = None
         self._started_at: Optional[float] = None
         self._cold_start_ms: Optional[float] = None
 
@@ -200,7 +201,11 @@ class BrowserSession:
                             'Abra esse perfil pelo avatar do Chrome, confira a Depuração remota e reconecte. '
                             'Se continuar, esta versão do Chrome não permite escolher esse perfil por este modo.')
                     self._pump(ctx)
-            self._profile_context_id = verify_profile(ctx, installation_root(installation) / directory, probe=probe)
+            # A aba de prova NÃO é fechada aqui: ela vira a aba do chat em page(). Fechar a única
+            # janela de um perfil logo antes de abrir o chat derrubou o perfil no Chrome 156.
+            self._profile_context_id = verify_profile(
+                ctx, installation_root(installation) / directory, probe=probe, keep_probe=True)
+            self._proof_page = probe
         self._context = ctx
         self._context.set_default_timeout(self.config.timeout_ms)
         self._cold_start_ms = (time.perf_counter() - started) * 1000
@@ -240,6 +245,15 @@ class BrowserSession:
             pass  # a verificação de origem/campos fala por si; não recarregar
         return mine[0]
 
+    def _release_proof(self) -> None:
+        """Fechar a aba de prova (nossa) quando ela não for virar a aba do chat."""
+        proof, self._proof_page = self._proof_page, None
+        if proof is not None:
+            try:
+                proof.close()
+            except Exception:
+                pass
+
     def _verified(self, page: Any) -> Any:
         """Marcar somente abas obtidas por esta sessão já verificada."""
         try:
@@ -275,8 +289,16 @@ class BrowserSession:
             if len(matches) > 1:
                 raise ExistingChromeError('Mais de uma aba do chat está aberta neste perfil. Deixe somente uma para conectar; nenhuma aba foi fechada pelo programa.')
             if matches:
+                self._release_proof()  # o perfil já tem janela com o chat
                 return self._verified(matches[0])
             safe_url(url)
+            proof = self._proof_page
+            if proof is not None and not proof.is_closed():
+                # A aba de prova é nossa e já está no perfil confirmado: vira a aba do chat.
+                # Se a navegação falhar ela continua registrada e close() a encerra.
+                proof.goto(url, wait_until='domcontentloaded')
+                self._proof_page = None
+                return self._verified(proof)
             # Falha de navegação é informada, nunca repetida em outra aba/perfil.
             return self._verified(self._open_chat_natively(ctx, url))
         page = pages[0] if pages else ctx.new_page()
@@ -300,6 +322,7 @@ class BrowserSession:
 
     def close(self) -> None:
         try:
+            self._release_proof()
             if self._context is not None and not self.config.attach_existing_chrome:
                 self._context.close()
         finally:
