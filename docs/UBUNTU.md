@@ -334,12 +334,14 @@ sintéticas também contam como requisições com resultado; não existe API de 
 pública nesta versão. [Definições e próximos marcos](NEXT_ARCHITECTURE.md).
 
 **Atualização sem terminal:**
-1. Baixe `downloads/BrowserAPI-Ubuntu.deb` pelo GitHub (Download raw file).
+1. Baixe o instalador mais recente em
+   <https://github.com/Financia-Brasil/browserapi-lab/releases/latest/download/BrowserAPI-Ubuntu.deb>
+   (a pasta `downloads/` do código é histórica; não use os arquivos dela).
 2. Abra o arquivo pelo gerenciador de arquivos e escolha instalar/atualizar.
 3. Salve seu trabalho e reinicie o computador pelo menu gráfico. Apenas fechar
    a aba não encerra o programa antigo; ainda não há atualização a quente.
 4. Abra **BrowserAPI** pelo menu de aplicativos. Confira que **Interface** e
-   **programa em execução** mostram ambos **0.2.0+ubuntu1**.
+   **programa em execução** mostram a mesma versão (rodapé do painel).
 5. Abra **Análise de gargalos e histórico**. Use seu chat salvo e **Testar agora**
    ou **Conversar** quando desejar autorizar uma mensagem; o resultado alimenta
    o painel. Não é necessário recriar perfil nem fazer login só para medir.
