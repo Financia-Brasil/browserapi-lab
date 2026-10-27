@@ -90,6 +90,14 @@ jobs:
       - name: Auditoria do ambiente (com navegador)
         run: python -m browserapi_lab.cli doctor --json results/ci/doctor-browser.json
 
+      # Informativo (continue-on-error): roda o fluxo REAL do produto, com dois perfis,
+      # contra o Google Chrome instalado no runner. Antes da bateria para sempre rodar.
+      - name: Experimento - dois perfis no Google Chrome real (informativo)
+        continue-on-error: true
+        run: |
+          mkdir -p results/ci
+          xvfb-run -a python scripts/native_open_probe.py --output results/ci/native-open-probe 2>&1 | tee results/ci/native-open-probe.log
+
       - name: Bateria de integracao com navegador
         id: testes
         run: xvfb-run -a python -m unittest discover -s tests -v 2>&1 | tee results/ci/browser-tests.log
@@ -174,6 +182,7 @@ jobs:
           mkdir -p "results/ci/${GITHUB_RUN_ID}"
           cp results/ci/browser-tests.log results/ci/doctor-browser.json results/ci/resumo.md "results/ci/${GITHUB_RUN_ID}/"
           if [ -f results/ci/gui-flow.json ]; then cp results/ci/gui-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
+          if [ -f results/ci/native-open-probe.json ]; then cp results/ci/native-open-probe.json results/ci/native-open-probe.log "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -d results/ci/ui-redesign ]; then cp -r results/ci/ui-redesign "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/resource-modes.json ]; then cp results/ci/resource-modes.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/llm-api-flow.json ]; then cp results/ci/llm-api-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi

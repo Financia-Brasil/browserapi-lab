@@ -224,10 +224,11 @@ class TestChatWorkflow(BrowserTestCase):
     def personal_chrome(self):
         """Chrome descartável que imita o navegador pessoal. Nunca usa perfil real.
 
-        O pedido nativo do produto é emulado por um segundo processo do MESMO
-        binário e do mesmo --user-data-dir: o Chrome entrega a linha de comando
-        ao processo existente (ProcessSingleton), como ao abrir um perfil pelo
-        menu. Falhas trazem o log do fixture para não precisarmos adivinhar.
+        O pedido NATIVO de perfil não é emulado por segundo processo: o Chromium
+        descartável sem janela respondeu SHUTDOWN ao hand-off (LOCK_ERROR, CI
+        40519568084), o que não é o comportamento de um Chrome com janela. Aqui o
+        pedido é emulado por CDP; o hand-off real é exercitado, contra o Google
+        Chrome instalado, por scripts/native_open_probe.py.
         """
         import subprocess
         import time
@@ -248,24 +249,14 @@ class TestChatWorkflow(BrowserTestCase):
                         raise AssertionError('Chrome descartável não expôs a porta (código %s): %s' % (
                             process.poll(), log.read_text(errors='replace')[-800:]))
                     self.page.wait_for_timeout(100)
-
-                def native_open(identifier, target, directory=None):
-                    result = subprocess.run([binary, '--headless=new', '--no-sandbox', '--user-data-dir=' + str(profile),
-                        '--profile-directory=' + (directory or identifier.split(':', 1)[1]), target],
-                        capture_output=True, timeout=20)
-                    if result.returncode != 0:
-                        raise AssertionError('Pedido nativo recusado (código %s): %s' % (
-                            result.returncode, result.stderr.decode(errors='replace')[-600:]))
-                yield SimpleNamespace(home=home, profile=profile, address=endpoint(home), process=process,
-                                      native_open=native_open)
+                yield SimpleNamespace(home=home, profile=profile, address=endpoint(home), process=process)
             finally:
                 # Somente o Chromium descartável criado acima pertence ao teste.
                 # SIGTERM só no pai podia deixar filhos escrevendo em Default
                 # durante TemporaryDirectory.cleanup (ENOTEMPTY no CI).
                 # Isso NÃO faz parte de BrowserSession nem fecha Chrome pessoal.
                 try:
-                    cleanup = self.session._pw.chromium.connect_over_cdp(
-                        endpoint(home))
+                    cleanup = self.session._pw.chromium.connect_over_cdp(endpoint(home))
                     cleanup.new_browser_cdp_session().send('Browser.close')
                 except Exception:
                     process.terminate()
@@ -276,10 +267,18 @@ class TestChatWorkflow(BrowserTestCase):
                     process.wait()
 
     @contextmanager
-    def attached_to(self, personal, opener=None):
+    def attached_to(self, personal, holder):
+        """Pedido nativo emulado por CDP na própria conexão da sessão testada."""
+        def opener(identifier, target):
+            cdp = holder['session']._attached_browser.new_browser_cdp_session()
+            try:
+                cdp.send('Target.createTarget', {'url': target})
+            finally:
+                cdp.detach()
+            holder.setdefault('opened', []).append((identifier, target))
         with patch('browserapi_lab.existing_chrome.endpoint', return_value=personal.address), \
                 patch('browserapi_lab.profiles.installation_root', return_value=personal.profile), \
-                patch('browserapi_lab.profiles.open_profile', side_effect=opener or personal.native_open):
+                patch('browserapi_lab.profiles.open_profile', side_effect=opener):
             yield
 
     def in_worker(self, function, timeout=90):
@@ -293,10 +292,12 @@ class TestChatWorkflow(BrowserTestCase):
         with self.personal_chrome() as personal:
             config = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
                                    attach_existing_chrome=True, existing_profile='Default')
+            holder = {}
 
             def exercise_connection():
-                with self.attached_to(personal):
-                    with BrowserSession(config) as attached:
+                with self.attached_to(personal, holder):
+                    session = holder['session'] = BrowserSession(config)
+                    with session as attached:
                         count = len(attached.context.pages)
                         page = attached.page(self.server.url())
                         # A aba de prova foi fechada: sobra só a aba do chat.
@@ -309,7 +310,8 @@ class TestChatWorkflow(BrowserTestCase):
                         other = attached.context.new_page()
                         other.goto('data:text/html,unrelated-fixture')
                     self.assertIsNone(personal.process.poll(), 'Desconectar não deve fechar navegador pessoal')
-                    with BrowserSession(config) as attached:
+                    session = holder['session'] = BrowserSession(config)
+                    with session as attached:
                         page = attached.page(self.server.url())
                         self.assertEqual(page.evaluate('window.__fixtureSession'), 'still-here')
                         self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
@@ -317,36 +319,69 @@ class TestChatWorkflow(BrowserTestCase):
                         with self.assertRaises(RuntimeError):
                             attached.page(self.server.url())
                         duplicate.close()  # só a duplicata criada acima
+                    # Proof tab (nonce) + chat tab: exatamente 2 pedidos por sessão nova.
+                    self.assertEqual([target.startswith('chrome://version/#browserapi-')
+                                      for _, target in holder['opened']], [True, False, True])
             self.in_worker(exercise_connection)
 
-    def test_two_chrome_profiles_are_not_merged_by_native_open(self):
-        """Mecanismo do relato 'os 2 perfis levam para um só' (fixture, sem conta real)."""
-        from dataclasses import replace
-        from browserapi_lab.browser import BrowserConfig, BrowserSession
-        with self.personal_chrome() as personal:
-            first = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
-                                  attach_existing_chrome=True, existing_profile='Default')
-            second = replace(first, existing_profile='Profile 1')
+    def test_same_origin_tab_in_another_browser_context_is_never_used(self):
+        """Playwright agrupa os perfis num contexto só; a identidade CDP os separa.
 
-            def exercise_profiles():
-                url = self.server.url()
-                with self.attached_to(personal):
-                    with BrowserSession(first) as one:
-                        default_identity = one._profile_context_id
-                        page_one = one.page(url)
-                        page_one.evaluate("window.__fixtureSession = 'profile-default'")
-                    with BrowserSession(second) as two:
-                        self.assertNotEqual(two._profile_context_id, default_identity)
-                        page_two = two.page(url)
-                        self.assertIsNone(page_two.evaluate('window.__fixtureSession'))
-                        self.assertEqual(page_two._browserapi_verified_profile, 'Profile 1')
-                        page_two.evaluate("window.__fixtureSession = 'profile-1'")
-                    # Mesma origem em DOIS perfis: cada sessão enxerga só a sua aba.
-                    with BrowserSession(first) as again:
-                        self.assertEqual(again.page(url).evaluate('window.__fixtureSession'), 'profile-default')
-                    with BrowserSession(second) as again:
-                        self.assertEqual(again.page(url).evaluate('window.__fixtureSession'), 'profile-1')
-            self.in_worker(exercise_profiles, 120)
+        Contextos de navegador criados por CDP têm o mesmo comportamento observável
+        de perfis diferentes para o Playwright (aba desconhecida cai no contexto
+        padrão) e IDs distintos. Fixture local, sem conta real.
+        """
+        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        from browserapi_lab.existing_chrome import target_context_id
+        with self.personal_chrome() as personal:
+            url = self.server.url()
+            holder = {}
+
+            def exercise():
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as pw:
+                    browser = pw.chromium.connect_over_cdp(personal.address)
+                    cdp = browser.new_browser_cdp_session()
+                    other_id = cdp.send('Target.createBrowserContext')['browserContextId']
+                    ctx = browser.contexts[0]
+                    mine = ctx.new_page()
+                    mine.goto(url)
+                    cdp.send('Target.createTarget', {'url': url, 'browserContextId': other_id})
+                    for _ in range(80):
+                        tabs = [p for p in ctx.pages if p.url.startswith(url)]
+                        if len(tabs) >= 2:
+                            break
+                        mine.wait_for_timeout(100)
+                    # Evidência empírica da ficha F13 (Playwright 1.64.1, Chromium real):
+                    self.assertEqual(len(browser.contexts), 1, 'Playwright deveria ver um único contexto')
+                    self.assertEqual(len(tabs), 2, 'As duas abas aparecem no mesmo contexto do Playwright')
+                    identities = {id(p): target_context_id(ctx, p) for p in tabs}
+                    self.assertEqual(len(set(identities.values())), 2, 'IDs CDP distintos por contexto')
+                    other = next(p for p in tabs if p is not mine)
+
+                    session = BrowserSession(BrowserConfig(attach_existing_chrome=True, existing_profile='Default',
+                                                           profiles_root=personal.home / 'app'))
+                    session._context, session._attached_browser = ctx, browser
+                    session._profile_context_id = identities[id(mine)]
+                    holder['session'] = session
+                    with patch('browserapi_lab.profiles.open_profile', side_effect=AssertionError('não deve abrir nada')):
+                        chosen = session.page(url)
+                    self.assertIs(chosen, mine)
+                    self.assertIsNot(chosen, other)
+
+                    # Sem aba no contexto escolhido: abre pelo pedido (emulado) e ignora a do outro contexto.
+                    mine.close()
+
+                    def opener(identifier, target):
+                        holder['opened'] = (identifier, target)
+                        cdp.send('Target.createTarget', {'url': target})
+                    with patch('browserapi_lab.profiles.open_profile', side_effect=opener):
+                        reopened = session.page(url)
+                    self.assertEqual(holder['opened'], ('chrome:Default', url))
+                    self.assertIsNot(reopened, other)
+                    self.assertEqual(target_context_id(ctx, reopened), session._profile_context_id)
+                    self.assertFalse(other.is_closed(), 'A aba do outro contexto não pode ser tocada')
+            self.in_worker(exercise)
 
     def test_profile_not_honored_by_chrome_fails_before_any_chat_tab(self):
         """Se o Chrome ignorar o perfil pedido, parar antes de abrir o chat."""
@@ -355,19 +390,16 @@ class TestChatWorkflow(BrowserTestCase):
         with self.personal_chrome() as personal:
             config = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
                                    attach_existing_chrome=True, existing_profile='Profile 1')
-            opened = []
-
-            def always_default(identifier, target):
-                opened.append(target)
-                personal.native_open(identifier, target, directory='Default')
+            holder = {}
 
             def exercise_mismatch():
-                with self.attached_to(personal, opener=always_default):
+                with self.attached_to(personal, holder):
+                    session = holder['session'] = BrowserSession(config)
                     with self.assertRaises(ProfileMismatchError):
-                        BrowserSession(config).start()
+                        session.start()
             self.in_worker(exercise_mismatch)
-            self.assertEqual(len(opened), 1, 'Somente a aba de prova pode ter sido pedida')
-            self.assertTrue(opened[0].startswith('chrome://version/#browserapi-'))
+            self.assertEqual(len(holder['opened']), 1, 'Somente a aba de prova pode ter sido pedida')
+            self.assertTrue(holder['opened'][0][1].startswith('chrome://version/#browserapi-'))
 
     def test_manual_voice_then_type_then_select_send_without_sending(self):
         config = self.prepare()
