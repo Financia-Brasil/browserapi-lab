@@ -135,6 +135,14 @@ class ConfigStore:
             return []
         return sorted(p.stem for p in self.root.glob('*.json') if not p.stem.endswith('.status'))
 
+    def delete(self, name):
+        """Remove only this local connection and receipt, never Chrome/history."""
+        path = self._path(name)
+        if not path.exists():
+            raise ValueError('Conexão não encontrada.')
+        path.unlink()
+        (self.root / (safe_name(name) + '.status.json')).unlink(missing_ok=True)
+
     def save_status(self, name, status):
         # O chamador fornece só um recibo sanitizado; nunca texto da conversa.
         self.write_json(self.root / (safe_name(name) + '.status.json'), status)

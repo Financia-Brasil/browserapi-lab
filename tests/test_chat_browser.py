@@ -183,7 +183,7 @@ class TestChatWorkflow(BrowserTestCase):
                 button.click();
                 window.__voiceRejected = window.__balPick === null;
                 button.setAttribute('aria-label', 'Enviar mensagem');
-                button.click();
+                button.click(); document.querySelector('[data-picker-confirm]').click();
             }, 100);
         }""")
         self.assertEqual(pick(self.page, 'botão Enviar'), '#send')
@@ -270,7 +270,7 @@ class TestChatWorkflow(BrowserTestCase):
         def choose(page, role):
             page.evaluate("""() => { const timer = setInterval(() => {
                 if (!window.__balPickerCleanup) return;
-                clearInterval(timer); document.querySelector('#send').click();
+                clearInterval(timer); document.querySelector('#send').click(); document.querySelector('[data-picker-confirm]').click();
             }, 100); }""")
             return pick(page, role)
         repair_fields(self.page, config, ask=ask, tell=lambda _:None, picker=choose,
@@ -386,13 +386,40 @@ class TestChatWorkflow(BrowserTestCase):
         script = (Path(__file__).parents[1] / 'browserapi_lab/assets/picker.js').read_text()
         self.page.evaluate(script, 'campo de mensagem')
         self.page.locator('#composer').click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
+        self.page.locator('[data-picker-confirm]').click()
         self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#composer')
         self.page.locator('#composer').fill('Não enviar durante reparo')
         self.page.evaluate(script, 'botão Enviar')
         self.page.locator('#send').click()
+        self.page.locator('[data-picker-confirm]').click()
         self.assertEqual(self.page.evaluate('window.__balPick.selector'), '#send')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
         self.assertEqual(self.page.locator('#__browserapi_picker').count(), 0)
+
+    def test_visual_picker_generic_text_preview_layers_back_and_cancel(self):
+        self.prepare()
+        self.page.evaluate("""() => {
+            const section=document.createElement('section');
+            section.id='sample-selection';
+            section.innerHTML='<div><p>Resposta de exemplo para selecionar visualmente.</p></div>';
+            document.body.prepend(section);
+        }""")
+        script=(Path(__file__).parents[1]/'browserapi_lab/assets/picker.js').read_text()
+        self.page.evaluate(script,'resposta do assistente')
+        self.page.locator('#sample-selection p').click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
+        self.assertGreater(self.page.locator('#__browserapi_picker_marks button').count(),0)
+        self.page.get_by_role('button',name='Camada maior',exact=True).click()
+        self.page.get_by_role('button',name='Voltar',exact=True).click()
+        self.page.locator('[data-picker-confirm]').click()
+        selector=self.page.evaluate('window.__balPick.selector')
+        self.assertEqual(self.page.locator(selector).inner_text(),'Resposta de exemplo para selecionar visualmente.')
+        self.assertEqual(self.page.locator('#__browserapi_picker_marks').count(),0)
+        self.page.evaluate(script,'campo de mensagem')
+        self.page.get_by_role('button',name='Cancelar',exact=True).click()
+        self.assertTrue(self.page.evaluate('window.__balPick.cancelled'))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
     def test_unrelated_page_mutations_do_not_block_completion(self):
         config = self.prepare()
@@ -417,6 +444,7 @@ class TestChatWorkflow(BrowserTestCase):
                                   ('resposta do assistente', '[data-role=assistant]:last-child .body', 'assistant')):
             self.page.evaluate(script, role)
             self.page.locator(target).click()
+            self.page.locator('[data-picker-confirm]').click()
             selected = self.page.evaluate('window.__balPick.selector')
             setattr(config, key, selected)
         result = exchange(self.page, config, authorized=True, health_check=True)

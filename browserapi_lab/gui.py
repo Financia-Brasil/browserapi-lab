@@ -428,6 +428,15 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError()
             if self.path == '/api/task':
                 self.server.panel.submit(payload)
+            elif self.path == '/api/chat/delete':
+                panel = self.server.panel
+                with panel.lock:
+                    if panel.closed or panel.phase in ('running','waiting','updating') or (panel.api_service and panel.api_service.server):
+                        raise PanelInputError('Termine a operação e desative a API antes de excluir a conexão.')
+                    try:
+                        panel.store.delete(payload.get('name'))
+                    except (ValueError, TypeError) as error:
+                        raise PanelInputError(str(error)) from None
             elif self.path == '/api/profile':
                 from .profiles import open_profile
                 panel=self.server.panel

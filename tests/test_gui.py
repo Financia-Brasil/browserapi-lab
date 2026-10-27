@@ -283,6 +283,23 @@ class TestPanel(unittest.TestCase):
             spawn.assert_not_called()
 
 
+    def test_delete_chat_requires_auth_and_idle_and_preserves_other_connections(self):
+        self.store.save(ChatConfig('remove-me','https://example.com'))
+        self.store.save(ChatConfig('keep-me','https://example.com'))
+        self.store.save_status('remove-me',{'status':'not_tested'})
+        body={'name':'remove-me'}
+        self.assertEqual(self.request('/api/chat/delete',method='POST',token=False,body=body)[0],403)
+        with self.panel.lock:
+            self.panel.phase='waiting'
+        self.assertEqual(self.request('/api/chat/delete',method='POST',body=body)[0],400)
+        with self.panel.lock:
+            self.panel.phase='idle'
+        self.assertEqual(self.request('/api/chat/delete',method='POST',body={'name':'../keep-me'})[0],400)
+        self.assertEqual(self.request('/api/chat/delete',method='POST',body=body)[0],200)
+        self.assertEqual(self.store.names(),['keep-me'])
+        self.assertIsNone(self.store.status('remove-me'))
+
+
 @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb não disponível')
 class TestUbuntuPackage(unittest.TestCase):
     def test_build_extract_assets_and_import_outside_checkout(self):
