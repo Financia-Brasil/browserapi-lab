@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.5.0';
+const PANEL_VERSION = '0.5.1';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -65,9 +65,10 @@ $('prepare-shortcut').onclick=()=>{navigate('settings');$('prepare').focus();};
 function sessionFields(){
   const personal=$('session-mode').value==='existing_chrome';
   $('personal-fields').hidden=!personal;
-  (personal ? $('personal-fields') : $('common-chat-slot')).insertBefore($('chat-fields'),personal ? document.querySelector('.profile-actions') : null);
+  (personal ? $('personal-fields') : $('common-chat-slot')).appendChild($('chat-fields'));
+  document.querySelector('.profile-actions').hidden=!personal;
   $('dedicated-fields').hidden=personal;
-  $('configure').textContent=personal?'Conectar e configurar →':'Abrir e configurar →';
+  $('configure').textContent=personal?'Conectar →':'Abrir e configurar →';
   if(personal){$('browser').value='chrome';if(!profileRows.length)scanProfiles();}
   controls();
 }
@@ -178,7 +179,10 @@ function render(value) {
   $('auto-update').disabled = !value.updates?.managed;
 
   const oldPrompt = state?.prompt?.id;
+  const previousPhase = state?.phase;
   state = value;
+  if (state.phase === 'error') error(state.messages[state.messages.length - 1] || 'Não foi possível conectar. Tente novamente.');
+  else if (previousPhase === 'error') error('');
   $('version-status').textContent = `Painel ${PANEL_VERSION} · programa ${state.version || 'antigo (sem identificação)'}`;
   if (incompatible()) error('O painel e o programa em execução são de versões diferentes. Não prossiga com os campos. Reinicie o computador e abra BrowserAPI pelo menu; fechar só a aba não encerra a versão antiga.');
   const labels = {idle:'Pronto',running:'Trabalhando…',waiting:'Aguardando você',done:'Concluído',error:'Precisa de atenção',cancelled:'Interrompido',updating:'Aplicando atualização…'};
@@ -241,6 +245,7 @@ async function scanProfiles(){
 }
 function profileNote(){
   const p=profileRows.find(p=>p.id===$('personal-profile').value);
+  $('profiles-note').hidden=!!p && p.openable!==false;
   $('profiles-note').textContent=!p?'Nenhum perfil disponível. Abra seu Chrome normalmente e atualize a lista. Não criaremos um perfil vazio no lugar.':
     p.openable===false?'Perfil encontrado, mas o executável do Chrome não está disponível. Abra-o pelo menu do computador e depois conecte.':
     p.endpoint_available?'Conexão local encontrada. Ainda é necessário autorizar no Chrome e conferir a conta.':
@@ -261,7 +266,7 @@ async function openProfile(destination){
   pending=true;controls();profileFeedback('Pedindo ao Chrome para abrir o perfil…');
   try{
     await api('profile',{profile:$('personal-profile').value,destination,provider:$('provider').value,url:$('url').value});
-    profileFeedback(destination==='permission'?'No Chrome, habilite Depuração remota. Depois volte, atualize a lista e conecte.':'Pedido de abertura enviado ao Chrome. Confira a conta no avatar e deixe somente uma aba deste chat aberta. Isso ainda não conectou o BrowserAPI.');
+    profileFeedback(destination==='permission'?'No Chrome, habilite Depuração remota. Depois volte, atualize a lista e conecte.':'Chrome solicitado. Confira sua conta e clique em Conectar.');
   }catch(err){profileFeedback(err.message,true);}
   finally{pending=false;controls();}
 }

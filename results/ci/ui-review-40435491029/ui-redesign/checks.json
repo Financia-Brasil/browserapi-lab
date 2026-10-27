@@ -1,0 +1,19 @@
+{
+  "captured_at": "2026-10-27T01:57:36.206420+00:00",
+  "latest_asset_mtime_utc": "2026-10-27T01:56:27.774756+00:00",
+  "desktop": [
+    1440,
+    1040
+  ],
+  "mobile": [
+    375,
+    812
+  ],
+  "horizontal_overflow": false,
+  "native_profile_open_request": true,
+  "automation_not_started_by_open_action": true,
+  "permission_target_allowlisted": true,
+  "api_advanced_collapsed": true,
+  "keyboard_focus_visible": true,
+  "scope": "Synthetic UI only; no personal Chrome or account used."
+}

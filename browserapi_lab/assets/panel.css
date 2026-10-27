@@ -10,3 +10,6 @@
 /* Review cycle 2: remove unsupported fullwidth '+' glyphs; tighten the
    desktop heading without reducing type or hiding permission guidance. */
 @media(min-width:841px){main{padding-top:32px}.page-heading{margin-bottom:24px}.section-heading{padding-bottom:16px;margin-bottom:16px}}
+
+/* Recovery is secondary to Connect, with breathing room on narrow screens. */
+.connection-options{margin-top:16px}

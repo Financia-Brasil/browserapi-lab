@@ -213,11 +213,11 @@ class TestChatWorkflow(BrowserTestCase):
                     with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
                         with BrowserSession(config) as attached:
                             count = len(attached.context.pages)
-                            with self.assertRaises(RuntimeError):
-                                attached.page(self.server.url())
-                            self.assertEqual(len(attached.context.pages), count)
-                            attached.context.pages[0].goto(self.server.url())  # usuário já abriu o chat
                             page = attached.page(self.server.url())
+                            self.assertEqual(len(attached.context.pages), count + 1)
+                            self.assertTrue(page.url.startswith(self.server.url()))
+                            self.assertIs(attached.page(self.server.url()), page)
+                            self.assertEqual(len(attached.context.pages), count + 1)
                             page.evaluate("window.__fixtureSession = 'still-here'")
                             other = attached.context.new_page()
                             other.goto('data:text/html,unrelated-fixture')

@@ -47,3 +47,48 @@ class TestExistingChrome(unittest.TestCase):
                 receipt = check(store,'x',ask=lambda _:'n',tell=lambda _:None,session_factory=factory)
                 self.assertEqual(receipt['status'],'not_authorized')
                 unused.assert_not_called()
+
+class TestSimplifiedConnection(unittest.TestCase):
+    def test_missing_chat_opens_once_in_existing_context_without_touching_other_tabs(self):
+        from unittest.mock import Mock
+        from browserapi_lab.browser import BrowserSession, BrowserConfig
+        session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        unrelated = Mock(url='https://unrelated.example/')
+        context = Mock(pages=[unrelated])
+        session._context = context
+        page = session.page('https://example.com/chat')
+        context.new_page.assert_called_once_with()
+        page.goto.assert_called_once_with('https://example.com/chat',wait_until='domcontentloaded')
+        unrelated.goto.assert_not_called()
+
+    def test_ambiguous_chat_does_not_open_or_choose_another_tab(self):
+        from unittest.mock import Mock
+        from browserapi_lab.browser import BrowserSession, BrowserConfig
+        session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._context = Mock(pages=[Mock(url='https://example.com/a'),Mock(url='https://example.com/b')])
+        with self.assertRaises(ExistingChromeError):
+            session.page('https://example.com/chat')
+        session._context.new_page.assert_not_called()
+
+    def test_navigation_failure_is_not_retried_with_another_tab(self):
+        from unittest.mock import Mock
+        from browserapi_lab.browser import BrowserSession, BrowserConfig
+        session = BrowserSession(BrowserConfig(attach_existing_chrome=True))
+        session._context = Mock(pages=[])
+        session._context.new_page.return_value.goto.side_effect = RuntimeError('navigation refused')
+        with self.assertRaises(RuntimeError):
+            session.page('https://example.com/chat')
+        session._context.new_page.assert_called_once_with()
+
+    def test_first_connection_opens_permission_for_selected_profile_only_after_consent(self):
+        from browserapi_lab.setup import authorize_session
+        config = ChatConfig('x','https://example.com',browser='chrome',session_mode='existing_chrome',personal_profile='Profile 1')
+        profile = dict(id='selected',installation='chrome',directory='Profile 1',connectable=True)
+        questions=[]
+        def ask(text):
+            questions.append(text)
+            return 's' if len(questions)==1 else ''
+        with patch('browserapi_lab.existing_chrome.endpoint',side_effect=[ExistingChromeError('missing'), 'ws://local']), patch('browserapi_lab.profiles.inventory',return_value=[profile]), patch('browserapi_lab.profiles.open_profile') as native:
+            self.assertTrue(authorize_session(config,ask,lambda _:None))
+            native.assert_called_once_with('selected','chrome://inspect/#remote-debugging')
+            self.assertEqual(len(questions),2)
