@@ -1,0 +1,41 @@
+{
+  "kind": "synthetic_graphical_journey",
+  "headed_worker": true,
+  "form_configure": true,
+  "health_check": true,
+  "consent_buttons": true,
+  "receipt": {
+    "schema_version": 1,
+    "name": "graphical",
+    "provider": "custom",
+    "browser": "chromium",
+    "browser_version": "156.0.8078.4",
+    "checked_at": "2026-10-27T02:03:36Z",
+    "config_fingerprint": "7c0e42560a8031a7a297e8bf59707a2b331592337432bae36669e32441594f64",
+    "status": "success",
+    "send_state": "confirmed",
+    "compatible_in_this_run": true,
+    "message": "Resposta confirmada nesta execu\u00e7\u00e3o",
+    "action": "Modelo escolhido manualmente; repita check se a interface mudar.",
+    "timings": {
+      "preflight_ms": 101.314,
+      "fill_ms": 6.07,
+      "send_ms": 50.64,
+      "send_pipeline_ms": 78.521,
+      "response_wait_ms": 751.856,
+      "ttft_dom_ms": 80.8,
+      "capture_overhead_ms": 504.4,
+      "parse_ms": 8.401,
+      "total_ms": 940.094,
+      "browser_start_ms": 684.136,
+      "page_open_ms": 80.428
+    },
+    "performance": {
+      "capture_budget_ms": 900,
+      "within_capture_budget": true,
+      "api_equivalence": "not_measured"
+    },
+    "scope": "Uma execu\u00e7\u00e3o; n\u00e3o garante disponibilidade futura ou funcionamento 24/7."
+  },
+  "scope": "Fixture local; n\u00e3o autentica sites externos ou instala em desktop Ubuntu real."
+}
