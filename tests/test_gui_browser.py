@@ -344,6 +344,7 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.set_viewport_size({'width':1440,'height':1040})
             self.open_panel()
             expect(self.page.locator('#personal-profile')).to_have_value('chrome:Profile 1')
+            self.assertEqual(self.page.locator('#configuration input:visible, #configuration select:visible').count(),2)
             self.assertTrue(self.page.locator('#open-profile').is_hidden())
             self.assertTrue(self.page.locator('#session-mode').is_hidden())
             self.assertTrue(self.page.locator('#name').is_hidden())
