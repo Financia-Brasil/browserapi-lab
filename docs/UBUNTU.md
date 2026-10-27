@@ -446,7 +446,9 @@ do nome do perfil para diferenciá-los; isso não comprova qual conta foi conect
 
 1. Em **Conectar um chat**, escolha o perfil e o chat e clique em **Conectar**. A pasta (`Default` ou `Profile N`) aparece
    primeiro na lista; ela não diz qual conta está dentro.
-2. Quando o Chrome pedir a permissão de depuração, clique em **Permitir**.
+2. **Primeira vez:** no Chrome, digite `chrome://inspect/#remote-debugging` na barra de endereço e ative a
+   **Depuração remota** (o Chrome não deixa programas abrirem essa página). Depois, quando ele pedir a permissão
+   ao conectar, clique em **Permitir**.
 3. O BrowserAPI pede ao Chrome uma aba de verificação **no perfil escolhido**, confere a pasta e abre o chat nesse
    mesmo perfil. Se aparecer “Perfil confirmado pelo Chrome: Profile N”, a pasta bateu. A conta do site (avatar,
    modelo) continua sendo conferência sua.
