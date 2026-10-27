@@ -226,7 +226,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
     tell('Confira sua conta e escolha o modelo na janela do chat.' if config.session_mode == 'existing_chrome' else 'Faça login e escolha o modelo na janela que abrir.')
     tell('Se o Google disser que o navegador não é seguro, interrompa. Não avance ao apontamento; o programa não contorna essa proteção.')
     with measured_page(session_factory, config, store) as (page, session_timings):
-        ask('Quando o chat e o modelo estiverem prontos, pressione Enter. ')
+        ask('Confira a conta no avatar do Chrome e o modelo no chat. Se estiverem corretos, clique em Continuar. ' if config.session_mode == 'existing_chrome' else 'Quando o chat e o modelo estiverem prontos, pressione Enter. ')
         blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
@@ -256,7 +256,7 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
     with measured_page(session_factory, config, store) as (page, session_timings):
-        ask('Faça login e escolha o modelo no navegador; Enter quando estiver pronto. ')
+        ask('Confira a conta no avatar do Chrome e o modelo no chat. Se estiverem corretos, clique em Continuar. ' if config.session_mode == 'existing_chrome' else 'Faça login e escolha o modelo no navegador; Enter quando estiver pronto. ')
         blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
