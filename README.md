@@ -5,6 +5,16 @@ Laboratório Python/Linux para validar automação de chats por navegador real.
 experimental e opt-in, com subconjunto textual de Chat Completions, não paridade
 completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 
+
+## Baixar (sem terminal)
+
+**[Instalador mais recente (.deb)](https://github.com/Financia-Brasil/browserapi-lab/releases/latest/download/BrowserAPI-Ubuntu.deb)**
+— abra pelo gerenciador de arquivos e escolha instalar. O programa instalado se atualiza sozinho quando está ocioso.
+Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
+deste código é histórica (0.3.1): não use os arquivos dela.
+
+**Novo na 0.6.1:** o perfil escolhido é o perfil usado. Veja [o que mudou e os limites](docs/PROFILE_BINDING_061.md).
+
 ## Janela para Ubuntu (experimental)
 
 Agora há um painel local com botões de configurar, autorizar, testar e corrigir,

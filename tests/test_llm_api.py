@@ -211,3 +211,30 @@ class TestWarmRouting(unittest.TestCase):
             self.assertEqual(job.config.name,'two')
             self.assertEqual([a['model'] for a in job.attempts],['one','two'])
             browser.close()
+
+    def test_personal_chrome_never_matches_same_origin_tab_from_another_profile(self):
+        """O Playwright junta abas de todos os perfis; só a sessão verificada escolhe."""
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as tmp:
+            store=ConfigStore(tmp)
+            store.save(ChatConfig('personal','https://chat.example',browser='chrome',session_mode='existing_chrome',
+                                  personal_profile='Profile 1',**HYPOTHESES['fixture']))
+            created=[]
+            def tab(url):
+                return SimpleNamespace(url=url,is_closed=lambda:False,wait_for_load_state=lambda *a,**kw:None)
+            class Session:
+                def __init__(self,config):
+                    self.other_profile=tab('https://chat.example/another-account')
+                    self.chosen_profile=tab('https://chat.example/chosen-account')
+                    self.context=SimpleNamespace(pages=[self.other_profile])
+                    created.append(self)
+                def start(self):pass
+                def page(self,url):return self.chosen_profile
+                def close(self):pass
+            job=Job('prompt',['personal'],{'headless':False,'lightweight':False,'fallback':False},{})
+            browser=WarmBrowser(store,Session)
+            with patch('browserapi_lab.llm_api.exchange',return_value=ChatResult('success',True,answer='ok',send_state='confirmed')) as send:
+                browser.run(job,lambda:False)
+            self.assertIs(send.call_args.args[0],created[0].chosen_profile)
+            self.assertIsNot(send.call_args.args[0],created[0].other_profile)
+            browser.close()

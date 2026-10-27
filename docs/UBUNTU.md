@@ -334,12 +334,14 @@ sintéticas também contam como requisições com resultado; não existe API de 
 pública nesta versão. [Definições e próximos marcos](NEXT_ARCHITECTURE.md).
 
 **Atualização sem terminal:**
-1. Baixe `downloads/BrowserAPI-Ubuntu.deb` pelo GitHub (Download raw file).
+1. Baixe o instalador mais recente em
+   <https://github.com/Financia-Brasil/browserapi-lab/releases/latest/download/BrowserAPI-Ubuntu.deb>
+   (a pasta `downloads/` do código é histórica; não use os arquivos dela).
 2. Abra o arquivo pelo gerenciador de arquivos e escolha instalar/atualizar.
 3. Salve seu trabalho e reinicie o computador pelo menu gráfico. Apenas fechar
    a aba não encerra o programa antigo; ainda não há atualização a quente.
 4. Abra **BrowserAPI** pelo menu de aplicativos. Confira que **Interface** e
-   **programa em execução** mostram ambos **0.2.0+ubuntu1**.
+   **programa em execução** mostram a mesma versão (rodapé do painel).
 5. Abra **Análise de gargalos e histórico**. Use seu chat salvo e **Testar agora**
    ou **Conversar** quando desejar autorizar uma mensagem; o resultado alimenta
    o painel. Não é necessário recriar perfil nem fazer login só para medir.
@@ -439,3 +441,25 @@ Isso remove somente a conexão e seu recibo no BrowserAPI; não apaga conta,
 conversas, perfil do Chrome ou histórico RAG da API. Desative a API e termine
 qualquer tarefa antes de excluir. O diretório **Default/Profile N** aparece antes
 do nome do perfil para diferenciá-los; isso não comprova qual conta foi conectada.
+
+## 0.6.1 — o perfil escolhido é o perfil usado
+
+1. Em **Conectar um chat**, escolha o perfil e o chat e clique em **Conectar**. A pasta (`Default` ou `Profile N`) aparece
+   primeiro na lista; ela não diz qual conta está dentro.
+2. **Primeira vez:** no Chrome, digite `chrome://inspect/#remote-debugging` na barra de endereço e ative a
+   **Depuração remota** (o Chrome não deixa programas abrirem essa página). Depois, quando ele pedir a permissão
+   ao conectar, clique em **Permitir**.
+3. O BrowserAPI pede ao Chrome uma aba de verificação **no perfil escolhido**, confere a pasta e abre o chat nesse
+   mesmo perfil. Se aparecer “Perfil confirmado pelo Chrome: Profile N”, a pasta bateu. A conta do site (avatar,
+   modelo) continua sendo conferência sua.
+
+Se algo parar, **nada foi escrito ou enviado**:
+
+- **“O Chrome concedeu outro perfil, não o escolhido”** — abra esse perfil pelo avatar do Chrome e conecte de novo.
+  Se continuar, esta versão do Chrome não deixa usar esse perfil por este modo. Não copie perfis para contornar.
+- **“Página diferente da configurada”** — mostra o endereço esperado e o aberto. A Arena agora é `arena.ai`; ao
+  conectar um chat antigo (`lmarena.ai`) o programa pergunta se pode migrar e mantém os campos já apontados.
+- **“Mais de uma aba do chat neste perfil”** — deixe só uma aba do chat naquele perfil.
+
+Não homologado no seu Chrome nem no Linux Lite. Detalhes e fontes: `docs/PROFILE_BINDING_061.md` e
+`pesquisa/2026-10-27-perfis-cdp-e-origem.md`.

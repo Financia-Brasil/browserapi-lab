@@ -107,6 +107,8 @@ def open_profile(identifier, target, config_home=None):
     binary=chrome_binary(profile['installation'])
     if binary is None:
         raise ValueError('Esta instalação do Chrome não foi encontrada. Atualize a lista ou instale o Chrome pelo gerenciador gráfico.')
+    # O Chrome só aceita http(s) e about:blank em pedidos de linha de comando; chrome://inspect
+    # é aceito aqui por compatibilidade, mas o Chrome o descarta (o usuário digita o endereço).
     if target!='chrome://inspect/#remote-debugging':
         safe_url(target)
     try:

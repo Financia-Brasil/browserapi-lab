@@ -164,6 +164,40 @@ def blocked_login_receipt(page, config, store, tell, timings=None):
     return receipt
 
 
+def navigation_receipt(page, config, store, ask, tell, timings=None):
+    """Não reensinar seletores nem permitir envio em outra origem.
+
+    A migração conhecida só muda o endereço após confirmação humana. A prova
+    de perfil ocorre antes, em BrowserSession; domínio não é prova de conta.
+    """
+    from .config import arena_migration, display_origin, origin
+    if origin(page.url) == origin(config.url):
+        return None
+    if arena_migration(config, page.url) and confirmed(ask,
+            'A Arena mudou de lmarena.ai para arena.ai. Confira a conta e a conversa na aba. '
+            'Autoriza salvar o endereço atual sem apagar os campos já escolhidos?'):
+        try:
+            target = safe_url(page.url)
+        except ValueError:
+            target = None
+        if target:
+            config.url = target
+            store.save(config)
+            tell('Endereço da Arena atualizado. Os campos foram preservados; nenhum envio foi feito nesta atualização.')
+            return None
+    from .chat import verified_profile
+    diagnostics = {'expected_origin': display_origin(config.url), 'observed_origin': display_origin(page.url)}
+    if verified_profile(page):
+        diagnostics['profile_directory'] = verified_profile(page)
+    result = ChatResult('wrong_origin', stage='navigation', timings=timings or {}, diagnostics=diagnostics)
+    receipt = result.receipt(config)
+    if config.name in store.names():
+        store.save_status(config.name, receipt)
+    tell(receipt['message'])
+    tell(receipt['action'])
+    return receipt
+
+
 def authorize_session(config, ask, tell):
     if config.session_mode != 'existing_chrome':
         return True
@@ -182,7 +216,7 @@ def authorize_session(config, ask, tell):
             if selected is None:
                 raise ExistingChromeError('O perfil escolhido não está disponível. Atualize a lista e escolha seu perfil novamente.')
             open_profile(selected['id'], 'chrome://inspect/#remote-debugging')
-            ask('No Chrome que abriu, habilite Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
+            ask('No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
             endpoint(installation=config.personal_installation)
     return True
 
@@ -231,6 +265,9 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
+        navigation = navigation_receipt(page, config, store, ask, tell, session_timings)
+        if navigation:
+            return navigation
         suggest(page, config)
         review = manual_send or repairing or not config.ready or confirmed(ask, 'Revisar os campos por apontamento antes do teste?')
         if review:
@@ -261,6 +298,9 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
         blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
+        navigation = navigation_receipt(page, config, store, ask, tell, session_timings)
+        if navigation:
+            return navigation
         if message is None:
             authorized = confirmed(ask, 'Autoriza UMA mensagem sintética de verificação?')
         else:
@@ -302,6 +342,9 @@ def point_controls(store, name, field, *, ask=input, tell=print, cancelled=None,
         blocked = blocked_login_receipt(page, config, store, tell, session_timings)
         if blocked:
             return blocked
+        navigation = navigation_receipt(page, config, store, ask, tell, session_timings)
+        if navigation:
+            return navigation
         repair_fields(page, config, ask, tell, picker, manual_send=True, fields=(field,))
         store.save(config)
         tell('Apontamento salvo. Não enviamos mensagem e isso não é um teste de compatibilidade.')

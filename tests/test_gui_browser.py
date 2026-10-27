@@ -44,6 +44,55 @@ class TestGraphicalJourney(BrowserTestCase):
         self.page.wait_for_function("document.querySelector('#prepared-label').textContent !== 'Verificando componentes…'")
         self.assertNotIn(self.http.token, self.page.url)
 
+    def test_preflight_receipt_explains_no_send_instead_of_zero_model_latency(self):
+        from browserapi_lab.chat import ChatResult
+        config = self.seed()
+        receipt = ChatResult('wrong_origin', stage='preflight', timings={'total_ms': 0},
+                    diagnostics={'expected_origin':'https://lmarena.ai', 'observed_origin':'https://arena.ai'}).receipt(config)
+        with self.panel.lock:
+            self.panel.receipt = receipt
+        self.open_panel()
+        self.page.wait_for_function("document.querySelector('#result-timing').textContent.includes('Nenhuma mensagem enviada')")
+        text = self.page.locator('#result-timing').inner_text()
+        self.assertNotIn('0 ms', text)
+        self.assertIn('Não houve medição de resposta do modelo', text)
+        self.assertIn('https://arena.ai', text)
+        self.assertIn('Página diferente', self.page.locator('#result-title').inner_text())
+        # Texto enxuto: a mesma informação não aparece duas vezes no recibo.
+        receipt_text = self.page.locator('#receipt').inner_text()
+        self.assertEqual(receipt_text.count('Nenhuma mensagem'), 1, receipt_text)
+        self.capture_receipt('receipt-no-send')
+
+    def capture_receipt(self, name):
+        """Desktop e 375px do recibo, sem rolagem horizontal; evidência em ui-redesign/."""
+        evidence = REPO_ROOT / 'results/ci/ui-redesign'
+        evidence.mkdir(parents=True, exist_ok=True)
+        viewport = self.page.viewport_size
+        try:
+            for width, label in ((1280, 'desktop'), (375, 'mobile')):
+                self.page.set_viewport_size({'width': width, 'height': 900})
+                self.page.locator('#receipt').scroll_into_view_if_needed()
+                overflow = self.page.evaluate('document.documentElement.scrollWidth - window.innerWidth')
+                self.assertLessEqual(overflow, 0, 'rolagem horizontal em %dpx' % width)
+                self.page.screenshot(path=str(evidence / (name + '-' + label + '.png')), full_page=True)
+        finally:
+            self.page.set_viewport_size(viewport)
+
+    def test_receipt_shows_the_folder_chrome_confirmed_without_claiming_the_account(self):
+        from playwright.sync_api import expect
+        from browserapi_lab.chat import ChatResult
+        config = self.seed()
+        receipt = ChatResult('success', True, answer='resposta privada', send_state='confirmed',
+                             timings={'total_ms': 1234}, diagnostics={'profile_directory': 'Profile 1'}).receipt(config)
+        with self.panel.lock:
+            self.panel.receipt = receipt
+        self.open_panel()
+        expect(self.page.locator('#result-timing')).to_contain_text('Perfil confirmado pelo Chrome: Profile 1')
+        text = self.page.locator('#result-timing').inner_text()
+        self.assertIn('A conta do site continua por sua conferência', text)
+        self.assertNotIn('resposta privada', self.page.content())
+        self.capture_receipt('receipt-profile')
+
     def wait_question(self, text):
         self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
 
@@ -390,7 +439,8 @@ class TestGraphicalJourney(BrowserTestCase):
             expect(self.page.locator('#profile-feedback')).to_contain_text('clique em Conectar')
             native.assert_called_with('chrome:Profile 1','https://gemini.google.com/app')
             self.page.click('#open-permission')
-            expect(self.page.locator('#profile-feedback')).to_contain_text('habilite Depuração remota')
+            # O Chrome descarta chrome:// em pedidos de linha de comando (url_util.cc): a pessoa digita o endereço.
+            expect(self.page.locator('#profile-feedback')).to_contain_text('digite chrome://inspect/#remote-debugging')
             native.assert_called_with('chrome:Profile 1','chrome://inspect/#remote-debugging')
             automation.assert_not_called()
             self.page.locator('.connection-options summary').click()
