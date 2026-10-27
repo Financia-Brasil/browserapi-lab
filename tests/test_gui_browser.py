@@ -58,6 +58,9 @@ class TestGraphicalJourney(BrowserTestCase):
         self.assertIn('Não houve medição de resposta do modelo', text)
         self.assertIn('https://arena.ai', text)
         self.assertIn('Página diferente', self.page.locator('#result-title').inner_text())
+        # Texto enxuto: a mesma informação não aparece duas vezes no recibo.
+        receipt_text = self.page.locator('#receipt').inner_text()
+        self.assertEqual(receipt_text.count('Nenhuma mensagem'), 1, receipt_text)
         self.capture_receipt('receipt-no-send')
 
     def capture_receipt(self, name):

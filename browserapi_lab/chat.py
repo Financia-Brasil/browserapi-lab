@@ -17,7 +17,7 @@ from .validation import response_instruction, select_output
 
 REMEDIES = {
     'not_configured': ('Configuração incompleta', 'Execute configure ou repair e aponte os campos na página.'),
-    'wrong_origin': ('Página diferente da configurada', 'Nenhuma mensagem foi enviada. O endereço aberto não corresponde ao salvo. Volte à aba configurada; se a Arena mudou de domínio, conecte novamente para confirmar a migração. Não refaça os campos para corrigir o perfil.'),
+    'wrong_origin': ('Página diferente da configurada', 'O endereço aberto não é o salvo. Volte à aba do chat. Se a Arena mudou de lmarena.ai para arena.ai, conecte de novo e confirme a migração: os campos já apontados são mantidos.'),
     'composer_missing': ('Campo de mensagem não encontrado ou ambíguo', 'Execute repair e clique no campo de mensagem correto.'),
     'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo.'),
     'send_missing': ('Botão Enviar não ficou disponível com segurança', 'Após preencher, o botão precisa estar visível, habilitado e ser único. Pode ter ficado um rascunho: confira a página antes de tentar de novo. Se necessário, use Corrigir campos.'),
