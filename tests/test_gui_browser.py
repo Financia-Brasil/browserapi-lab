@@ -75,6 +75,7 @@ class TestGraphicalJourney(BrowserTestCase):
                         if (window.__balTypingCleanup && !composer.value) {
                             composer.value = 'rascunho digitado na fixture';
                             composer.dispatchEvent(new Event('input', {bubbles:true}));
+                            window.__fixtureTeaching.push('typed');
                         }
                         const banner = document.querySelector('#__browserapi_picker');
                         if (banner && banner !== previous) {
@@ -95,6 +96,12 @@ class TestGraphicalJourney(BrowserTestCase):
                 return page
         original_ask = kwargs['ask']
         def ask(text):
+            if 'digite algo SEM enviar' in text:
+                # A pessoa sintética precisa terminar de digitar ANTES de
+                # confirmar. O picker remove o typing guard; sem esta barreira,
+                # um clique rápido no painel pode vencer o timer de 80 ms e
+                # tentar selecionar o microfone vazio, não o estado Enviar.
+                current[0].wait_for_function("document.querySelector('#composer').value === 'rascunho digitado na fixture' && document.querySelector('#send').getAttribute('aria-label') === 'Enviar mensagem'")
             if 'Apontar mensagem do usuário' in text:
                 current[0].evaluate('window.__fixtureClearAllowed = true')
             if 'Autoriza UMA' in text:
@@ -208,7 +215,9 @@ class TestGraphicalJourney(BrowserTestCase):
         self.assertEqual(self.store.load('saved').voice_signature,'')
         self.assertEqual(self.store.status('saved')['status'],'not_authorized')
         self.assertEqual(self.training_audit[0]['count'],0)
-        self.assertIn('send',self.training_audit[0]['steps'])
+        steps = self.training_audit[0]['steps']
+        self.assertIn('send',steps)
+        self.assertLess(steps.index('typed'),steps.index('send'))
 
     def test_buttons_voice_send_and_switch_saved_session_are_visible(self):
         self.seed()
