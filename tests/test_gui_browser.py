@@ -416,7 +416,8 @@ class TestGraphicalJourney(BrowserTestCase):
             expect(self.page.locator('#profile-feedback')).to_contain_text('clique em Conectar')
             native.assert_called_with('chrome:Profile 1','https://gemini.google.com/app')
             self.page.click('#open-permission')
-            expect(self.page.locator('#profile-feedback')).to_contain_text('habilite Depuração remota')
+            # O Chrome descarta chrome:// em pedidos de linha de comando (url_util.cc): a pessoa digita o endereço.
+            expect(self.page.locator('#profile-feedback')).to_contain_text('digite chrome://inspect/#remote-debugging')
             native.assert_called_with('chrome:Profile 1','chrome://inspect/#remote-debugging')
             automation.assert_not_called()
             self.page.locator('.connection-options summary').click()

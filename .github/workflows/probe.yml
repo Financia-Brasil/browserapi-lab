@@ -26,9 +26,14 @@ concurrency:
 
 jobs:
   probe:
-    name: "Dois perfis no Google Chrome real"
+    name: "Dois perfis no Google Chrome real (amostra ${{ matrix.amostra }})"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # VMs diferentes trazem versões diferentes do Chrome (155 e 156 já apareceram): várias amostras.
+    strategy:
+      fail-fast: false
+      matrix:
+        amostra: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,12 +51,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          destination="results/ci/probe-${GITHUB_RUN_ID}"
+          destination="results/ci/probe-${GITHUB_RUN_ID}-${{ matrix.amostra }}"
           mkdir -p "$destination"
           cp results/ci/probe/* "$destination/"
           git add -f "$destination"
           if git diff --cached --quiet; then echo "nada a registrar"; exit 0; fi
-          git commit -m "ci: probe de perfis ${GITHUB_RUN_ID} [skip ci]"
+          git commit -m "ci: probe de perfis ${GITHUB_RUN_ID} amostra ${{ matrix.amostra }} [skip ci]"
           for tentativa in 1 2 3 4 5; do
             if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}"; then
               echo "evidência publicada"
