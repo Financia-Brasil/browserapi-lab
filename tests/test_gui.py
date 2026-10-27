@@ -75,6 +75,19 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.request('/inter.ttf',token=False)[0],200)
         self.assertEqual(self.request('/mono.ttf',token=False)[0],200)
 
+    def test_ledger_spacing_and_local_font_contract(self):
+        import re
+        from browserapi_lab.gui import ASSETS
+        css=(ASSETS/'panel.css').read_text()
+        for prop,value in re.findall(r'(padding(?:-[a-z]+)?|margin(?:-[a-z]+)?|gap)\s*:\s*([^;}]+)',css):
+            if prop=='margin-left' and value in ('232px','200px'):
+                continue  # offsets iguais à largura da navegação, não espaçadores
+            for number in re.findall(r'(?<![.\d])(\d+)px',value):
+                self.assertIn(int(number),(0,4,8,16,24,32,40,48,56,64),(prop,value))
+        self.assertNotIn('https://',css)
+        self.assertIn('font-weight:450',css)
+        self.assertIn('prefers-reduced-motion',css)
+
     def test_auto_update_setting_is_authenticated_and_updating_blocks_tasks(self):
         from browserapi_lab.updates import UpdateStore, Updater
         store = UpdateStore(Path(self.tmp.name)/'update-data')
