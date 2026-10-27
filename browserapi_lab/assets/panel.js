@@ -223,9 +223,10 @@ function render(value) {
     const timing = receipt.timings?.total_ms;
     const origins = receipt.diagnostics?.expected_origin && receipt.diagnostics?.observed_origin
       ? ` Esperado: ${receipt.diagnostics.expected_origin}. Aberto: ${receipt.diagnostics.observed_origin}.` : '';
+    const profile = receipt.diagnostics?.profile_directory ? ` Perfil confirmado pelo Chrome: ${receipt.diagnostics.profile_directory}. A conta do site continua por sua conferência.` : '';
     $('result-timing').textContent = (stopped
       ? `Nenhuma mensagem enviada. Etapa: ${stages[receipt.stage] || 'antes do envio'}. Não houve medição de resposta do modelo.`
-      : (timing !== undefined ? `Tempo do fluxo: ${Math.round(timing)} ms (envio e observação; não é latência de API).` : 'Confira a conversa antes de repetir: o envio pode ter ocorrido.')) + origins;
+      : (timing !== undefined ? `Tempo do fluxo: ${Math.round(timing)} ms (envio e observação; não é latência de API).` : 'Confira a conversa antes de repetir: o envio pode ter ocorrido.')) + origins + profile;
   }
   renderMetrics(value);
   renderService(value);

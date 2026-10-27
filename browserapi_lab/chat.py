@@ -89,6 +89,12 @@ def browser_config(config, root, headless=False):
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
+def verified_profile(page):
+    """Diretório que a sessão confirmou no Chrome; ``None`` se a aba não vem dela."""
+    value = getattr(page, '_browserapi_verified_profile', None)
+    return value if isinstance(value, str) and re.fullmatch(r'(Default|Profile [0-9]{1,6})', value) else None
+
+
 def google_login_blocked(page):
     """Reconhece recusa explícita, sem tentar autenticar ou contornar o Google."""
     if urlsplit(page.url).hostname != 'accounts.google.com':
@@ -147,9 +153,13 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         if phase:
             metrics[phase] = round((now - phase_start) * 1000, 3)
         phase, phase_start = name, now
+    verified = verified_profile(page)
     def outcome(*args, **kwargs):
         nonlocal result
-        result = ChatResult(*args, timings=metrics, stage=phase.removesuffix('_ms'), **kwargs)
+        diagnostics = dict(kwargs.pop('diagnostics', None) or {})
+        if verified:
+            diagnostics.setdefault('profile_directory', verified)
+        result = ChatResult(*args, timings=metrics, stage=phase.removesuffix('_ms'), diagnostics=diagnostics, **kwargs)
         return result
     try:
         if cancelled and cancelled():

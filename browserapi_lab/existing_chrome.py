@@ -58,14 +58,18 @@ def verify_profile(context, expected, probe=None):
             actual = field.inner_text(timeout=1000).strip()
         if not actual or not Path(actual).is_absolute():
             raise ValueError('missing profile path')
-        if Path(actual).resolve() != Path(expected).resolve():
+        actual_path, expected_path = Path(actual).resolve(), Path(expected).resolve()
+        if actual_path != expected_path:
+            if actual_path.parent != expected_path.parent:
+                raise ProfileMismatchError(
+                    'O Chrome conectado usa outra pasta de dados que a instalação escolhida. '
+                    'Paramos antes de abrir o chat ou escrever. Escolha a instalação e o perfil que aparecem na lista, '
+                    'ou abra o perfil pelo avatar do Chrome e reconecte. Não copie perfis para resolver isso.')
             raise ProfileMismatchError(
                 'O Chrome concedeu outro perfil, não o escolhido. Paramos antes de abrir o chat ou escrever. '
-                'A conexão automática pode expor somente o perfil padrão do Chrome; a lista de perfis não muda essa permissão. '
-                'Abra o perfil desejado pelo avatar, confira Depuração remota e reconecte. '
-                'Se o Chrome continuar concedendo outro perfil, este modo não suporta a seleção nessa versão. '
-                'Não copie o perfil nem repita a configuração dos campos para resolver isso.')
-        return target_context_id(context, probe)
+                'Abra o perfil desejado pelo avatar do Chrome, confira a Depuração remota e reconecte. '
+                'Se o Chrome continuar concedendo outro perfil, este modo não consegue usar esse perfil nesta versão. '
+                'Não copie o perfil nem refaça os campos do chat para resolver isso.')
     except ProfileMismatchError:
         raise
     except Exception:

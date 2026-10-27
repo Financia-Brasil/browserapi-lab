@@ -185,9 +185,11 @@ def navigation_receipt(page, config, store, ask, tell, timings=None):
             store.save(config)
             tell('Endereço da Arena atualizado. Os campos foram preservados; nenhum envio foi feito nesta atualização.')
             return None
-    result = ChatResult('wrong_origin', stage='navigation', timings=timings or {},
-                        diagnostics={'expected_origin': display_origin(config.url),
-                                     'observed_origin': display_origin(page.url)})
+    from .chat import verified_profile
+    diagnostics = {'expected_origin': display_origin(config.url), 'observed_origin': display_origin(page.url)}
+    if verified_profile(page):
+        diagnostics['profile_directory'] = verified_profile(page)
+    result = ChatResult('wrong_origin', stage='navigation', timings=timings or {}, diagnostics=diagnostics)
     receipt = result.receipt(config)
     if config.name in store.names():
         store.save_status(config.name, receipt)

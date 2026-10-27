@@ -92,10 +92,16 @@ class WarmBrowser:
                     opened=time.perf_counter()
                     if light:
                         self.session.context.route('**/*',lambda route:route.abort() if route.request.resource_type in ('image','media','font') else route.continue_())
-                    matches=[p for p in self.session.context.pages if p.url.startswith(('http:','https:')) and origin(p.url)==target]
-                    if len(matches)>1:
-                        raise APIError('Deixe somente uma aba do chat aberta','ambiguous_tabs',409)
-                    self.page=matches[0] if matches else self.session.page(config.url)
+                    if config.session_mode=='existing_chrome':
+                        # O Playwright agrupa abas de TODOS os perfis neste contexto.
+                        # Só a sessão verificada pode escolher uma aba do perfil
+                        # confirmado; nunca casar origem entre perfis diferentes.
+                        self.page=self.session.page(config.url)
+                    else:
+                        matches=[p for p in self.session.context.pages if p.url.startswith(('http:','https:')) and origin(p.url)==target]
+                        if len(matches)>1:
+                            raise APIError('Deixe somente uma aba do chat aberta','ambiguous_tabs',409)
+                        self.page=matches[0] if matches else self.session.page(config.url)
                     # Abas restauradas podem ter URL final antes de o DOM estar
                     # pronto; não navegar de novo nem perder a conversa existente.
                     self.page.wait_for_load_state('domcontentloaded',timeout=config.timeout_ms)

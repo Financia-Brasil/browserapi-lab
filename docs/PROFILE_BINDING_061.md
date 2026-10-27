@@ -1,28 +1,36 @@
-# 0.6.1 — limites e correções de conexão
+# 0.6.1 — o perfil escolhido é o perfil usado
 
-O inventário de diretórios não é uma lista de contextos CDP. Chrome 144+ pode
-conceder somente o perfil padrão, mesmo com outros perfis abertos. Não afirmar
-que duas opções do inventário selecionam duas contas.
+## O que causava “os 2 perfis levam para um só”
+Três peças, cada uma conferida na fonte (ver `pesquisa/2026-10-27-perfis-cdp-e-origem.md`):
 
-Antes de tocar no chat, o runtime abre sua própria aba interna chrome://version,
-espera o Profile Path e compara o diretório inteiro com instalação/perfil
-escolhidos. Fecha apenas essa aba de prova. Falha ou divergência interrompe a
-conexão, sem preencher/enviar nem encerrar o Chrome. Caminhos, contas e cookies
-não entram no recibo. Isso verifica o diretório, não o login da conta no site:
-a confirmação manual de conta/modelo continua obrigatória.
+1. O Playwright 1.64.1 coloca abas de **todos** os perfis do Chrome no mesmo contexto.
+2. A criação de aba por CDP (`Target.createTarget`) abre no perfil usado por último, não no escolhido.
+3. O código procurava “uma aba da mesma origem” sem saber de qual perfil ela era; o serviço de API local
+   ainda fazia isso por conta própria.
 
-**Limitação importante:** isto impede conectar silenciosamente ao perfil errado;
-não faz o Chrome oferecer perfis que o transporte nativo não expõe. Não é
-homologação de múltiplos perfis pessoais ou de Linux Lite. A documentação e o
-contraponto comunitário estão em `pesquisa/2026-10-27-perfis-cdp-e-origem.md`.
-Não propor cópia de credenciais, Guest, flags no perfil padrão ou outro login.
+Renomear ou reordenar a lista de perfis não muda nada disso.
 
-Arena agora abre em arena.ai. Conexões antigas lmarena.ai podem confirmar a
-migração ao endereço mostrado, preservando os seletores. Outros domínios,
-subdomínios, HTTP ou portas não ganham confiança automaticamente. Recusar não
-altera o arquivo. A alteração de domínio não é prova de conta.
+## Como funciona agora
+1. Conecta ao Chrome com a sua permissão (nada é aberto antes dela).
+2. Pede ao **próprio Chrome** uma aba interna `chrome://version` com código único no perfil escolhido
+   (`--profile-directory`, sem `user_data_dir`, sem flags de depuração, sem copiar perfil).
+3. Reencontra só essa aba, lê o *Profile Path* mostrado pelo Chrome e compara a pasta inteira.
+   Guarda o `browserContextId` real da aba, só na memória. Fecha apenas a aba de prova.
+4. O chat é aberto **pelo Chrome nativo no mesmo perfil**. Abas existentes só são reaproveitadas se tiverem o
+   mesmo `browserContextId`. Aba nova em outro perfil nunca é usada nem repetida.
+5. Qualquer divergência ou falta de prova **para antes de abrir ou escrever no chat**.
 
-Recibos distinguem navegação/pré-voo/envio/espera/leitura. Quando não houve envio,
-o painel informa isso e não apresenta 0 ms como tempo de resposta do modelo.
-Diagnósticos mostram só origens, não caminhos, queries ou conteúdo da conversa.
-Updater, apontamento gráfico, exclusão local e consentimento de um envio mantidos.
+O painel mostra “Perfil confirmado pelo Chrome: Profile N”. Isso é a **pasta**; a conta do site (avatar, e-mail,
+modelo) continua sendo conferida por você. Caminhos e contas não entram no recibo.
+
+## Arena
+O endereço oficial é `arena.ai`. Conexões antigas em `lmarena.ai` pedem confirmação para migrar e preservam
+os campos já apontados. Nenhum outro domínio, subdomínio, HTTP ou porta ganha confiança automática.
+O recibo diz em que etapa parou e se algo foi enviado; “0 ms” de um pré-voo não é mais apresentado como
+tempo de resposta do modelo.
+
+## Limites
+- Não homologado no seu Chrome pessoal nem no Linux Lite: os testes usam Chromium descartável.
+- Se esta versão do Chrome não expuser a aba de prova, o modo para com mensagem clara. Não há login alternativo,
+  cópia de perfil nem Guest como contorno.
+- O código do Chromium lido é o da linha principal; o Chrome estável instalado pode divergir.

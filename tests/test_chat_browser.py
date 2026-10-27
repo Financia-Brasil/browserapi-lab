@@ -220,70 +220,52 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertTrue(self.page.evaluate('window.__voiceRejected'))
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
-    def test_connect_existing_browser_does_not_close_or_reload_it(self):
+    @contextmanager
+    def personal_chrome(self):
+        """Chrome descartável que imita o navegador pessoal. Nunca usa perfil real.
+
+        O pedido nativo do produto é emulado por um segundo processo do MESMO
+        binário e do mesmo --user-data-dir: o Chrome entrega a linha de comando
+        ao processo existente (ProcessSingleton), como ao abrir um perfil pelo
+        menu. Falhas trazem o log do fixture para não precisarmos adivinhar.
+        """
         import subprocess
         import time
-        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        from types import SimpleNamespace
         from browserapi_lab.existing_chrome import endpoint
+        binary = self.session._pw.chromium.executable_path
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            profile = home/'google-chrome'
-            process = subprocess.Popen([self.session._pw.chromium.executable_path,
-                '--no-sandbox','--remote-debugging-port=0',
-                '--user-data-dir='+str(profile),'about:blank'], stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            profile = home / 'google-chrome'
+            log = home / 'fixture-chrome.log'
+            with log.open('wb') as stderr:
+                process = subprocess.Popen([binary, '--headless=new', '--no-sandbox', '--remote-debugging-port=0',
+                    '--user-data-dir=' + str(profile), 'about:blank'], stdout=subprocess.DEVNULL, stderr=stderr)
             try:
-                deadline = time.monotonic()+20
-                while not (profile/'DevToolsActivePort').exists():
-                    self.assertIsNone(process.poll())
-                    self.assertLess(time.monotonic(),deadline)
+                deadline = time.monotonic() + 30
+                while not (profile / 'DevToolsActivePort').exists():
+                    if process.poll() is not None or time.monotonic() > deadline:
+                        raise AssertionError('Chrome descartável não expôs a porta (código %s): %s' % (
+                            process.poll(), log.read_text(errors='replace')[-800:]))
                     self.page.wait_for_timeout(100)
-                address = endpoint(home)
-                config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True, existing_profile='Default')
-                fixture_binary = self.session._pw.chromium.executable_path
-                def native_open(identifier, target):
-                    subprocess.run([fixture_binary, '--no-sandbox',
-                        '--user-data-dir='+str(profile), '--profile-directory='+identifier.split(':', 1)[1], target],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=True)
-                def exercise_connection():
-                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address), patch('browserapi_lab.profiles.installation_root', return_value=profile), patch('browserapi_lab.profiles.open_profile', side_effect=native_open):
-                        with BrowserSession(config) as attached:
-                            count = len(attached.context.pages)
-                            page = attached.page(self.server.url())
-                            self.assertEqual(len(attached.context.pages), count + 1)
-                            self.assertTrue(page.url.startswith(self.server.url()))
-                            self.assertIs(attached.page(self.server.url()), page)
-                            self.assertEqual(len(attached.context.pages), count + 1)
-                            page.evaluate("window.__fixtureSession = 'still-here'")
-                            other = attached.context.new_page()
-                            other.goto('data:text/html,unrelated-fixture')
-                        self.assertIsNone(process.poll(), 'Desconectar não deve fechar navegador pessoal')
-                        with BrowserSession(config) as attached:
-                            page = attached.page(self.server.url())
-                            self.assertEqual(page.evaluate('window.__fixtureSession'),'still-here')
-                            self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
-                            attached.new_page(self.server.url())
-                            with self.assertRaises(RuntimeError):
-                                attached.page(self.server.url())
-                            # Remover apenas a duplicata criada pela fixture acima.
-                            attached.context.pages[-1].close()
-                        from dataclasses import replace
-                        with BrowserSession(replace(config, existing_profile='Profile 1')) as second:
-                            other_profile = second.page(self.server.url())
-                            self.assertIsNone(other_profile.evaluate('window.__fixtureSession'))
-                            other_profile.evaluate("window.__fixtureSession = 'separate-profile'")
-                        with BrowserSession(config) as first:
-                            original = first.page(self.server.url())
-                            self.assertEqual(original.evaluate('window.__fixtureSession'), 'still-here')
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=1) as worker:
-                    worker.submit(exercise_connection).result(timeout=90)
+
+                def native_open(identifier, target, directory=None):
+                    result = subprocess.run([binary, '--headless=new', '--no-sandbox', '--user-data-dir=' + str(profile),
+                        '--profile-directory=' + (directory or identifier.split(':', 1)[1]), target],
+                        capture_output=True, timeout=20)
+                    if result.returncode != 0:
+                        raise AssertionError('Pedido nativo recusado (código %s): %s' % (
+                            result.returncode, result.stderr.decode(errors='replace')[-600:]))
+                yield SimpleNamespace(home=home, profile=profile, address=endpoint(home), process=process,
+                                      native_open=native_open)
             finally:
                 # Somente o Chromium descartável criado acima pertence ao teste.
                 # SIGTERM só no pai podia deixar filhos escrevendo em Default
                 # durante TemporaryDirectory.cleanup (ENOTEMPTY no CI).
                 # Isso NÃO faz parte de BrowserSession nem fecha Chrome pessoal.
                 try:
-                    cleanup = self.session._pw.chromium.connect_over_cdp(address)
+                    cleanup = self.session._pw.chromium.connect_over_cdp(
+                        endpoint(home))
                     cleanup.new_browser_cdp_session().send('Browser.close')
                 except Exception:
                     process.terminate()
@@ -292,6 +274,100 @@ class TestChatWorkflow(BrowserTestCase):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
+
+    @contextmanager
+    def attached_to(self, personal, opener=None):
+        with patch('browserapi_lab.existing_chrome.endpoint', return_value=personal.address), \
+                patch('browserapi_lab.profiles.installation_root', return_value=personal.profile), \
+                patch('browserapi_lab.profiles.open_profile', side_effect=opener or personal.native_open):
+            yield
+
+    def in_worker(self, function, timeout=90):
+        # A API síncrona do Playwright não roda dentro do loop desta thread.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            return worker.submit(function).result(timeout=timeout)
+
+    def test_connect_existing_browser_does_not_close_or_reload_it(self):
+        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        with self.personal_chrome() as personal:
+            config = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
+                                   attach_existing_chrome=True, existing_profile='Default')
+
+            def exercise_connection():
+                with self.attached_to(personal):
+                    with BrowserSession(config) as attached:
+                        count = len(attached.context.pages)
+                        page = attached.page(self.server.url())
+                        # A aba de prova foi fechada: sobra só a aba do chat.
+                        self.assertEqual(len(attached.context.pages), count + 1)
+                        self.assertTrue(page.url.startswith(self.server.url()))
+                        self.assertEqual(page._browserapi_verified_profile, 'Default')
+                        self.assertIs(attached.page(self.server.url()), page)
+                        self.assertEqual(len(attached.context.pages), count + 1)
+                        page.evaluate("window.__fixtureSession = 'still-here'")
+                        other = attached.context.new_page()
+                        other.goto('data:text/html,unrelated-fixture')
+                    self.assertIsNone(personal.process.poll(), 'Desconectar não deve fechar navegador pessoal')
+                    with BrowserSession(config) as attached:
+                        page = attached.page(self.server.url())
+                        self.assertEqual(page.evaluate('window.__fixtureSession'), 'still-here')
+                        self.assertTrue(any(p.url.startswith('data:') for p in attached.context.pages))
+                        duplicate = attached.new_page(self.server.url())
+                        with self.assertRaises(RuntimeError):
+                            attached.page(self.server.url())
+                        duplicate.close()  # só a duplicata criada acima
+            self.in_worker(exercise_connection)
+
+    def test_two_chrome_profiles_are_not_merged_by_native_open(self):
+        """Mecanismo do relato 'os 2 perfis levam para um só' (fixture, sem conta real)."""
+        from dataclasses import replace
+        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        with self.personal_chrome() as personal:
+            first = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
+                                  attach_existing_chrome=True, existing_profile='Default')
+            second = replace(first, existing_profile='Profile 1')
+
+            def exercise_profiles():
+                url = self.server.url()
+                with self.attached_to(personal):
+                    with BrowserSession(first) as one:
+                        default_identity = one._profile_context_id
+                        page_one = one.page(url)
+                        page_one.evaluate("window.__fixtureSession = 'profile-default'")
+                    with BrowserSession(second) as two:
+                        self.assertNotEqual(two._profile_context_id, default_identity)
+                        page_two = two.page(url)
+                        self.assertIsNone(page_two.evaluate('window.__fixtureSession'))
+                        self.assertEqual(page_two._browserapi_verified_profile, 'Profile 1')
+                        page_two.evaluate("window.__fixtureSession = 'profile-1'")
+                    # Mesma origem em DOIS perfis: cada sessão enxerga só a sua aba.
+                    with BrowserSession(first) as again:
+                        self.assertEqual(again.page(url).evaluate('window.__fixtureSession'), 'profile-default')
+                    with BrowserSession(second) as again:
+                        self.assertEqual(again.page(url).evaluate('window.__fixtureSession'), 'profile-1')
+            self.in_worker(exercise_profiles, 120)
+
+    def test_profile_not_honored_by_chrome_fails_before_any_chat_tab(self):
+        """Se o Chrome ignorar o perfil pedido, parar antes de abrir o chat."""
+        from browserapi_lab.browser import BrowserConfig, BrowserSession
+        from browserapi_lab.existing_chrome import ProfileMismatchError
+        with self.personal_chrome() as personal:
+            config = BrowserConfig(profile='connection', profiles_root=personal.home / 'app',
+                                   attach_existing_chrome=True, existing_profile='Profile 1')
+            opened = []
+
+            def always_default(identifier, target):
+                opened.append(target)
+                personal.native_open(identifier, target, directory='Default')
+
+            def exercise_mismatch():
+                with self.attached_to(personal, opener=always_default):
+                    with self.assertRaises(ProfileMismatchError):
+                        BrowserSession(config).start()
+            self.in_worker(exercise_mismatch)
+            self.assertEqual(len(opened), 1, 'Somente a aba de prova pode ter sido pedida')
+            self.assertTrue(opened[0].startswith('chrome://version/#browserapi-'))
 
     def test_manual_voice_then_type_then_select_send_without_sending(self):
         config = self.prepare()
