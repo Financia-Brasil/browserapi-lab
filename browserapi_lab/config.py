@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 DEFAULT_CONFIG_DIR = Path.home() / '.config' / 'browserapi-lab'
 PROVIDERS = {
     'gemini': 'https://gemini.google.com/app',
-    'lmarena': 'https://lmarena.ai/',
+    'lmarena': 'https://arena.ai/',
 }
 BROWSERS = ('chromium', 'chrome', 'msedge', 'custom')
 SELECTOR_KEYS = ('composer', 'send', 'user', 'assistant', 'root')
@@ -42,6 +42,28 @@ def origin(url):
     parts = urlsplit(url)
     port = parts.port or (443 if parts.scheme == 'https' else 80)
     return parts.scheme, parts.hostname, port
+
+
+def display_origin(url):
+    """Diagnóstico sem caminho, query, fragmento ou credenciais."""
+    try:
+        scheme, host, port = origin(url)
+        if scheme not in ('http', 'https') or not host:
+            return 'página interna ou endereço inválido'
+        suffix = '' if port == (443 if scheme == 'https' else 80) else ':' + str(port)
+        return scheme + '://' + host + suffix
+    except (ValueError, TypeError):
+        return 'endereço inválido'
+
+
+def arena_migration(config, actual_url):
+    """Única migração conhecida. Nunca wildcard, HTTP, subdomínio ou outro site."""
+    try:
+        return (config.provider == 'lmarena'
+                and origin(config.url) == ('https', 'lmarena.ai', 443)
+                and origin(actual_url) == ('https', 'arena.ai', 443))
+    except (ValueError, TypeError):
+        return False
 
 
 @dataclass

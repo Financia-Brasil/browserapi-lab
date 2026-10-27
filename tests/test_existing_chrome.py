@@ -92,3 +92,49 @@ class TestSimplifiedConnection(unittest.TestCase):
             self.assertTrue(authorize_session(config,ask,lambda _:None))
             native.assert_called_once_with('selected','chrome://inspect/#remote-debugging')
             self.assertEqual(len(questions),2)
+
+class TestProfileIdentity(unittest.TestCase):
+    def probe(self, actual):
+        from unittest.mock import Mock
+        page = Mock(url='chrome://version/')
+        page.locator.return_value.inner_text.return_value = actual
+        context = Mock()
+        context.new_page.return_value = page
+        return context, page
+
+    def test_verified_directory_not_profile_label(self):
+        from browserapi_lab.existing_chrome import verify_profile
+        context, page = self.probe('/fixtures/google-chrome/Profile 1')
+        verify_profile(context, Path('/fixtures/google-chrome/Profile 1'))
+        page.close.assert_called_once_with()
+        page.wait_for_function.assert_called_once()
+        context.close.assert_not_called()
+
+    def test_two_choices_cannot_silently_bind_to_same_profile(self):
+        from browserapi_lab.existing_chrome import verify_profile, ProfileMismatchError
+        context, page = self.probe('/fixtures/google-chrome/Default')
+        verify_profile(context, '/fixtures/google-chrome/Default')
+        with self.assertRaises(ProfileMismatchError):
+            verify_profile(context, '/fixtures/google-chrome/Profile 1')
+        self.assertEqual(page.close.call_count, 2)
+        context.close.assert_not_called()
+
+    def test_unreadable_or_non_native_page_fails_closed_and_closes_only_probe(self):
+        from browserapi_lab.existing_chrome import verify_profile
+        for actual in ('', 'Default', '/fixtures/another-install/Default'):
+            context, page = self.probe(actual)
+            with self.assertRaises(ExistingChromeError):
+                verify_profile(context, '/fixtures/google-chrome/Default')
+            page.close.assert_called_once_with()
+        context, page = self.probe('/fixtures/google-chrome/Default')
+        page.url = 'https://spoof.example/'
+        with self.assertRaises(ExistingChromeError):
+            verify_profile(context, '/fixtures/google-chrome/Default')
+        page.locator.assert_not_called()
+
+    def test_selected_profile_reaches_browser_config(self):
+        from browserapi_lab.chat import browser_config
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ChatConfig('x', 'https://example.com', browser='chrome',
+                                session_mode='existing_chrome', personal_profile='Profile 1')
+            self.assertEqual(browser_config(config, Path(tmp)).existing_profile, 'Profile 1')

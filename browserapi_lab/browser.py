@@ -50,6 +50,7 @@ class BrowserConfig:
     screenshot_on_error: bool = False
     attach_existing_chrome: bool = False
     existing_installation: str = "chrome"
+    existing_profile: str = ""
 
     @property
     def profile_dir(self) -> Path:
@@ -124,6 +125,12 @@ class BrowserSession:
                 contexts = self._attached_browser.contexts
                 if len(contexts) != 1:
                     raise ExistingChromeError('A conexão não identificou um único contexto do Chrome. Desconectamos sem fechar seu navegador.')
+                from .existing_chrome import verify_profile
+                from .profiles import installation_root, profile_name
+                if not self.config.existing_profile:
+                    raise ExistingChromeError('Escolha um perfil na lista antes de conectar. Não assumimos que o Chrome concedeu a conta desejada.')
+                expected = installation_root(self.config.existing_installation) / profile_name(self.config.existing_profile)
+                verify_profile(contexts[0], expected)
                 self._context = contexts[0]
                 self._context.set_default_timeout(self.config.timeout_ms)
                 self._cold_start_ms = (time.perf_counter() - started) * 1000

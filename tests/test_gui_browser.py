@@ -44,6 +44,21 @@ class TestGraphicalJourney(BrowserTestCase):
         self.page.wait_for_function("document.querySelector('#prepared-label').textContent !== 'Verificando componentes…'")
         self.assertNotIn(self.http.token, self.page.url)
 
+    def test_preflight_receipt_explains_no_send_instead_of_zero_model_latency(self):
+        from browserapi_lab.chat import ChatResult
+        config = self.seed()
+        receipt = ChatResult('wrong_origin', stage='preflight', timings={'total_ms': 0},
+                    diagnostics={'expected_origin':'https://lmarena.ai', 'observed_origin':'https://arena.ai'}).receipt(config)
+        with self.panel.lock:
+            self.panel.receipt = receipt
+        self.open_panel()
+        self.page.wait_for_function("document.querySelector('#result-timing').textContent.includes('Nenhuma mensagem enviada')")
+        text = self.page.locator('#result-timing').inner_text()
+        self.assertNotIn('0 ms', text)
+        self.assertIn('Não houve medição de resposta do modelo', text)
+        self.assertIn('https://arena.ai', text)
+        self.assertIn('Página diferente', self.page.locator('#result-title').inner_text())
+
     def wait_question(self, text):
         self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
 

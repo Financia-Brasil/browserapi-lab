@@ -17,7 +17,7 @@ from .validation import response_instruction, select_output
 
 REMEDIES = {
     'not_configured': ('Configuração incompleta', 'Execute configure ou repair e aponte os campos na página.'),
-    'wrong_origin': ('Página diferente da configurada', 'Volte ao chat escolhido; se o site mudou de endereço, refaça configure.'),
+    'wrong_origin': ('Página diferente da configurada', 'Nenhuma mensagem foi enviada. O endereço aberto não corresponde ao salvo. Volte à aba configurada; se a Arena mudou de domínio, conecte novamente para confirmar a migração. Não refaça os campos para corrigir o perfil.'),
     'composer_missing': ('Campo de mensagem não encontrado ou ambíguo', 'Execute repair e clique no campo de mensagem correto.'),
     'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo.'),
     'send_missing': ('Botão Enviar não ficou disponível com segurança', 'Após preencher, o botão precisa estar visível, habilitado e ser único. Pode ter ficado um rascunho: confira a página antes de tentar de novo. Se necessário, use Corrigir campos.'),
@@ -47,6 +47,8 @@ class ChatResult:
     request_id: str | None = None
     browser_version: str | None = None
     send_state: str = 'not_sent'
+    stage: str = 'not_started'
+    diagnostics: dict = field(default_factory=dict)
 
     def receipt(self, config):
         title, action = REMEDIES.get(self.status, ('Resposta confirmada nesta execução', 'Modelo escolhido manualmente; repita check se a interface mudar.'))
@@ -54,7 +56,8 @@ class ChatResult:
             'schema_version': 1, 'name': config.name, 'provider': config.provider,
             'browser': config.browser, 'browser_version': self.browser_version, 'checked_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'config_fingerprint': config_fingerprint(config),
-            'status': self.status, 'send_state': self.send_state, 'compatible_in_this_run': self.compatible,
+            'status': self.status, 'send_state': self.send_state, 'stage': self.stage,
+            'diagnostics': self.diagnostics, 'compatible_in_this_run': self.compatible,
             'message': title, 'action': action, 'timings': self.timings,
             'performance': {
                 'capture_budget_ms': 900,
@@ -82,6 +85,7 @@ def browser_config(config, root, headless=False):
                          channel=config.browser if config.browser in ('chrome', 'msedge') else None,
                          attach_existing_chrome=config.session_mode == 'existing_chrome',
                          existing_installation=config.personal_installation,
+                         existing_profile=config.personal_profile,
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
@@ -145,7 +149,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         phase, phase_start = name, now
     def outcome(*args, **kwargs):
         nonlocal result
-        result = ChatResult(*args, timings=metrics, **kwargs)
+        result = ChatResult(*args, timings=metrics, stage=phase.removesuffix('_ms'), **kwargs)
         return result
     try:
         if cancelled and cancelled():
@@ -153,7 +157,12 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         config.validate()
         problem = preflight(page, config)
         if problem:
-            return outcome(problem)
+            diagnostics = {}
+            if problem == 'wrong_origin':
+                from .config import display_origin
+                diagnostics = {'expected_origin': display_origin(config.url),
+                               'observed_origin': display_origin(page.url)}
+            return outcome(problem, diagnostics=diagnostics)
         outputs_before = page.locator(config.assistant).count()
         locator = page.locator(config.composer)
         data = locator.evaluate('''el => ({tag:el.tagName.toLowerCase(),
@@ -242,6 +251,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             'capture_overhead_ms': summary.get('since_last_mutation_ms'),
         })
         outcome('success', True, answer=answer, request_id=request_id)
+        result.stage = 'completed'
         result.browser_version = page.context.browser.version
         return result
     except (EOFError, KeyboardInterrupt):

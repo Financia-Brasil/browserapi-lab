@@ -19,6 +19,30 @@ class TestChatWorkflow(BrowserTestCase):
         self.page.evaluate('mode => FakeChat.config({mode, delay:1})', mode)
         return config
 
+    def test_native_profile_proof_reads_real_chromium_and_rejects_other_directory(self):
+        from browserapi_lab.existing_chrome import verify_profile, ProfileMismatchError
+        context = self.session.context
+        before = list(context.pages)
+        expected = self.session.config.profile_dir / 'Default'
+        verify_profile(context, expected)
+        self.assertEqual(list(context.pages), before)
+        with self.assertRaises(ProfileMismatchError):
+            verify_profile(context, self.session.config.profile_dir / 'Profile 1')
+        self.assertEqual(list(context.pages), before)
+        self.assertFalse(self.page.is_closed())
+
+    def test_removing_origin_guard_allows_send_to_wrong_destination_counterexample(self):
+        # Contraprova de H4, SOMENTE fixture local. Nunca uma conta pessoal.
+        config = self.prepare()
+        config.url = 'https://unrelated.example/'
+        blocked = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(blocked.status, 'wrong_origin')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+        with patch('browserapi_lab.chat.preflight', return_value=None):
+            unsafe = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(unsafe.status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
     def test_authorized_health_contract(self):
         config = self.prepare()
         result = exchange(self.page, config, authorized=True, health_check=True)

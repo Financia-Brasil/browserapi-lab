@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.6.0';
+const PANEL_VERSION = '0.6.1';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -216,9 +216,16 @@ function render(value) {
   $('receipt').hidden = !state.receipt;
   if (state.receipt) {
     const receipt = state.receipt;
-    $('result-title').textContent = receipt.compatible_in_this_run ? 'Funcionou neste teste ✓' : 'Ainda não funcionou';
+    $('result-title').textContent = receipt.compatible_in_this_run ? 'Funcionou neste teste ✓' : (receipt.message || 'Ainda não funcionou');
     $('result-action').textContent = (receipt.action || '').replaceAll('Execute repair', 'Clique em Corrigir campos').replaceAll('Execute configure ou repair', 'Clique em Abrir e configurar ou Corrigir campos').replaceAll('repita check', 'clique em Testar agora').replaceAll('execute repair', 'clique em Corrigir campos');
-    $('result-timing').textContent = receipt.timings?.total_ms !== undefined ? `Tempo observado: ${Math.round(receipt.timings.total_ms)} ms (inclui espera da resposta).` : '';
+    const stages = {not_started:'antes do teste',navigation:'verificação do endereço',preflight:'verificação antes do envio',send_pipeline:'envio',response_wait:'espera da resposta',parse:'leitura da resposta',completed:'concluído'};
+    const stopped = receipt.send_state === 'not_sent';
+    const timing = receipt.timings?.total_ms;
+    const origins = receipt.diagnostics?.expected_origin && receipt.diagnostics?.observed_origin
+      ? ` Esperado: ${receipt.diagnostics.expected_origin}. Aberto: ${receipt.diagnostics.observed_origin}.` : '';
+    $('result-timing').textContent = (stopped
+      ? `Nenhuma mensagem enviada. Etapa: ${stages[receipt.stage] || 'antes do envio'}. Não houve medição de resposta do modelo.`
+      : (timing !== undefined ? `Tempo do fluxo: ${Math.round(timing)} ms (envio e observação; não é latência de API).` : 'Confira a conversa antes de repetir: o envio pode ter ocorrido.')) + origins;
   }
   renderMetrics(value);
   renderService(value);
