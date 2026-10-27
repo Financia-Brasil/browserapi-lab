@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "from": "0.5.1",
+  "to": "0.6.0",
+  "real_supervisor_and_two_gui_processes": true,
+  "same_port_and_token": true,
+  "automatic_idle_switch": true,
+  "startup_confirmation": true,
+  "messages_sent": 0,
+  "baseline_release_commit": "00e10799cf4e6753ecf3367833c9fb553c608172",
+  "target_runtime_sha256": "2ac69337702b370b9f10c97dd16de898871ba0d5287fc85ed9cecd043f0b0426",
+  "local_font_served": true,
+  "api_off_by_default": true
+}

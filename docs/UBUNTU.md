@@ -418,3 +418,24 @@ manter; não escolhe uma conta/conversa arbitrária nem fecha suas abas.
 O nome do perfil não comprova a conta disponibilizada pelo Chrome; confira o avatar.
 Chrome 144+ continua necessário para o consentimento nativo. Seu desktop/conta real
 não foi homologado neste ambiente; os testes usam fixtures e processos descartáveis.
+
+## 0.6 — escolher pela imagem, sem adivinhar seletores
+
+Em **Corrigir campos**, confirme o controle que quer ensinar. O chat vem para a
+frente com áreas numeradas em azul. Clique na área: a prévia fica verde; somente
+**Usar esta área** salva a seleção. Não é mais preciso entender “seletor genérico”.
+Para mensagens, use **Camada maior/menor**, **Voltar** ou **Escolher outra** até a
+prévia cobrir o texto certo. **Mover painel** libera uma área encoberta; **Esc**
+ou **Cancelar** saem sem salvar aquele apontamento. A prévia não envia mensagens.
+
+O assistente não preenche todos os campos: busca, login e título também podem
+parecer campos de texto. A descoberta visual não altera rascunhos. O ensino de
+Enviar continua com sua digitação manual e autorização separada para o teste.
+Seleção por posição é avisada: pode precisar de ajuste após novas mensagens.
+Frames e componentes com DOM isolado ainda não têm este mapeamento gráfico.
+
+Para remover um cadastro, abra **Ajustar ou excluir → Excluir conexão** e confirme.
+Isso remove somente a conexão e seu recibo no BrowserAPI; não apaga conta,
+conversas, perfil do Chrome ou histórico RAG da API. Desative a API e termine
+qualquer tarefa antes de excluir. O diretório **Default/Profile N** aparece antes
+do nome do perfil para diferenciá-los; isso não comprova qual conta foi conectada.
