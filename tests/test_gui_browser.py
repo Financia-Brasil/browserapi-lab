@@ -429,7 +429,7 @@ class TestGraphicalJourney(BrowserTestCase):
             expect(self.page.locator('#chat-count')).to_have_text('1')
             self.page.screenshot(path=str(evidence/'saved-chat.png'),full_page=True)
             assets=REPO_ROOT/'browserapi_lab/assets'
-            latest_mtime=max((assets/name).stat().st_mtime for name in ('panel.html','panel.js','panel.css'))
+            latest_mtime=max((assets/name).stat().st_mtime for name in ('panel.html','panel.js','panel.css','picker.js'))
             def luminance(color):
                 values=[int(color[i:i+2],16)/255 for i in (1,3,5)]
                 return sum(v*k for v,k in zip([x/12.92 if x<=.04045 else ((x+.055)/1.055)**2.4 for x in values],[.2126,.7152,.0722]))

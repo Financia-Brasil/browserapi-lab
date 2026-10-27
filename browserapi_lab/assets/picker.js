@@ -66,9 +66,10 @@
   }
   const candidates=()=>{
     const css=role==='campo de mensagem'?editable:message?'[data-message-author-role],[data-role=user],[data-role=assistant],user-query,model-response,article,[role=article],.markdown,.message-content,p,div':clickable;
-    return [...document.querySelectorAll(css)].filter(el=>visible(el) && (!message || (el.innerText || '').trim().length>8 && (el.matches('[data-message-author-role],[data-role=user],[data-role=assistant],user-query,model-response,article,[role=article],.markdown,.message-content') || ![...el.children].some(c=>(c.innerText || '').trim().length>8)))).slice(0,160);
+    return [...document.querySelectorAll(css)].filter(el=>visible(el) && el.getBoundingClientRect().bottom>=0 && el.getBoundingClientRect().top<=innerHeight && (!message || (el.innerText || '').trim().length>8 && (el.matches('[data-message-author-role],[data-role=user],[data-role=assistant],user-query,model-response,article,[role=article],.markdown,.message-content') || ![...el.children].some(c=>(c.innerText || '').trim().length>8)))).slice(0,160);
   };
   function draw(){
+    confirm.hidden=!chosen;outer.hidden=inner.hidden=!message || !chosen;back.hidden=!history.length;another.hidden=!chosen;
     for(const b of controls.querySelectorAll('button'))b.style.opacity=b.disabled?'0.45':'1';
     marks.replaceChildren();
     const items=chosen?query(selector):candidates();
@@ -91,7 +92,7 @@
     if(push && chosen)history.push(chosen);
     chosen=el;selector=identify(el);
     const count=query(selector).length;
-    status.textContent=count+' área(s) em verde. '+(fragile?'Seleção por posição: pode precisar de ajuste quando o chat mudar. ':'')+'Confirme ou ajuste a camada.';
+    status.textContent=count+' área(s) em verde. '+(fragile?'Seleção por posição: pode precisar de ajuste quando o chat mudar. ':'')+(message?'Confirme ou ajuste a camada.':'É o controle certo?');
     confirm.disabled=!count || (!message && count!==1);
     outer.disabled=!message || !visible(el.parentElement);inner.disabled=!message || ![...el.children].some(visible);back.disabled=!history.length;
     draw();
@@ -107,7 +108,7 @@
   const outer=button('Camada maior',()=>preview(chosen?.parentElement));
   const inner=button('Camada menor',()=>preview([...chosen.children].find(visible)));
   const back=button('Voltar',()=>{const el=history.pop();if(el)preview(el,false);});
-  button('Escolher outra',reset);
+  const another=button('Escolher outra',reset);
   button('Mover painel',()=>{const bottom=banner.style.top!=='auto';banner.style.top=bottom?'auto':'16px';banner.style.bottom=bottom?'16px':'auto';});
   button('Cancelar',()=>{window.__balPick={cancelled:true};cleanup();});
   const click=ev=>{
