@@ -11,3 +11,4 @@ Testes de conexão: aba ausente é criada no contexto existente, aba encontrada 
 Permissão inicial: tela nativa apenas após consentimento e somente para perfil inventariado; conta/modelo confirmados em etapa visível antes de ensinar ou enviar.
 Sem evidência de uso no Chrome pessoal/conta real do usuário, Linux Lite real ou leitor de tela; permissão nativa não foi homologada neste sandbox.
 captura 2026-10-27 02:02:07 UTC > última edição dos assets no runner 02:01:19 UTC ✓.
+Publicada v0.5.1 após CI main 40436817318; atualização real 0.5→0.5.1 e 34 payloads do instalador verificados — [provas](../../results/ci/ux-051-updater/published.json).

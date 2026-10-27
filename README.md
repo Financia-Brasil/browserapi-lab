@@ -188,3 +188,12 @@ Conexões primeiro, com abertura nativa de perfil Chrome já existente e permiss
 separada; API, atividade e manutenção em áreas próprias. Fontes locais, teclado,
 contraste e capturas desktop/375px: [revisão com evidências](docs/design/UI_050_REVIEW.md).
 Abertura normal de perfil não implica conta verificada nem autorização CDP.
+
+### 0.5.1 — conexão simplificada
+
+Escolha **perfil + chat → Conectar**. Não precisa abrir o chat antes: a aba é
+reaproveitada ou aberta no Chrome autorizado. Configuração inicial de permissão
+guiada; nome, modo separado e recuperação em **Opções e ajuda**.
+[Instalador publicado](https://github.com/Financia-Brasil/browserapi-lab/releases/download/v0.5.1/BrowserAPI-Ubuntu.deb) · [Revisão desktop/mobile](docs/design/UX_051_REVIEW.md).
+Atualização automática preservada e testada da versão pública 0.5.0 para 0.5.1;
+conta pessoal/desktop Linux Lite do usuário não homologados neste ambiente.
