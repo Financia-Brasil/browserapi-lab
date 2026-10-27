@@ -1,0 +1,101 @@
+test_append_mantem_um_cabecalho (test_report.TestResultWriter.test_append_mantem_um_cabecalho) ... ok
+test_candidatos_auxiliares (test_report.TestResultWriter.test_candidatos_auxiliares) ... ok
+test_envelope_invalido_nao_e_gravado (test_report.TestResultWriter.test_envelope_invalido_nao_e_gravado) ... ok
+test_grava_json_e_csvs (test_report.TestResultWriter.test_grava_json_e_csvs) ... ok
+test_alerts_not_options_detect_blocking (test_resilience_browser.TestResilience.test_alerts_not_options_detect_blocking) ... ok
+test_contract_new_assistant_only_and_ambiguity (test_resilience_browser.TestResilience.test_contract_new_assistant_only_and_ambiguity) ... ok
+test_empty_timeout_then_recover_same_page (test_resilience_browser.TestResilience.test_empty_timeout_then_recover_same_page) ... ok
+test_fill_keyboard_js_and_enter (test_resilience_browser.TestResilience.test_fill_keyboard_js_and_enter) ... ok
+test_large_history_does_not_exhaust_scan_before_composer (test_resilience_browser.TestResilience.test_large_history_does_not_exhaust_scan_before_composer) ... ok
+test_old_feedback_buttons_do_not_hide_send_candidate (test_resilience_browser.TestResilience.test_old_feedback_buttons_do_not_hide_send_candidate) ... ok
+test_uncertain_send_never_duplicates (test_resilience_browser.TestResilience.test_uncertain_send_never_duplicates) ... ok
+test_watcher_reinstall_disconnects_previous_observer (test_resilience_browser.TestResilience.test_watcher_reinstall_disconnects_previous_observer) ... ok
+test_kind (test_sender.TestEvidence.test_kind) ... ok
+test_new_matching_message (test_sender.TestEvidence.test_new_matching_message) ... ok
+test_no_message_is_failure (test_sender.TestEvidence.test_no_message_is_failure) ... ok
+test_wrong_text_is_failure (test_sender.TestEvidence.test_wrong_text_is_failure) ... ok
+test_sem_playwright_nao_quebra (test_session.TestApiDoPlaywright.test_sem_playwright_nao_quebra) ... ok
+test_suporta_exportacao_indexeddb_quando_instalado (test_session.TestApiDoPlaywright.test_suporta_exportacao_indexeddb_quando_instalado)
+Não assumimos a API: verificamos a assinatura instalada (briefing). ... ok
+test_adquire_e_libera (test_session.TestProfileLock.test_adquire_e_libera) ... ok
+test_context_manager (test_session.TestProfileLock.test_context_manager) ... ok
+test_lock_entre_processos (test_session.TestProfileLock.test_lock_entre_processos)
+O lock real é entre processos: é o cenário que corrompe perfil. ... ok
+test_readquire_apos_liberar (test_session.TestProfileLock.test_readquire_apos_liberar) ... ok
+test_segundo_lock_no_mesmo_perfil_falha (test_session.TestProfileLock.test_segundo_lock_no_mesmo_perfil_falha) ... ok
+test_ensure_profile_cria_diretorio (test_session.TestProfilePath.test_ensure_profile_cria_diretorio) ... ok
+test_nao_escapa_do_root (test_session.TestProfilePath.test_nao_escapa_do_root) ... ok
+test_nome_com_espaco_e_sanitizado (test_session.TestProfilePath.test_nome_com_espaco_e_sanitizado) ... ok
+test_nome_vazio_ou_ponto (test_session.TestProfilePath.test_nome_vazio_ou_ponto) ... ok
+test_padrao (test_session.TestProfilePath.test_padrao) ... ok
+test_assert_no_private_values (test_session.TestSanitizacao.test_assert_no_private_values) ... ok
+test_detecta_chaves_sensiveis (test_session.TestSanitizacao.test_detecta_chaves_sensiveis) ... ok
+test_estado_vazio (test_session.TestSanitizacao.test_estado_vazio) ... ok
+test_marcador_constante (test_session.TestSanitizacao.test_marcador_constante) ... ok
+test_remove_valores_de_cookies (test_session.TestSanitizacao.test_remove_valores_de_cookies) ... ok
+test_concurrent_snapshots_remain_bounded_and_json_serializable (test_telemetry.TestTelemetry.test_concurrent_snapshots_remain_bounded_and_json_serializable) ... ok
+test_denials_errors_and_cancellation_do_not_fabricate_request_result (test_telemetry.TestTelemetry.test_denials_errors_and_cancellation_do_not_fabricate_request_result) ... ok
+test_empty_is_unknown_not_zero_tokens_or_zero_latency (test_telemetry.TestTelemetry.test_empty_is_unknown_not_zero_tokens_or_zero_latency) ... ok
+test_malformed_status_and_huge_numbers_are_not_echoed (test_telemetry.TestTelemetry.test_malformed_status_and_huge_numbers_are_not_echoed) ... ok
+test_payload_is_whitelisted_numeric_finite_and_content_free (test_telemetry.TestTelemetry.test_payload_is_whitelisted_numeric_finite_and_content_free) ... ok
+test_repair_and_mode_change_invalidate_old_online_observation (test_telemetry.TestTelemetry.test_repair_and_mode_change_invalidate_old_online_observation) ... ok
+test_snapshots_do_not_leak_mutable_state_and_inputs_validated (test_telemetry.TestTelemetry.test_snapshots_do_not_leak_mutable_state_and_inputs_validated) ... ok
+test_sources_are_last_observation_stale_or_waiting_not_heartbeats (test_telemetry.TestTelemetry.test_sources_are_last_observation_stale_or_waiting_not_heartbeats) ... ok
+test_timing_absence_is_not_silently_included_as_zero (test_telemetry.TestTelemetry.test_timing_absence_is_not_silently_included_as_zero) ... ok
+test_window_and_statistics_are_consistent_not_lifetime (test_telemetry.TestTelemetry.test_window_and_statistics_are_consistent_not_lifetime) ... ok
+test_activation_then_rollback_and_rejected_version_not_redownloaded (test_updates.TestUpdates.test_activation_then_rollback_and_rejected_version_not_redownloaded) ... ok
+test_corrupt_bundle_and_incompatible_abi_never_activate (test_updates.TestUpdates.test_corrupt_bundle_and_incompatible_abi_never_activate) ... ok
+test_corrupt_preferences_fail_closed_not_reenable_updates (test_updates.TestUpdates.test_corrupt_preferences_fail_closed_not_reenable_updates) ... ok
+test_disabled_offline_and_version_order (test_updates.TestUpdates.test_disabled_offline_and_version_order) ... ok
+test_disabled_setting_prevents_pending_activation_on_next_launch (test_updates.TestUpdates.test_disabled_setting_prevents_pending_activation_on_next_launch) ... ok
+test_download_ready_is_not_live_code_swap (test_updates.TestUpdates.test_download_ready_is_not_live_code_swap) ... ok
+test_orphan_stage_is_recovered_without_overwriting_active_files (test_updates.TestUpdates.test_orphan_stage_is_recovered_without_overwriting_active_files) ... ok
+test_real_server_restart_waits_for_idle_and_preserves_origin_token (test_updates.TestUpdates.test_real_server_restart_waits_for_idle_and_preserves_origin_token) ... ok
+test_release_commit_pin_hash_and_all_browser_assets (test_updates.TestUpdates.test_release_commit_pin_hash_and_all_browser_assets) ... ok
+test_runtime_created_after_first_launch_is_reused_without_repreparing (test_updates.TestUpdates.test_runtime_created_after_first_launch_is_reused_without_repreparing) ... ok
+test_successful_confirmation_keeps_previous_for_rollback (test_updates.TestUpdates.test_successful_confirmation_keeps_previous_for_rollback) ... ok
+test_supervisor_falls_back_after_new_child_cannot_start (test_updates.TestUpdates.test_supervisor_falls_back_after_new_child_cannot_start) ... ok
+test_traversal_symlink_and_missing_assets_rejected (test_updates.TestUpdates.test_traversal_symlink_and_missing_assets_rejected) ... ok
+test_changed_or_wrong_value (test_validation.TestComposerEvidence.test_changed_or_wrong_value) ... ok
+test_cleared_alone_is_not_confirmation (test_validation.TestComposerEvidence.test_cleared_alone_is_not_confirmation) ... ok
+test_combined_confirmation (test_validation.TestComposerEvidence.test_combined_confirmation) ... ok
+test_missing_control_is_not_empty (test_validation.TestComposerEvidence.test_missing_control_is_not_empty) ... ok
+test_ambiguous_is_not_silently_selected (test_validation.TestOutputContract.test_ambiguous_is_not_silently_selected) ... ok
+test_current_response (test_validation.TestOutputContract.test_current_response) ... ok
+test_no_match (test_validation.TestOutputContract.test_no_match) ... ok
+test_previous_response (test_validation.TestOutputContract.test_previous_response) ... ok
+test_rejects_invalid_shapes (test_validation.TestOutputContract.test_rejects_invalid_shapes) ... ok
+test_selects_only_valid_candidate (test_validation.TestOutputContract.test_selects_only_valid_candidate) ... ok
+
+======================================================================
+ERROR: test_repair_always_asks_voice_presence_then_type_and_send (test_gui_browser.TestGraphicalJourney.test_repair_always_asks_voice_presence_then_type_and_send)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/browserapi-lab/browserapi-lab/tests/test_gui_browser.py", line 203, in test_repair_always_asks_voice_presence_then_type_and_send
+    self.skip_other_message_fields()
+  File "/home/runner/work/browserapi-lab/browserapi-lab/tests/test_gui_browser.py", line 107, in skip_other_message_fields
+    self.wait_question('Apontar mensagem do usuário')
+  File "/home/runner/work/browserapi-lab/browserapi-lab/tests/test_gui_browser.py", line 48, in wait_question
+    self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/sync_api/_generated.py", line 21235, in wait_for_function
+    self._sync(
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_page.py", line 1158, in wait_for_function
+    return await self._main_frame.wait_for_function(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_frame.py", line 945, in wait_for_function
+    await self._channel.send("waitForFunction", self._timeout, params)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Page.wait_for_function: Timeout 30000ms exceeded.
+
+----------------------------------------------------------------------
+Ran 322 tests in 201.076s
+
+FAILED (errors=1, skipped=1)
+

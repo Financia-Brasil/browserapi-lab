@@ -1,7 +1,8 @@
 'use strict';
-const PANEL_VERSION = '0.4.0';
+const PANEL_VERSION = '0.5.0';
 const $ = id => document.getElementById(id);
-const token = location.hash.slice(1) || sessionStorage.getItem('browserapi-token') || '';
+const fragment = location.hash.slice(1);
+const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
 if (token) sessionStorage.setItem('browserapi-token', token);
 history.replaceState(null, '', '/');
 let state = null;
@@ -20,8 +21,11 @@ async function api(path, body) {
 function incompatible() { return !!state && state.version !== PANEL_VERSION; }
 function busy() { return pending || !!(state && ['running','waiting','updating'].includes(state.phase)); }
 function controls() {
-  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode']) $(id).disabled = busy() || incompatible();
+  for (const id of ['configure','prepare','doctor','browser','provider','name','url','session-mode','scan-profiles','prepare-shortcut']) $(id).disabled = busy() || incompatible();
   $('ask').disabled = busy() || incompatible() || !selected;
+  $('composer-panel').hidden=!selected;
+  $('selected-label').textContent=selected || '';
+  profileControls();
   $('cancel').disabled = !busy();
   for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy() || incompatible();
 }
@@ -34,16 +38,42 @@ async function task(operation, extra = {}) {
 }
 $('configuration').addEventListener('submit', event => {
   event.preventDefault();
+  if($('session-mode').value==='existing_chrome' && !$('personal-profile').value){
+    profileFeedback('Abra seu Chrome e atualize a lista. Nenhum perfil será criado no lugar do seu.',true);return;
+  }
   if (state?.chats.some(chat => chat.name === $('name').value)) {
     error('Esse nome já está salvo. Use Corrigir campos, ou escolha outro nome para um novo navegador/chat.'); return;
   }
   task('configure', {name: $('name').value, browser: $('browser').value,
                      provider: $('provider').value, personal_profile:$('personal-profile').value, session_mode: $('session-mode').value, url: $('url').value});
 });
-$('session-mode').addEventListener('change', () => {
-  const personal = $('session-mode').value === 'existing_chrome';
-  $('personal-warning').hidden = !personal;
-  if (personal) { $('browser').value = 'chrome'; $('name').value = 'meu-chrome-logado'; }
+let currentView='connections';
+function navigate(view){
+  currentView=view;
+  for(const panel of document.querySelectorAll('.view')) panel.hidden=panel.id!=='view-'+view;
+  for(const item of document.querySelectorAll('[data-view]')){
+    const active=item.dataset.view===view;
+    item.classList.toggle('active',active);
+    if(active) item.setAttribute('aria-current','page'); else item.removeAttribute('aria-current');
+  }
+  $('current-view').textContent={connections:'Conexões',activity:'Atividade',api:'API local',settings:'Configurações'}[view];
+  document.title='BrowserAPI · '+$('current-view').textContent;
+}
+for(const item of document.querySelectorAll('[data-view]')) item.onclick=()=>navigate(item.dataset.view);
+$('add-chat').onclick=()=>{navigate('connections');$('connection-form').scrollIntoView({block:'start'});$('session-mode').focus();};
+$('prepare-shortcut').onclick=()=>{navigate('settings');$('prepare').focus();};
+function sessionFields(){
+  const personal=$('session-mode').value==='existing_chrome';
+  $('personal-fields').hidden=!personal;
+  (personal ? $('personal-fields') : $('common-chat-slot')).insertBefore($('chat-fields'),personal ? document.querySelector('.profile-actions') : null);
+  $('dedicated-fields').hidden=personal;
+  $('configure').textContent=personal?'Conectar e configurar →':'Abrir e configurar →';
+  if(personal){$('browser').value='chrome';if(!profileRows.length)scanProfiles();}
+  controls();
+}
+$('session-mode').addEventListener('change',sessionFields);
+$('browser').addEventListener('change',()=>{
+  if($('browser').value!=='chrome'){$('session-mode').value='dedicated';sessionFields();}
 });
 $('provider').addEventListener('change', () => {
   $('url-box').hidden = $('provider').value !== 'custom';
@@ -72,6 +102,7 @@ function renderChats(chats) {
   chatSignature = signature;
   $('chats').replaceChildren();
   $('empty').hidden = chats.length > 0;
+  $('chat-count').textContent=chats.length;
   if (!chats.some(chat => chat.name === selected)) selected = chats[0]?.name || null;
   for (const chat of chats) {
     const box = document.createElement('div'); box.className = 'chat';
@@ -85,11 +116,14 @@ function renderChats(chats) {
       `${chat.browser}${chat.session_mode === 'existing_chrome' ? ' · Chrome já aberto (configurado)' : ' · perfil separado'} · ${chat.compatible ? 'Último teste passou' : 'Precisa testar'}${chat.checked_at ? ' · ' + chat.checked_at : ''}`;
     if (chat.personal_profile) info.textContent += ` · perfil indicado: ${chat.personal_installation}/${chat.personal_profile} (conta não verificada)`;
     box.append(info);
+    const actions=document.createElement('div');actions.className='chat-actions';
+    const advanced=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Ajustar campos e botão de voz';advanced.append(summary);
     for (const [caption, operation] of [['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send'],['Testar agora','check'],['Corrigir campos','repair']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';
-      button.onclick = () => task(operation, {name: chat.name, ...(operation==='use_existing' ? {personal_profile:$('personal-profile').value}: {})}); box.append(button);
+      button.onclick = () => task(operation, {name: chat.name, ...(operation==='use_existing' ? {personal_profile:$('personal-profile').value}: {})});
+      (operation==='point_voice' || operation==='point_send' ? advanced : actions).append(button);
     }
-    $('chats').append(box);
+    box.append(actions,advanced);$('chats').append(box);
   }
 }
 let metricsSignature = '';
@@ -152,6 +186,7 @@ function render(value) {
   $('prepared-label').textContent = state.prepared ? 'Componente de automação disponível. O teste confirma o navegador.' : 'Primeira vez? Clique em Preparar BrowserAPI.';
   renderChats(state.chats);
   $('log').textContent = state.messages.join('\n\n');
+  document.querySelector('.progress').hidden=!state.prompt && !state.receipt && !state.messages.length && !['running','waiting'].includes(state.phase);
   $('prompt').hidden = !state.prompt;
   if (state.prompt) {
     $('question').textContent = state.prompt.text;
@@ -161,6 +196,7 @@ function render(value) {
     if (oldPrompt !== state.prompt.id) {
       for (const id of ['yes','no','continue']) $(id).disabled = incompatible();
       $('continue').textContent = /digite algo/i.test(state.prompt.text) ? 'Já digitei · Selecionar Enviar' : 'Continuar';
+      document.querySelector('.progress').scrollIntoView({block:'nearest'});
       (yesno ? $('yes') : $('continue')).focus();
     }
   }
@@ -185,17 +221,54 @@ poll();
 
 $('auto-update').addEventListener('change', async () => { try { await api('updates',{enabled:$('auto-update').checked}); await refresh(); } catch (err) { error(err.message); } });
 
-$('scan-profiles').onclick=async()=>{
-  try {
-    const data=await api('profiles');
-    $('personal-profile').replaceChildren(new Option('Chrome padrão · verificar manualmente',''));
-    for(const p of data.profiles){
-      const option=new Option(`${p.installation} · ${p.label} (${p.directory})${p.connectable ? '' : ' · só inventário'}`,p.id);
-      option.disabled=!p.connectable; $('personal-profile').append(option);
+let profileRows=[];
+async function scanProfiles(){
+  const previous=$('personal-profile').value;
+  $('scan-profiles').disabled=true;
+  try{
+    const data=await api('profiles');profileRows=data.profiles;
+    $('personal-profile').replaceChildren();
+    const supported=profileRows.filter(p=>p.connectable);
+    if(!supported.length)$('personal-profile').append(new Option('Nenhum perfil do Chrome encontrado',''));
+    for(const p of supported){
+      const installation={chrome:'Chrome','chrome-beta':'Chrome Beta','chrome-unstable':'Chrome Dev'}[p.installation];
+      $('personal-profile').append(new Option(`${p.label} · ${installation} (${p.directory})`,p.id));
     }
-    $('profiles-note').textContent=`${data.profiles.length} perfis encontrados. Indicação não comprova conta/contexto; abra o perfil escolhido e confira a aba. Não iniciamos outro processo no perfil.`;
-  } catch(err){error(err.message);}
-};
+    if(supported.some(p=>p.id===previous))$('personal-profile').value=previous;
+    profileNote();
+  }catch(err){profileFeedback(err.message,true);}
+  finally{$('scan-profiles').disabled=busy() || incompatible();profileControls();}
+}
+function profileNote(){
+  const p=profileRows.find(p=>p.id===$('personal-profile').value);
+  $('profiles-note').textContent=!p?'Nenhum perfil disponível. Abra seu Chrome normalmente e atualize a lista. Não criaremos um perfil vazio no lugar.':
+    p.openable===false?'Perfil encontrado, mas o executável do Chrome não está disponível. Abra-o pelo menu do computador e depois conecte.':
+    p.endpoint_available?'Conexão local encontrada. Ainda é necessário autorizar no Chrome e conferir a conta.':
+    'Perfil encontrado. Abra-o e configure a permissão antes de conectar (Chrome 144+).';
+  profileControls();
+}
+function profileControls(){
+  const p=profileRows.find(p=>p.id===$('personal-profile').value);
+  for(const id of ['open-profile','open-permission']) $(id).disabled=busy() || incompatible() || !p || p.openable===false;
+  $('personal-profile').disabled=busy() || incompatible();
+}
+function profileFeedback(text,failed=false){
+  $('profile-feedback').textContent=text;$('profile-feedback').hidden=!text;
+  $('profile-feedback').dataset.error=String(failed);
+}
+async function openProfile(destination){
+  if(busy() || incompatible())return;
+  pending=true;controls();profileFeedback('Pedindo ao Chrome para abrir o perfil…');
+  try{
+    await api('profile',{profile:$('personal-profile').value,destination,provider:$('provider').value,url:$('url').value});
+    profileFeedback(destination==='permission'?'No Chrome, habilite Depuração remota. Depois volte, atualize a lista e conecte.':'Pedido de abertura enviado ao Chrome. Confira a conta no avatar e deixe somente uma aba deste chat aberta. Isso ainda não conectou o BrowserAPI.');
+  }catch(err){profileFeedback(err.message,true);}
+  finally{pending=false;controls();}
+}
+$('personal-profile').onchange=()=>{profileFeedback('');profileNote();};
+$('scan-profiles').onclick=scanProfiles;
+$('open-profile').onclick=()=>openProfile('chat');
+$('open-permission').onclick=()=>openProfile('permission');
 let serviceSignature='';
 function renderService(value){
   const a=value.api_service || {};
@@ -203,6 +276,7 @@ function renderService(value){
   $('api-toggle').textContent=a.enabled ? 'Desativar API' : 'Autorizar e iniciar API';
   $('api-toggle').disabled=!a.available || incompatible() || (!a.enabled && busy());
   $('api-url').value=a.url || ''; $('api-key').value=a.key || '';
+  $('copy-api-url').disabled=!a.url; $('copy-api-key').disabled=!a.key; $('api-show').disabled=!a.key;
   const signature=JSON.stringify([a.enabled,a.names,a.headless,a.lightweight,a.retrieval,a.fallback,a.remember,a.personal_consent,value.chats]);
   if(signature!==serviceSignature){
     serviceSignature=signature;
@@ -236,3 +310,11 @@ $('api-rotate').onclick=async()=>{
   if(!confirm('Revogar a chave e o registro de idempotência? Reconfigure os agentes. Isso não desfaz envios; não repita pedidos antigos sem conferir a página.')) return;
   try{await api('service',{enabled:false,rotate:true});await refresh();}catch(err){error(err.message);}
 };
+
+async function copyValue(id){
+  try{await navigator.clipboard.writeText($(id).value);$('copy-feedback').textContent=id==='api-key'?'Chave copiada. Não compartilhe.':'Endereço copiado.';}
+  catch(err){$(id).focus();$(id).select();$('copy-feedback').textContent='Selecione e copie o campo com Ctrl+C.';}
+}
+$('copy-api-url').onclick=()=>copyValue('api-url');
+$('copy-api-key').onclick=()=>copyValue('api-key');
+sessionFields();

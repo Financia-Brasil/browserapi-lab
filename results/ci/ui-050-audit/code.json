@@ -1,0 +1,21 @@
+{
+  "audited_at": "2026-10-27T01:28:39.705518+00:00",
+  "spacing_declarations_checked": 138,
+  "layout_offset_exceptions": [
+    "232px sidebar",
+    "200px sidebar"
+  ],
+  "local_font_families": [
+    "Inter",
+    "JetBrains Mono"
+  ],
+  "default_weight": 450,
+  "decorative_box_shadows": 0,
+  "transition_ms": [
+    140,
+    140
+  ],
+  "reduced_motion": true,
+  "external_font_requests": false,
+  "scope": "Code audit; appearance additionally inspected in real Chromium captures."
+}

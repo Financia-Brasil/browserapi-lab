@@ -181,3 +181,10 @@ O workflow de publicação para main depende dos testes; patch automático, mino
 major por incremento da base. Alterações nesta branch só afetam main depois de
 integradas. Inventário de perfis, API, RAG e roteamento não são implementados por
 este atualizador e continuam no plano, sem falsa alegação de entrega completa.
+
+## Redesenho 0.5
+
+Conexões primeiro, com abertura nativa de perfil Chrome já existente e permissão
+separada; API, atividade e manutenção em áreas próprias. Fontes locais, teclado,
+contraste e capturas desktop/375px: [revisão com evidências](docs/design/UI_050_REVIEW.md).
+Abertura normal de perfil não implica conta verificada nem autorização CDP.

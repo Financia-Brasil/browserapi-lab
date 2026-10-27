@@ -400,3 +400,27 @@ texto NÃO criptografado localmente, com limite de 8 milhões de caracteres, nã
 tokens. IDs separam recuperação local, não conversas remotas. É possível apagar
 o histórico ou revogar a chave pelo painel, sem usar terminal. Otimizações
 headless/bloqueio de recursos só se aplicam a perfil dedicado e são experimentais.
+
+## Interface 0.5: abrir seu perfil de verdade
+
+A navegação agora separa **Conexões**, **Atividade**, **API local** e **Configurações**.
+Componentes e atualização automática ficam em Configurações; não são pré-requisitos
+visuais para escolher um perfil. Métricas ficam em Atividade. O assistente de voz,
+a digitação manual e a autorização antes do teste continuam obrigatórios.
+
+1. Em **Conexões**, mantenha **Usar meu perfil existente do Chrome** e escolha o
+   perfil pelo nome. A lista carrega sozinha; **Atualizar lista** refaz a busca.
+2. Escolha o chat e o nome da conexão. **Abrir este perfil** pede ao Chrome normal
+   que abra o chat no diretório selecionado, usando o encaminhamento nativo do
+   Chrome. Não é Playwright abrindo outro perfil vazio; não copiamos sua sessão.
+3. Confira sua conta no avatar. **Configurar permissão** abre a tela do próprio
+   Chrome nesse perfil; habilite Depuração remota em Chrome 144+ e volte ao painel.
+4. Deixe uma única aba do chat e clique **Conectar e configurar**. Autorize a
+   solicitação no Chrome e siga o assistente. Abrir o perfil não é o mesmo que
+   autorizar controle: o acesso CDP pode alcançar todas as abas e contas.
+
+Se o Chrome recusar a abertura ou o executável não estiver disponível, a interface
+mostra a falha em vez de anunciar sucesso. O nome do perfil e a presença de um
+endpoint não provam qual conta a conexão disponibiliza. Essa verificação continua
+manual. Não forçamos flags de depuração nem duplicamos o `user_data_dir` por
+Playwright. O fluxo nativo no seu desktop/conta ainda não foi homologado aqui.

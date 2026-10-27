@@ -58,6 +58,36 @@ class TestPanel(unittest.TestCase):
         connection.close()
         return result
 
+    def test_native_profile_open_is_authenticated_allowlisted_and_blocked_while_busy(self):
+        body={'profile':'chrome:Default','destination':'chat','provider':'gemini'}
+        with patch('browserapi_lab.profiles.open_profile') as native:
+            self.assertEqual(self.request('/api/profile',method='POST',body=body,token=False)[0],403)
+            native.assert_not_called()
+            self.assertEqual(self.request('/api/profile',method='POST',body=body)[0],200)
+            native.assert_called_once_with('chrome:Default','https://gemini.google.com/app')
+            native.reset_mock()
+            body['destination']='arbitrary-command'
+            self.assertEqual(self.request('/api/profile',method='POST',body=body)[0],400)
+            self.panel.phase='waiting';body['destination']='permission'
+            self.assertEqual(self.request('/api/profile',method='POST',body=body)[0],400)
+            native.assert_not_called()
+            self.panel.phase='idle'
+        self.assertEqual(self.request('/inter.ttf',token=False)[0],200)
+        self.assertEqual(self.request('/mono.ttf',token=False)[0],200)
+
+    def test_ledger_spacing_and_local_font_contract(self):
+        import re
+        from browserapi_lab.gui import ASSETS
+        css=(ASSETS/'panel.css').read_text()
+        for prop,value in re.findall(r'(padding(?:-[a-z]+)?|margin(?:-[a-z]+)?|gap)\s*:\s*([^;}]+)',css):
+            if prop=='margin-left' and value in ('232px','200px'):
+                continue  # offsets iguais à largura da navegação, não espaçadores
+            for number in re.findall(r'(?<![.\d])(\d+)px',value):
+                self.assertIn(int(number),(0,4,8,16,24,32,40,48,56,64),(prop,value))
+        self.assertNotIn('https://',css)
+        self.assertIn('font-weight:450',css)
+        self.assertIn('prefers-reduced-motion',css)
+
     def test_auto_update_setting_is_authenticated_and_updating_blocks_tasks(self):
         from browserapi_lab.updates import UpdateStore, Updater
         store = UpdateStore(Path(self.tmp.name)/'update-data')
