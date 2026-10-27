@@ -11,3 +11,4 @@ Textos: camada maior/menor, Voltar e escolher outra; seleção antes rejeitada c
 Exclusão autenticada apenas de cadastro/recibo, bloqueada durante operação/API; histórico RAG e conversas não são apagados.
 Limites: LMArena real/conta pessoal não homologados; frames e shadow DOM isolados não têm mapa gráfico; seletores por posição continuam frágeis.
 capturas na execução 40509596029: checks 2026-10-27 13:10:59 UTC > mtime de assets (incluindo picker.js) 13:10:15 UTC ✓.
+Publicação v0.6.0 aprovada em main 40511019910; 34 payloads do instalador e atualização 0.5.1→0.6.0 conferidos — [prova](../../results/ci/visual-060-updater/published.json).

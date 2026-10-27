@@ -1,0 +1,16 @@
+{
+  "verified_at": "2026-10-27T13:28:56.785594+00:00",
+  "release": "https://github.com/Financia-Brasil/browserapi-lab/releases/tag/v0.6.0",
+  "release_commit": "04a7508cb65938dc1191ce9f5a162fa924577537",
+  "version": "0.6.0",
+  "hashes": {
+    "BrowserAPI-Ubuntu.deb": "a36ec6bc7b607d87d0f58c409e24465ffab6a38dc69071f2b3f6933dea22cb38",
+    "BrowserAPI-runtime.zip": "2ac69337702b370b9f10c97dd16de898871ba0d5287fc85ed9cecd043f0b0426",
+    "update.json": "bc3e675a16f02025c9246414c1d29ab2e6c59b66308f83ba6118502843b44967",
+    "SHA256SUMS": "8bda951551de06faed87e30707353a3ac648fac7bdc7fe69e7b50f9f647ba5d3"
+  },
+  "runtime_matches_tested_source": true,
+  "deb_runtime_payloads_match": 34,
+  "github_asset_digests_match": true,
+  "method": "Pinned GitHub repository contents + SHA256SUMS + GitHub asset digests; publisher trust, not independent signature or personal account/desktop test."
+}

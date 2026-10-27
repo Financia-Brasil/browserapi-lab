@@ -188,3 +188,17 @@ Conexões primeiro, com abertura nativa de perfil Chrome já existente e permiss
 separada; API, atividade e manutenção em áreas próprias. Fontes locais, teclado,
 contraste e capturas desktop/375px: [revisão com evidências](docs/design/UI_050_REVIEW.md).
 Abertura normal de perfil não implica conta verificada nem autorização CDP.
+
+## Assistente gráfico 0.6.0
+
+**Corrigir campos → área azul → prévia verde → Usar esta área.**
+O assistente enumera candidatos visíveis sem escrever em todos os campos. Para
+textos, permite ajustar camadas e voltar antes de confirmar. Ações inaplicáveis
+ficam ocultas. Esc cancela; Mover painel libera regiões encobertas.
+
+**Meus chats → Ajustar ou excluir → Excluir conexão** remove apenas o cadastro
+local e recibo, com confirmação. Não apaga conversas, Chrome ou histórico RAG.
+
+[Instalador 0.6.0](https://github.com/Financia-Brasil/browserapi-lab/releases/download/v0.6.0/BrowserAPI-Ubuntu.deb) · [Capturas e limites](docs/design/UX_060_REVIEW.md).
+Atualização da versão pública 0.5.1 para 0.6.0 testada. LMArena real/conta pessoal
+ainda não homologados; frames isolados não têm este mapa gráfico.
