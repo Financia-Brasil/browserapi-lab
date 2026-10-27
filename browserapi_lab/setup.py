@@ -166,12 +166,24 @@ def blocked_login_receipt(page, config, store, tell, timings=None):
 def authorize_session(config, ask, tell):
     if config.session_mode != 'existing_chrome':
         return True
+    profile = (' Perfil escolhido: ' + config.personal_profile + '.') if config.personal_profile else ''
+    tell('Vamos reaproveitar o chat aberto ou abrir uma aba para você. Confira a conta no Chrome antes de continuar.')
+    if not confirmed(ask, 'Conectar ao seu Chrome?' + profile + ' A permissão permite acesso às abas e contas desse navegador. Nada será enviado sem sua autorização.'):
+        return False
     if config.personal_profile:
-        tell('Perfil indicado por você: '+config.personal_installation+' / '+config.personal_profile+'. Abra esse perfil e confira a conta na aba. CDP não comprova a identidade do perfil/conta.')
-    tell('Modo perfil pessoal: use Chrome 144+ já aberto e habilite Depuração remota em chrome://inspect/#remote-debugging.')
-    tell('O Chrome pedirá sua permissão. Esta conexão pode acessar todas as abas/contas desse navegador; só prossiga se confiar no programa. Não copiamos cookies nem abrimos outro processo no seu perfil.')
-    tell('Deixe somente uma aba do chat escolhido aberta. O programa não fecha o Chrome ao desconectar.')
-    return confirmed(ask, 'Autoriza conectar ao Chrome pessoal já aberto com esse acesso?')
+        from .existing_chrome import endpoint, ExistingChromeError
+        try:
+            endpoint(installation=config.personal_installation)
+        except ExistingChromeError:
+            from .profiles import inventory, open_profile
+            selected = next((p for p in inventory() if p['installation'] == config.personal_installation
+                             and p['directory'] == config.personal_profile and p['connectable']), None)
+            if selected is None:
+                raise ExistingChromeError('O perfil escolhido não está disponível. Atualize a lista e escolha seu perfil novamente.')
+            open_profile(selected['id'], 'chrome://inspect/#remote-debugging')
+            ask('No Chrome que abriu, habilite Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
+            endpoint(installation=config.personal_installation)
+    return True
 
 
 @contextmanager
@@ -211,7 +223,7 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         config = ChatConfig(name, url, browser=browser, executable=executable, provider=provider).validate()
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
-    tell('3/5 — Abra o navegador do projeto. Faça login e escolha o modelo manualmente.')
+    tell('Confira sua conta e escolha o modelo na janela do chat.' if config.session_mode == 'existing_chrome' else 'Faça login e escolha o modelo na janela que abrir.')
     tell('Se o Google disser que o navegador não é seguro, interrompa. Não avance ao apontamento; o programa não contorna essa proteção.')
     with measured_page(session_factory, config, store) as (page, session_timings):
         ask('Quando o chat e o modelo estiverem prontos, pressione Enter. ')

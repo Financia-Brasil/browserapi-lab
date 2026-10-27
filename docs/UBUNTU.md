@@ -124,7 +124,7 @@ O programa recusa controles explicitamente identificados como microfone/voz,
 tanto no apontamento quanto antes do clique de envio. Isso não é reconhecimento
 universal de qualquer ícone ou de toda mudança possível do site.
 
-### Usar seu Chrome pessoal já aberto e logado — experimental
+### Usar seu Chrome pessoal — referência do fluxo anterior (veja 0.5.1 ao final)
 
 Esta opção atende ao pedido explícito do usuário de usar o perfil cotidiano,
 sem copiar cookies e sem lançar outra instância sobre seu diretório de perfil.
@@ -132,8 +132,8 @@ sem copiar cookies e sem lançar outra instância sobre seu diretório de perfil
 1. Use Chrome **144 ou mais recente**, já aberto no perfil/conta desejados.
 2. No Chrome, abra **chrome://inspect/#remote-debugging** e habilite a opção de
    depuração remota. Se a opção não existir, não tente flags/comandos para forçar.
-3. Deixe somente uma aba do chat escolhido aberta nesse navegador, na conta e
-   no modelo desejados. Outras abas não serão fechadas pelo programa.
+3. Não precisa abrir o chat antes: o aplicativo abre quando necessário. Se já
+   houver várias abas do mesmo chat, mantenha somente a que pretende usar.
 4. No formulário BrowserAPI, escolha **Meu Chrome já aberto e logado**, deixe
    Google Chrome selecionado e salve com **outro nome**, por exemplo `gemini-logado`.
 5. Leia o aviso de acesso e autorize a conexão no painel e no pedido do próprio
@@ -385,7 +385,7 @@ privado preparado durante a primeira sessão, inclusive após autoatualizar de
 No modo **Meu Chrome já aberto e logado**, use **Listar perfis** e selecione a
 instalação/diretório pretendidos. Os nomes vêm de metadados locais; não comprovam
 conta Google, sincronização ou qual contexto o Chrome disponibiliza por CDP. Abra
-você mesmo esse perfil e deixe a aba correta aberta. Não copiamos credenciais,
+o perfil desejado ou use Conectar para o fluxo guiado descrito no final desta página. Não copiamos credenciais,
 não fechamos outras abas e não lançamos outro processo sobre seu perfil pessoal.
 Chrome Beta/Unstable são selecionáveis; Chromium/Edge aparecem apenas no inventário.
 
@@ -401,26 +401,20 @@ tokens. IDs separam recuperação local, não conversas remotas. É possível ap
 o histórico ou revogar a chave pelo painel, sem usar terminal. Otimizações
 headless/bloqueio de recursos só se aplicam a perfil dedicado e são experimentais.
 
-## Interface 0.5: abrir seu perfil de verdade
+## Interface 0.5.1: perfil e chat, depois Conectar
 
-A navegação agora separa **Conexões**, **Atividade**, **API local** e **Configurações**.
-Componentes e atualização automática ficam em Configurações; não são pré-requisitos
-visuais para escolher um perfil. Métricas ficam em Atividade. O assistente de voz,
-a digitação manual e a autorização antes do teste continuam obrigatórios.
+1. Em **Conexões**, escolha seu perfil e o chat. Clique em **Conectar**.
+2. Autorize o acesso ao Chrome. Se faltar a permissão inicial, o aplicativo abre
+   a tela do Chrome no perfil escolhido: habilite Depuração remota e continue.
+3. O aplicativo reaproveita uma aba do chat ou abre uma nesse Chrome. Não exige
+   que você abra o chat antes, nem recarrega uma conversa já encontrada.
+4. Confira sua conta e o modelo. O assistente mantém o ensino manual de voz/Enviar
+   e pede autorização separada antes de enviar o teste.
 
-1. Em **Conexões**, mantenha **Usar meu perfil existente do Chrome** e escolha o
-   perfil pelo nome. A lista carrega sozinha; **Atualizar lista** refaz a busca.
-2. Escolha o chat e o nome da conexão. **Abrir este perfil** pede ao Chrome normal
-   que abra o chat no diretório selecionado, usando o encaminhamento nativo do
-   Chrome. Não é Playwright abrindo outro perfil vazio; não copiamos sua sessão.
-3. Confira sua conta no avatar. **Configurar permissão** abre a tela do próprio
-   Chrome nesse perfil; habilite Depuração remota em Chrome 144+ e volte ao painel.
-4. Deixe uma única aba do chat e clique **Conectar e configurar**. Autorize a
-   solicitação no Chrome e siga o assistente. Abrir o perfil não é o mesmo que
-   autorizar controle: o acesso CDP pode alcançar todas as abas e contas.
-
-Se o Chrome recusar a abertura ou o executável não estiver disponível, a interface
-mostra a falha em vez de anunciar sucesso. O nome do perfil e a presença de um
-endpoint não provam qual conta a conexão disponibiliza. Essa verificação continua
-manual. Não forçamos flags de depuração nem duplicamos o `user_data_dir` por
-Playwright. O fluxo nativo no seu desktop/conta ainda não foi homologado aqui.
+**Opções e ajuda** reúne nome da conexão, perfil separado e ações manuais de
+recuperação. Logs ficam recolhidos. Não há flags a digitar ou credenciais a copiar.
+Se houver várias abas do mesmo chat, o aplicativo pede que você escolha qual
+manter; não escolhe uma conta/conversa arbitrária nem fecha suas abas.
+O nome do perfil não comprova a conta disponibilizada pelo Chrome; confira o avatar.
+Chrome 144+ continua necessário para o consentimento nativo. Seu desktop/conta real
+não foi homologado neste ambiente; os testes usam fixtures e processos descartáveis.
