@@ -372,6 +372,7 @@ class TestGraphicalJourney(BrowserTestCase):
             expect(self.page.locator('#error')).to_contain_text('Permissão do Chrome necessária')
             with self.panel.lock:
                 self.panel.phase='idle'
+                self.panel.messages.clear()
             expect(self.page.locator('#error')).to_be_hidden()
             self.page.locator('[data-view=connections]').click()
             self.page.set_viewport_size({'width':375,'height':812})
