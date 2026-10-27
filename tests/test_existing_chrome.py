@@ -107,7 +107,7 @@ class TestProfileIdentity(unittest.TestCase):
         context, page = self.probe('/fixtures/google-chrome/Profile 1')
         verify_profile(context, Path('/fixtures/google-chrome/Profile 1'))
         page.close.assert_called_once_with()
-        page.wait_for_function.assert_called_once()
+        page.locator.assert_called_once_with('#profile_path')
         context.close.assert_not_called()
 
     def test_two_choices_cannot_silently_bind_to_same_profile(self):

@@ -21,15 +21,21 @@ class TestChatWorkflow(BrowserTestCase):
 
     def test_native_profile_proof_reads_real_chromium_and_rejects_other_directory(self):
         from browserapi_lab.existing_chrome import verify_profile, ProfileMismatchError
-        context = self.session.context
-        before = list(context.pages)
-        expected = self.session.config.profile_dir / 'Default'
-        verify_profile(context, expected)
-        self.assertEqual(list(context.pages), before)
-        with self.assertRaises(ProfileMismatchError):
-            verify_profile(context, self.session.config.profile_dir / 'Profile 1')
-        self.assertEqual(list(context.pages), before)
-        self.assertFalse(self.page.is_closed())
+        # O headless shell padrão não tem WebUI. Testar o Chromium COMPLETO,
+        # como o Chrome pessoal, sem reutilizar credenciais ou outro Playwright.
+        with tempfile.TemporaryDirectory() as tmp:
+            context = self.session._pw.chromium.launch_persistent_context(
+                tmp, headless=True, executable_path=self.session._pw.chromium.executable_path)
+            try:
+                before = list(context.pages)
+                verify_profile(context, Path(tmp) / 'Default')
+                self.assertEqual(list(context.pages), before)
+                with self.assertRaises(ProfileMismatchError):
+                    verify_profile(context, Path(tmp) / 'Profile 1')
+                self.assertEqual(list(context.pages), before)
+                self.assertFalse(before[0].is_closed())
+            finally:
+                context.close()  # só o Chromium descartável criado neste teste
 
     def test_removing_origin_guard_allows_send_to_wrong_destination_counterexample(self):
         # Contraprova de H4, SOMENTE fixture local. Nunca uma conta pessoal.
@@ -232,9 +238,9 @@ class TestChatWorkflow(BrowserTestCase):
                     self.assertLess(time.monotonic(),deadline)
                     self.page.wait_for_timeout(100)
                 address = endpoint(home)
-                config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True)
+                config = BrowserConfig(profile='connection', profiles_root=home/'app',attach_existing_chrome=True, existing_profile='Default')
                 def exercise_connection():
-                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address):
+                    with patch('browserapi_lab.existing_chrome.endpoint', return_value=address), patch('browserapi_lab.profiles.installation_root', return_value=profile):
                         with BrowserSession(config) as attached:
                             count = len(attached.context.pages)
                             page = attached.page(self.server.url())

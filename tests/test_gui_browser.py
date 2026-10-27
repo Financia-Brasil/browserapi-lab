@@ -58,6 +58,17 @@ class TestGraphicalJourney(BrowserTestCase):
         self.assertIn('Não houve medição de resposta do modelo', text)
         self.assertIn('https://arena.ai', text)
         self.assertIn('Página diferente', self.page.locator('#result-title').inner_text())
+        evidence = REPO_ROOT / 'results/ci/profile-binding'
+        evidence.mkdir(parents=True, exist_ok=True)
+        viewport = self.page.viewport_size
+        try:
+            for width, label in ((1280, 'desktop'), (375, 'mobile')):
+                self.page.set_viewport_size({'width':width, 'height':900})
+                self.page.locator('#receipt').scroll_into_view_if_needed()
+                self.page.screenshot(path=str(evidence / ('diagnostic-' + label + '.png')), full_page=True)
+        finally:
+            self.page.set_viewport_size(viewport)
+
 
     def wait_question(self, text):
         self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)

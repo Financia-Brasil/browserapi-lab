@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import re
+import time
 
 
 class ExistingChromeError(RuntimeError):
@@ -40,13 +41,21 @@ def verify_profile(context, expected):
     aba interna que criamos; nunca persistir o caminho pessoal lido.
     """
     probe = None
+    stage = 'abrir página interna'
     try:
         probe = context.new_page()
         probe.goto('chrome://version/', wait_until='domcontentloaded', timeout=10000)
         if probe.url != 'chrome://version/':
             raise ValueError('not a browser-owned page')
-        probe.wait_for_function("document.getElementById('profile_path')?.textContent.trim()", timeout=5000)
-        actual = probe.locator('#profile_path').inner_text().strip()
+        stage = 'ler identificação do perfil'
+        # WebUI pode bloquear eval usado por wait_for_function (CSP). Ler só
+        # o campo nativo, sem relaxar CSP nem injetar código na página interna.
+        deadline = time.monotonic() + 5
+        field = probe.locator('#profile_path')
+        actual = field.inner_text(timeout=5000).strip()
+        while not actual and time.monotonic() < deadline:
+            probe.wait_for_timeout(100)
+            actual = field.inner_text(timeout=1000).strip()
         if not actual or not Path(actual).is_absolute():
             raise ValueError('missing profile path')
         if Path(actual).resolve() != Path(expected).resolve():
@@ -60,7 +69,7 @@ def verify_profile(context, expected):
         raise
     except Exception:
         raise ExistingChromeError(
-            'Não foi possível verificar o perfil recebido do Chrome. Nenhum chat foi aberto ou preenchido. '
+            'Não foi possível verificar o perfil recebido do Chrome (' + stage + '). Nenhum chat foi aberto ou preenchido. '
             'Confira se a página interna chrome://version abre normalmente e reconecte; não assumimos outro perfil.') from None
     finally:
         if probe is not None:
