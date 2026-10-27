@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-27T14:49:33+00:00",
+  "outcome": "FAIL",
+  "error": "ExistingChromeError: O Chrome não abriu a verificação do perfil escolhido. Nenhum chat foi aberto ou preenchido. Abra esse perfil pelo avatar do Chrome, confira a Depuração remota e reconecte. Se continuar, esta versão do Chrome não permite escolher esse perfil por este modo.",
+  "steps": [
+    {
+      "t": 2.59,
+      "step": "chrome_started"
+    },
+    {
+      "t": 7.1,
+      "step": "handoff_diagnostic",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "opened": [
+        true,
+        false
+      ]
+    }
+  ],
+  "scope": "Chrome descartável em pasta temporária; não é o seu Chrome nem uma conta real.",
+  "chrome": "Google Chrome 155.0.8059.39",
+  "display_available": true,
+  "handoff": [
+    {
+      "target": "about:blank",
+      "directory": "Default",
+      "lock": "runnervmtai0g-2332",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[2467:2467:0100/000000.658240:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[2468:2468:0100/000000.691797:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.14,
+      "new_targets": [
+        "chrome://newtab/"
+      ]
+    },
+    {
+      "target": "chrome://version/",
+      "directory": "Default",
+      "lock": "runnervmtai0g-2332",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[2532:2532:0100/000000.771213:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[2533:2533:0100/000000.772892:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.07,
+      "new_targets": []
+    }
+  ],
+  "process_states": {
+    "total": 17,
+    "zumbis": 0
+  },
+  "chrome_log_filtered": [
+    "",
+    "DevTools listening on ws://127.0.0.1:41887/devtools/browser/73d4ddca-f74a-4601-8cfd-65be0ee746c7",
+    "[2332:2357:1027/144939.723115:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[2332:2357:1027/144939.723229:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[2332:2357:1027/144939.723383:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[2332:2332:1027/145001.903562:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2332:2332:1027/145001.925691:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2332:2332:1027/145001.948587:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type."
+  ]
+}
