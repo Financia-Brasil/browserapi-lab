@@ -87,6 +87,8 @@ class TestGraphicalJourney(BrowserTestCase):
                                 window.__fixtureTeaching.push('send'); send.click(); window.__fixtureSelected = true;
                             }
                         }
+                        const confirm = document.querySelector('[data-picker-confirm]');
+                        if (confirm && !confirm.disabled) confirm.click();
                         if (window.__fixtureClearAllowed && window.__fixtureSelected && !window.__balTypingCleanup && !window.__balPickerCleanup && composer.value === 'rascunho digitado na fixture') {
                             window.__fixtureTeaching.push('removed-own-draft');
                             composer.value = ''; composer.dispatchEvent(new Event('input',{bubbles:true}));
@@ -115,6 +117,41 @@ class TestGraphicalJourney(BrowserTestCase):
         self.page.click('#no')
         self.wait_question('Apontar resposta do assistente')
         self.page.click('#no')
+
+    def test_delete_saved_connection_cancel_then_confirm(self):
+        from playwright.sync_api import expect
+        self.seed()
+        self.open_panel()
+        self.page.locator('#chats details summary').click()
+        self.page.once('dialog',lambda d:d.dismiss())
+        self.page.get_by_role('button',name='Excluir conexão',exact=True).click()
+        self.assertEqual(self.store.names(),['saved'])
+        self.page.once('dialog',lambda d:d.accept())
+        self.page.get_by_role('button',name='Excluir conexão',exact=True).click()
+        expect(self.page.locator('#chat-count')).to_have_text('0')
+        self.assertEqual(self.store.names(),[])
+        expect(self.page.locator('#composer-panel')).to_be_hidden()
+
+    def test_visual_picker_graphical_preview_and_responsive_evidence(self):
+        self.page.goto(self.chat_server.url())
+        script=(REPO_ROOT/'browserapi_lab/assets/picker.js').read_text()
+        self.page.set_viewport_size({'width':1440,'height':1040})
+        self.page.evaluate(script,'campo de mensagem')
+        self.page.locator('#composer').click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
+        destination=REPO_ROOT/'results/ci/ui-redesign'
+        destination.mkdir(parents=True,exist_ok=True)
+        self.page.screenshot(path=str(destination/'picker-desktop.png'),full_page=True)
+        self.page.set_viewport_size({'width':375,'height':812})
+        self.page.screenshot(path=str(destination/'picker-mobile.png'),full_page=True)
+        self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+        self.page.get_by_role('button',name='Escolher outra',exact=True).click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
+        self.page.locator('#composer').click()
+        self.page.locator('[data-picker-confirm]').click()
+        self.assertEqual(self.page.evaluate('window.__balPick.selector'),'#composer')
+        self.assertEqual(self.page.locator('#composer').input_value(),'')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
     def test_managed_update_reloads_interface_without_reinstall_or_new_token(self):
         class Managed:
@@ -392,7 +429,7 @@ class TestGraphicalJourney(BrowserTestCase):
             expect(self.page.locator('#chat-count')).to_have_text('1')
             self.page.screenshot(path=str(evidence/'saved-chat.png'),full_page=True)
             assets=REPO_ROOT/'browserapi_lab/assets'
-            latest_mtime=max((assets/name).stat().st_mtime for name in ('panel.html','panel.js','panel.css'))
+            latest_mtime=max((assets/name).stat().st_mtime for name in ('panel.html','panel.js','panel.css','picker.js'))
             def luminance(color):
                 values=[int(color[i:i+2],16)/255 for i in (1,3,5)]
                 return sum(v*k for v,k in zip([x/12.92 if x<=.04045 else ((x+.055)/1.055)**2.4 for x in values],[.2126,.7152,.0722]))

@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.5.1';
+const PANEL_VERSION = '0.6.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -118,12 +118,21 @@ function renderChats(chats) {
     if (chat.personal_profile) info.textContent += ` · perfil indicado: ${chat.personal_installation}/${chat.personal_profile} (conta não verificada)`;
     box.append(info);
     const actions=document.createElement('div');actions.className='chat-actions';
-    const advanced=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Ajustar campos e botão de voz';advanced.append(summary);
+    const advanced=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Ajustar ou excluir';advanced.append(summary);
     for (const [caption, operation] of [['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send'],['Testar agora','check'],['Corrigir campos','repair']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';
       button.onclick = () => task(operation, {name: chat.name, ...(operation==='use_existing' ? {personal_profile:$('personal-profile').value}: {})});
       (operation==='point_voice' || operation==='point_send' ? advanced : actions).append(button);
     }
+    const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Excluir conexão';
+    remove.onclick=async()=>{
+      if(busy() || incompatible() || !confirm('Excluir esta conexão do BrowserAPI? Seu Chrome e suas conversas não serão apagados.'))return;
+      pending=true;controls();
+      try{await api('chat/delete',{name:chat.name});await refresh();}
+      catch(err){error(err.message);}
+      finally{pending=false;controls();}
+    };
+    advanced.append(remove);
     box.append(actions,advanced);$('chats').append(box);
   }
 }
@@ -236,7 +245,7 @@ async function scanProfiles(){
     if(!supported.length)$('personal-profile').append(new Option('Nenhum perfil do Chrome encontrado',''));
     for(const p of supported){
       const installation={chrome:'Chrome','chrome-beta':'Chrome Beta','chrome-unstable':'Chrome Dev'}[p.installation];
-      $('personal-profile').append(new Option(`${p.label} · ${installation} (${p.directory})`,p.id));
+      $('personal-profile').append(new Option(`${p.directory} · ${p.label} · ${installation}`,p.id));
     }
     if(supported.some(p=>p.id===previous))$('personal-profile').value=previous;
     profileNote();
