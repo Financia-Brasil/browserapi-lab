@@ -94,10 +94,23 @@ def manual_send_pick(page, config, ask, tell, picker):
 
 def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False, manual_send=False, fields=None):
     labels = {'composer': 'campo de mensagem', 'send': 'botão Enviar',
-              'user': 'mensagem do usuário', 'assistant': 'resposta do assistente'}
+              'user': 'sua pergunta já enviada na conversa', 'assistant': 'a resposta do chat'}
+    # A pergunta antiga ("mensagem do usuário?") não dizia se era o balão da
+    # conversa ou o campo de digitar, e o app parecia mudo sobre o que fazer.
+    questions = {
+        'composer': 'Apontar o campo onde você digita a mensagem (a caixa de texto vazia)?',
+        'send': 'Apontar o botão enviar (Enviar / seta), depois de digitar sem enviar?',
+        'user': 'Apontar A SUA PERGUNTA JÁ ENVIADA: o balão com o texto que você mandou (não o campo de digitar)?',
+        'assistant': 'Apontar A RESPOSTA DO CHAT: o balão da resposta que o modelo deu?',
+        'voice': 'Apontar o botão de microfone, com o campo vazio?',
+    }
     if manual_send or (fields and 'voice' in fields):
         labels = {'composer': 'campo de mensagem', 'voice': 'botão de comando de voz', **{key: label for key, label in labels.items() if key != 'composer'}}
-    tell('Reparo por apontamento. Tenha uma mensagem sua e uma resposta visíveis na conversa.')
+    tells_history = fields is None or bool({'user', 'assistant'} & set(fields))
+    tell('Reparo por apontamento: clique no elemento dentro da janela do chat. Esc cancela.')
+    if tells_history:
+        tell('Para as mensagens da conversa, envie você mesmo uma pergunta no chat, espere a resposta e volte. '
+             'O campo onde se digita NÃO é a pergunta já enviada.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
     for key, label in labels.items():
         if fields is not None and key not in fields:
@@ -109,7 +122,7 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
                 config.voice_signature = ''
                 tell('Chat sem entrada por voz: nenhum estado de microfone será usado.')
         else:
-            should_pick = (key == 'send' and manual_send) or confirmed(ask, f'Apontar {label}?')
+            should_pick = (key == 'send' and manual_send) or confirmed(ask, questions.get(key, f'Apontar {label}?'))
         if should_pick:
             preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
             temporary = False
@@ -289,7 +302,8 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         return receipt
 
 
-def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None):
+def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None,
+          show_answer=True, record=None):
     config = store.load(name)
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
@@ -313,8 +327,17 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
             store.save_status(name, receipt)
         tell(receipt['message'])
         tell(receipt['action'])
-        if result.answer is not None and message is not None:
+        if result.answer is not None and message is not None and show_answer:
             tell(result.answer)
+        # Chamado só depois de uma resposta nova validada. Recibos, telemetria e
+        # relatórios continuam sem o texto; quem exibe decide onde guardá-lo.
+        if (record is not None and message is not None and result.status == 'success'
+                and isinstance(result.answer, str) and result.answer.strip()):
+            try:
+                record(name, message, result.answer, receipt)
+            except Exception:
+                tell('A resposta chegou, mas o painel não conseguiu mostrá-la. Nada foi reenviado; '
+                     'veja a conversa no navegador.')
         return receipt
 
 

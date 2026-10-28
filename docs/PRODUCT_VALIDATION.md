@@ -346,3 +346,94 @@ sem navegador. Corpus sintético persistido >6M caracteres coberto por teste de
 recuperação; não equivale a medir 1M tokens. Nenhuma conta real/laptop do usuário
 foi usada. Permanecem sem prova: Chrome pessoal nativo nesse desktop, sites
 autenticados, vantagem das otimizações, 4 GB/24x7 e Fetch/XHR direto.
+
+
+## Marco 0.7.0 — a resposta na conversa do painel (2026-10-28)
+
+Até a 0.6.1, a resposta de **Conversar** só aparecia em “Ver detalhes da operação”.
+A 0.7.0 acrescenta o cartão **Conversa** com turnos, data/hora, tempo da troca,
+**Copiar última resposta** e **Limpar painel**. Contrato e limites:
+[design/UX_070_SPEC.md](design/UX_070_SPEC.md); revisão do que foi inspecionado:
+[design/UX_070_REVIEW.md](design/UX_070_REVIEW.md).
+
+O que está comprovado por teste local:
+
+- Turno só é exibido após mensagem enviada e resposta **nova validada**; recusa,
+  timeout, envio ambíguo, resposta antiga e verificação automática não entram.
+- Falha ao exibir não altera o recibo nem provoca reenvio; recibo, telemetria e
+  `/api/state` continuam sem pergunta e sem resposta.
+- Orçamento de 40 mensagens/120 mil caracteres por conexão, descarte em pares,
+  preservação do turno mais novo e corte com aviso.
+- Rotas de leitura/limpeza exigem token, Host/Origin locais e ociosidade; excluir
+  a conexão apaga o texto exibido daquele cadastro.
+- Texto renderizado como texto (HTML da página não executa); cartão responsivo e
+  bloqueado quando o painel e o programa têm versões diferentes.
+
+Evidência (2026-10-28), sem inflar o que existe:
+
+```text
+lab 40609553859 (branch) e 40609557720 (PR): SUCCESS
+  Integração real com Chromium: Ran 394 tests in 213,268s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 35,958s — OK
+  Núcleo Python (sem navegador): aprovado
+Núcleo local deste ambiente, sem Chromium: 289 testes, 17 ignorados, OK
+```
+
+Capturas reais em `results/ci/ui-review-40609553859/ui-redesign/conversation-desktop.png`
+e `conversation-mobile.png`, inspecionadas junto com os turnos, botões e o rodapé de
+escopo; em 375px não há rolagem horizontal. A primeira execução
+([40608925770](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40608925770))
+falhou em um assert **do teste** (o fixture de contrato responde JSON, não Markdown);
+o produto já exibia o texto íntegro e o teste foi corrigido, sem alterar prazo,
+reenvio ou código de envio. Leitura humana de usabilidade e o desktop Linux Lite do
+usuário continuam pendentes.
+
+Limites que permanecem abertos: turno só aparece ao fim da resposta validada (sem
+eco parcial de streaming); chamadas da API local/agentes não entram nesta conversa;
+nada é persistido; Gemini/Arena autenticados e Chrome pessoal continuam **não
+homologados**. O Marco 0.6.1 e as pendências externas anteriores não são afetados.
+
+
+## Marco 0.8.0 — correções do uso real e Atividade gráfica (2026-10-28)
+
+Origem: relato do usuário após usar a 0.6.1/0.7.0 (falso “Envio sem confirmação”,
+exclusão de conexões, pergunta de apontamento ambígua, pedido de gráficos na aba
+Atividade e menos texto). Contrato: [design/UX_080_SPEC.md](design/UX_080_SPEC.md);
+revisão: [design/UX_080_REVIEW.md](design/UX_080_REVIEW.md).
+
+| Relato | Estado neste marco | Prova |
+|---|---|---|
+| “Envio sem confirmação” com a mensagem na tela | comparação normalizada, reuso de nó, até 9 s e campo esvaziado como evidência adicional; contraprova de divergência mantida | 7 testes unitários + 2 testes de navegador (a executar no CI) |
+| “Não dá pra excluir” | **Excluir** visível na linha do chat, com nome na confirmação | contrato de UI + DOM emulado + teste de navegador |
+| “Apontar mensagem do usuário?” confuso | perguntas dizem qual elemento e instruem a enviar uma pergunta antes | teste unitário de `repair_fields` |
+| Falta gráficos em Atividade | seis gráficos SVG com legenda e `aria-label` | contrato de UI + DOM emulado + teste de navegador |
+| “Tira esses texto” | Configurações e Próxima ação encurtadas; texto longo recolhido | inspeção das capturas `ui-redesign/*` |
+
+Correção de defeito introduzida na 0.7.0: aspa faltante em `id="view-activity"`
+quebrava o id da aba Atividade. Corrigido; teste de parser impede repetição.
+
+Consumo: caracteres enviados/recebidos são medidos de verdade pelo painel;
+`tokens` continua `null`/“Não medido” e a estimativa de 4 caracteres/token aparece
+rotulada como grosseira. Não há custo, quota ou `usage` do provedor inventados.
+
+Evidência em 2026-10-28:
+
+```text
+lab 40624683164 (branch) e 40624688687 (PR): SUCCESS
+  Integração real com Chromium: Ran 411 tests in 220,003s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 42,095s — OK
+  Núcleo Python (sem navegador): aprovado
+Local, sem Chromium neste ambiente: 303 testes, 17 ignorados, OK
+```
+
+Capturas em Chromium real da fixture, inspecionadas:
+`results/ci/ui-review-40624683164/ui-redesign/activity-usage-desktop.png`,
+`activity-usage-mobile.png` e `activity-desktop.png`. Três rodadas anteriores
+falharam: duas por erros nos testes novos deste marco e uma por corrida real no
+contador da API local (resolvida no produto). A causa exata do falso negativo no
+computador do usuário não é afirmada como reproduzida — os testes reproduzem
+normalização de texto e atraso de renderização.
+
+Corrida corrigida no produto nesta rodada: a chamada da API local só liberava o
+contador depois de escrever o socket, então pedir “apagar histórico/revogar” logo
+após uma resposta podia receber 409 “ocupado”. Novo teste cobre o caso sem espera.

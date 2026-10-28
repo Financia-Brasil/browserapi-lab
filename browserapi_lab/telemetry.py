@@ -45,13 +45,25 @@ class Telemetry:
         if name is not None:
             safe_name(name)
         with self.lock:
-            self.active = {'operation':operation, 'name':name, 'started':self.clock(), 'manual_wait_ms':0.0}
+            self.active = {'operation':operation, 'name':name, 'started':self.clock(), 'manual_wait_ms':0.0,
+                           'prompt_chars':0, 'response_chars':0, 'measured_responses':0}
 
     def source(self,name):
         safe_name(name)
         with self.lock:
             if self.active:
                 self.active['name']=name
+
+    def usage(self, prompt_chars, response_chars):
+        """Contabilidade medida em caracteres; nunca inventa tokens do provedor."""
+        # Medição é do par: meio consumo implausível não entra como verdade.
+        if not (numeric(prompt_chars) and numeric(response_chars)):
+            return
+        with self.lock:
+            if self.active:
+                self.active['prompt_chars'] += int(prompt_chars)
+                self.active['response_chars'] += int(response_chars)
+                self.active['measured_responses'] += 1
 
     def user_wait(self, milliseconds):
         with self.lock:
@@ -74,6 +86,8 @@ class Telemetry:
             record = {'id':self.sequence, 'operation':active['operation'], 'name':active['name'],
                       'phase':phase if phase in ('done','error','cancelled') else 'error',
                       'status':status, 'timings':timings,
+                      'prompt_chars':active['prompt_chars'] if active['prompt_chars'] else None,
+                      'response_chars':active['response_chars'] if active['response_chars'] else None,
                       'at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()), 'observed':self.clock()}
             attempts=[]
             if isinstance(receipt.get('attempts'),list):
@@ -109,9 +123,16 @@ class Telemetry:
                 sources[record['name']] = {'state':'not_observed','at':None,'stale':False}
         if active and active['name']:
             sources[active['name']] = {'state':'busy','at':None,'stale':False}
+        prompt_chars = sum(r.get('prompt_chars') or 0 for r in requests)
+        response_chars = sum(r.get('response_chars') or 0 for r in requests)
         for record in records:
             record.pop('observed')
         return {'scope':'current_process_rolling_window', 'limit':self.limit, 'history':records,
+                'usage':{'prompt_chars':prompt_chars, 'response_chars':response_chars,
+                         'total_chars':prompt_chars+response_chars,
+                         'measured_responses':sum(1 for r in requests if r.get('response_chars')),
+                         'estimated_tokens':None, 'tokens':None, 'token_source':'not_reported',
+                         'estimate_note':'Estimativa local só em caracteres; não é cobrança nem usage do provedor.'},
                 'operations':len(records), 'requests':len(requests), 'successes':successes,
                 'failures':len(requests)-successes,
                 'operation_errors':sum(r['phase']=='error' for r in records),

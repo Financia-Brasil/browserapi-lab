@@ -101,6 +101,71 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
 
+    def test_site_que_reescreve_o_texto_ainda_confirma_o_envio(self):
+        """Relato real: a mensagem foi enviada, mas o painel disse "sem confirmação".
+
+        O fixture aqui imita chats reais que normalizam o balão da pessoa
+        (espaços/NBSP) e demoram alguns milissegundos para pintá-lo.
+        """
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const conversation = document.querySelector('#conversation');
+            new MutationObserver(() => {
+                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
+                    if (node.dataset.balNormalized) continue;
+                    node.dataset.balNormalized = '1';
+                    node.textContent = node.textContent.replace(/\\s+/g, '\u00a0') + '\u200b';
+                }
+            }).observe(conversation, {childList: true, subtree: true});
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success', result.diagnostics)
+        self.assertEqual(result.send_state, 'confirmed')
+        self.assertEqual(result.answer, 'browserapi-ok')
+        self.assertIn('texto esperado', result.diagnostics.get('send_evidence', ''))
+
+    def test_balao_novo_com_campo_esvaziado_confirma_e_declara_a_evidencia(self):
+        """O site publica um balão novo, reescreve o texto e consome o rascunho.
+
+        Este é o caminho mais permissivo da confirmação: só vale quando existe
+        mensagem nova **e** o campo ficou vazio. A evidência fica no recibo.
+        """
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const conversation = document.querySelector('#conversation');
+            new MutationObserver(() => {
+                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
+                    if (node.dataset.balChanged) continue;
+                    node.dataset.balChanged = '1';
+                    node.textContent = 'conteúdo renderizado de outro jeito';
+                }
+            }).observe(conversation, {childList: true, subtree: true});
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success', result.diagnostics)
+        self.assertEqual(result.answer, 'browserapi-ok')
+        self.assertIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_clique_bloqueado_sem_mensagem_nova_nao_confirma_envio(self):
+        """Contraprova realista: nada foi publicado no chat, então não há sucesso.
+
+        O clique em Enviar é interceptado (site com botão inerte/erro de rede).
+        O balão não muda, o campo mantém o texto: sem evidência, sem confirmação.
+        """
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            document.querySelector('#send').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }, true);
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertNotEqual(result.status, 'success', result.diagnostics)
+        self.assertEqual(result.send_state, 'unknown')
+        self.assertNotIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
+
     def test_ambiguous_send_after_fill_never_clicks_or_retries(self):
         config = self.prepare()
         config.timeout_ms = 500
@@ -244,12 +309,19 @@ class TestChatWorkflow(BrowserTestCase):
                     '--user-data-dir=' + str(profile), 'about:blank'], stdout=subprocess.DEVNULL, stderr=stderr)
             try:
                 deadline = time.monotonic() + 30
-                while not (profile / 'DevToolsActivePort').exists():
+                # O Chrome cria DevToolsActivePort vazio/parcial antes de escrever
+                # as duas linhas válidas. Esperar só o arquivo existir gerava
+                # falso "sem conexão consentida" no CI (40620094973).
+                address = None
+                while address is None:
                     if process.poll() is not None or time.monotonic() > deadline:
                         raise AssertionError('Chrome descartável não expôs a porta (código %s): %s' % (
                             process.poll(), log.read_text(errors='replace')[-800:]))
-                    self.page.wait_for_timeout(100)
-                yield SimpleNamespace(home=home, profile=profile, address=endpoint(home), process=process)
+                    try:
+                        address = endpoint(home)
+                    except Exception:
+                        self.page.wait_for_timeout(100)
+                yield SimpleNamespace(home=home, profile=profile, address=address, process=process)
             finally:
                 # Somente o Chromium descartável criado acima pertence ao teste.
                 # SIGTERM só no pai podia deixar filhos escrevendo em Default

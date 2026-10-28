@@ -85,6 +85,12 @@ Cada invocação abre/fecha o navegador, reutilizando o perfil em disco. **Não 
 serviço de agentes com navegador permanentemente quente ou uma API 24/7.** O
 benchmark de aba quente mede outro cenário, sem esse custo de abrir/fechar.
 
+No painel gráfico (0.7.0), a mesma mensagem aparece no cartão **Conversa** com
+**Copiar última resposta** e **Limpar painel**. Esse texto vive só na memória do
+processo: não é gravado, não entra em recibo/telemetria e não é histórico do site.
+Limpar o painel não apaga a conversa no provedor. Ver
+[UX_070_SPEC.md](design/UX_070_SPEC.md).
+
 ## Corrigir uma configuração
 
 ```bash
@@ -113,7 +119,7 @@ autorizar nova tentativa.
 |---|---|
 | Campo/botão não encontrado ou ambíguo | Usar `repair` e apontar o controle correto |
 | Rascunho presente | Enviar ou remover manualmente; o programa não o sobrescreve |
-| Envio não confirmado | Conferir a conversa; não reenviar às cegas; reparar identificação da mensagem do usuário |
+| Envio não confirmado | Conferir a conversa: se a sua mensagem apareceu, o envio funcionou. Não reenviar às cegas. Persistindo, reparar o balão da pergunta já enviada |
 | Resposta fora do formato | Verificar seleção de saída e se o modelo obedeceu ao pedido |
 | Múltiplas saídas válidas | Apontar somente o contêiner de cada resposta do assistente |
 | Login expirado | Fazer login e escolher o modelo manualmente |

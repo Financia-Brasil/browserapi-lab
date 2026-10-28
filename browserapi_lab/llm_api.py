@@ -414,6 +414,15 @@ class APIHandler(BaseHTTPRequestHandler):
             if service.active>=4:
                 return self.send_json(429,{'error':{'message':'Capacidade local ocupada','code':'local_capacity'}})
             service.active+=1
+        # A chamada termina quando o worker termina, não quando o socket é
+        # escrito: sem isso, "apagar histórico/revogar" feito logo depois de uma
+        # resposta podia ser recusado como "tarefa em andamento".
+        released=[False]
+        def release():
+            if not released[0]:
+                released[0]=True
+                with service.lock:
+                    service.active-=1
         try:
             self.connection.settimeout(15)
             length=int(self.headers.get('Content-Length','0'))
@@ -435,11 +444,13 @@ class APIHandler(BaseHTTPRequestHandler):
                   'choices':[{'index':0,'message':{'role':'assistant','content':result.answer},'finish_reason':'stop'}],
                   'usage':None,'browserapi':{'context':job.context,'attempts':job.attempts,'streaming':'buffered'}}
             if not payload.get('stream'):
+                release()
                 return self.send_json(200,body)
             chunk={'id':body['id'],'object':'chat.completion.chunk','created':body['created'],'model':body['model'],
                    'choices':[{'index':0,'delta':{'role':'assistant','content':result.answer},'finish_reason':None}]}
             end=dict(chunk,choices=[{'index':0,'delta':{},'finish_reason':'stop'}])
             raw=('data: '+json.dumps(chunk,ensure_ascii=False)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n').encode()
+            release()
             self.send_response(200)
             self.send_header('Content-Type','text/event-stream')
             self.send_header('Cache-Control','no-store')
@@ -447,6 +458,7 @@ class APIHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(raw)
         except (ContextError,ValueError,TypeError,KeyError,RecursionError) as error:
+            release()
             if not isinstance(error,APIError):
                 error=APIError(str(error) if isinstance(error,ContextError) else 'Solicitação inválida')
             try:
@@ -456,5 +468,4 @@ class APIHandler(BaseHTTPRequestHandler):
         except OSError:
             pass
         finally:
-            with service.lock:
-                service.active-=1
+            release()

@@ -99,9 +99,9 @@ class TestGraphicalJourney(BrowserTestCase):
     def wait_phase(self, phase):
         self.page.wait_for_function("text => document.querySelector('#phase').textContent === text", arg=phase, timeout=45000)
 
-    def seed(self, mode='contract'):
+    def seed(self, mode='contract', timeout_ms=4000):
         config = ChatConfig('saved', self.chat_server.url(), provider='fixture',
-                            timeout_ms=4000, stability_ms=400, **HYPOTHESES['fixture'])
+                            timeout_ms=timeout_ms, stability_ms=400, **HYPOTHESES['fixture'])
         self.store.save(config)
         return config
 
@@ -153,7 +153,7 @@ class TestGraphicalJourney(BrowserTestCase):
                 # um clique rápido no painel pode vencer o timer de 80 ms e
                 # tentar selecionar o microfone vazio, não o estado Enviar.
                 current[0].wait_for_function("document.querySelector('#composer').value === 'rascunho digitado na fixture' && document.querySelector('#send').getAttribute('aria-label') === 'Enviar mensagem'")
-            if 'Apontar mensagem do usuário' in text:
+            if 'A SUA PERGUNTA JÁ ENVIADA' in text:
                 current[0].evaluate('window.__fixtureClearAllowed = true')
             if 'Autoriza UMA' in text:
                 audit.append(current[0].evaluate('({count:FakeChat.state().user_messages,steps:window.__fixtureTeaching})'))
@@ -162,21 +162,25 @@ class TestGraphicalJourney(BrowserTestCase):
         return real_configure(store,name,session_factory=TrainingSession,**kwargs)
 
     def skip_other_message_fields(self):
-        self.wait_question('Apontar mensagem do usuário')
+        self.wait_question('A SUA PERGUNTA JÁ ENVIADA')
         self.page.click('#no')
-        self.wait_question('Apontar resposta do assistente')
+        self.wait_question('A RESPOSTA DO CHAT')
         self.page.click('#no')
 
     def test_delete_saved_connection_cancel_then_confirm(self):
         from playwright.sync_api import expect
         self.seed()
         self.open_panel()
-        self.page.locator('#chats details summary').click()
-        self.page.once('dialog',lambda d:d.dismiss())
-        self.page.get_by_role('button',name='Excluir conexão',exact=True).click()
+        # Excluir fica visível na linha de ações, sem abrir "Ajustar ou excluir".
+        self.assertTrue(self.page.get_by_role('button',name='Excluir',exact=True).is_visible())
+        messages=[]
+        self.page.once('dialog',lambda d:(messages.append(d.message),d.dismiss()))
+        self.page.get_by_role('button',name='Excluir',exact=True).click()
+        self.assertIn('"saved"',messages[0])
+        self.assertIn('não são apagados',messages[0])
         self.assertEqual(self.store.names(),['saved'])
         self.page.once('dialog',lambda d:d.accept())
-        self.page.get_by_role('button',name='Excluir conexão',exact=True).click()
+        self.page.get_by_role('button',name='Excluir',exact=True).click()
         expect(self.page.locator('#chat-count')).to_have_text('0')
         self.assertEqual(self.store.names(),[])
         expect(self.page.locator('#composer-panel')).to_be_hidden()
@@ -288,7 +292,7 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.get_by_role('button',name='Corrigir campos').click()
             self.wait_question('Quando o chat')
             self.page.click('#continue')
-            self.wait_question('Apontar campo de mensagem')
+            self.wait_question('campo onde você digita')
             self.page.click('#no')
             self.wait_question('Com o campo de mensagem vazio')
             self.page.click('#no')  # sem voz: remove estado negativo antigo
@@ -336,7 +340,7 @@ class TestGraphicalJourney(BrowserTestCase):
             self.wait_question('Quando o chat')
             self.assertFalse((self.store.root/'graphical.status.json').exists())
             self.page.click('#continue')
-            self.wait_question('Apontar campo de mensagem')
+            self.wait_question('campo onde você digita')
             self.page.click('#no')
             self.wait_question('Com o campo de mensagem vazio')
             self.page.click('#yes')
@@ -356,12 +360,15 @@ class TestGraphicalJourney(BrowserTestCase):
             self.assertEqual(receipt['browser'],'chromium')
             self.page.wait_for_function("document.querySelector('#stat-requests').textContent === '1'")
             self.assertEqual(self.page.locator('#stat-success').inner_text(),'100%')
-            self.assertEqual(self.page.locator('#stat-tokens').inner_text(),'Não disponível')
+            self.assertEqual(self.page.locator('#stat-tokens').inner_text(),'Não medido')
             self.assertIn('Online (observado)',self.page.locator('#source-health').inner_text())
-            self.assertEqual(self.page.locator('#latency-history li').count(),1)
             self.assertGreaterEqual(receipt['timings']['browser_start_ms'],0)
             self.assertGreaterEqual(receipt['timings']['page_open_ms'],0)
-            self.assertIn('Pipeline de envio',self.page.locator('#stage-timings').text_content())
+            # Gráficos em SVG, não tabelas/parágrafos.
+            self.assertGreaterEqual(self.page.locator('#chart-status svg circle').count(),1)
+            self.assertGreaterEqual(self.page.locator('#chart-latency svg rect').count(),1)
+            self.assertIn('Envio',self.page.locator('#chart-stages svg text').all_text_contents())
+            self.assertIn('100%',self.page.locator('#chart-success svg text').all_text_contents())
 
             self.page.get_by_role('button', name='Testar agora').click()
             self.wait_question('Faça login')
@@ -371,8 +378,19 @@ class TestGraphicalJourney(BrowserTestCase):
             self.wait_phase('Concluído')
             self.assertTrue(self.store.status('graphical')['compatible_in_this_run'])
             self.page.wait_for_function("document.querySelector('#stat-requests').textContent === '2'")
-            self.assertEqual(self.page.locator('#latency-history li').count(),2)
+            self.assertEqual(self.page.locator('#chart-latency svg rect').count(),2)
             self.assertEqual(self.panel.snapshot()['telemetry']['requests'],2)
+
+            self.page.locator('[data-view=activity]').click()
+            self.page.set_viewport_size({'width':1280,'height':1000})
+            self.page.wait_for_function('document.querySelector("#chart-status svg") !== null')
+            self.assertEqual(self.page.locator('#chart-latency svg rect').count(),2)
+            self.assertEqual(self.page.locator('#chart-status svg circle').count(),1)
+            self.assertIn('Sucesso',self.page.locator('#status-legend').inner_text())
+            self.assertGreaterEqual(self.page.locator('#chart-stages svg rect').count(),2)
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth - window.innerWidth'),0)
+            self.page.screenshot(path=str(REPO_ROOT/'results/ci/ui-redesign/activity-desktop.png'),full_page=True)
+            self.page.locator('[data-view=connections]').click()
 
             evidence = {'kind':'synthetic_graphical_journey','headed_worker':True,
                         'form_configure':True,'health_check':True,'consent_buttons':True,
@@ -381,6 +399,80 @@ class TestGraphicalJourney(BrowserTestCase):
             destination = REPO_ROOT/'results/ci/gui-flow.json'
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(json.dumps(evidence,indent=2)+'\n')
+
+    def test_ask_shows_the_new_answer_in_the_panel_conversation(self):
+        from playwright.sync_api import expect
+        # Este teste é sobre exibição, não sobre prazo: sob carga do runner, 4 s
+        # transformavam contenção de CPU em "resposta não confirmada no prazo".
+        self.seed(timeout_ms=20000)
+        self.open_panel()
+        self.page.fill('#message', 'Pergunta sintética do painel')
+        self.page.click('#ask')
+        self.wait_question('Faça login')
+        self.page.click('#continue')
+        self.wait_question('Autoriza enviar a mensagem informada')
+        self.page.click('#yes')
+        self.wait_phase('Concluído')
+        # `ask` não grava recibo de compatibilidade: a fonte de verdade do turno
+        # é a conversa do painel. Falhar aqui mostra o que o painel relatou.
+        snapshot = self.panel.transcript.snapshot('saved')
+        self.assertEqual(len(snapshot['messages']), 2,
+                         (self.page.locator('#log').inner_text(), self.panel.snapshot()['messages'][-3:]))
+        expect(self.page.locator('#conversation-card')).to_be_visible()
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        # O painel só exibe o turno depois de um novo poll do estado.
+        self.page.wait_for_function("document.querySelectorAll('#conversation .turn').length === 2", timeout=15000)
+        text = self.page.locator('#conversation').inner_text()
+        self.assertIn('Pergunta sintética do painel', text)
+        # Neste fixture a resposta de contrato é JSON; o que importa é que o
+        # texto capturado da página apareça inteiro e só na conversa.
+        self.assertIn('browserapi-ok', text)
+        self.assertIn('1 pergunta', self.page.locator('#conversation-scope').inner_text())
+        self.assertNotIn('browserapi-ok', self.page.locator('#log').text_content() or '')
+        self.assertEqual(self.panel.transcript.snapshot('saved')['messages'][1]['role'], 'assistant')
+        self.assertGreater(self.panel.transcript.snapshot('saved')['messages'][1]['total_ms'], 0)
+        evidence = REPO_ROOT/'results/ci/ui-redesign'
+        evidence.mkdir(parents=True, exist_ok=True)
+        self.page.set_viewport_size({'width': 1280, 'height': 900})
+        self.page.locator('#conversation-card').scroll_into_view_if_needed()
+        self.page.screenshot(path=str(evidence/'conversation-desktop.png'), full_page=True)
+        self.page.locator('[data-view=activity]').click()
+        self.page.wait_for_function('document.querySelectorAll("#chart-usage svg rect").length > 0')
+        self.assertIn('estimativa grosseira', self.page.locator('#usage-note').inner_text())
+        self.assertIn('caracteres', self.page.locator('#usage-note').inner_text())
+        self.page.screenshot(path=str(evidence/'activity-usage-desktop.png'), full_page=True)
+        self.page.set_viewport_size({'width': 375, 'height': 812})
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth - window.innerWidth'), 0)
+        self.page.screenshot(path=str(evidence/'activity-usage-mobile.png'), full_page=True)
+        self.page.locator('[data-view=connections]').click()
+        self.page.set_viewport_size({'width': 375, 'height': 812})
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth - window.innerWidth'), 0)
+        self.page.screenshot(path=str(evidence/'conversation-mobile.png'), full_page=True)
+
+    def test_conversation_text_is_not_executable_and_clear_keeps_the_site(self):
+        from playwright.sync_api import expect
+        self.seed()
+        self.open_panel()
+        self.panel.transcript.add_exchange('saved', 'Pergunta salva só na memória',
+                                           '<img src=x onerror="window.secretLeaked=true"> texto',
+                                           at='2026-10-28T10:00:00Z', total_ms=321.4)
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        self.assertIn('<img src=x', self.page.locator('#conversation').inner_text())
+        self.assertEqual(self.page.locator('#conversation img').count(), 0)
+        self.assertFalse(self.page.evaluate('Boolean(window.secretLeaked)'))
+        self.assertIn('321 ms', self.page.locator('#conversation').inner_text())
+        message = []
+        self.page.once('dialog', lambda dialog: (message.append(dialog.message), dialog.dismiss()))
+        self.page.click('#conversation-clear')
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        self.assertIn('NÃO será apagada', message[0])
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.click('#conversation-clear')
+        expect(self.page.locator('#conversation .turn')).to_have_count(0)
+        self.assertEqual(self.panel.transcript.snapshot('saved')['messages'], [])
+        self.assertIn('saved', self.store.names())
+        self.assertEqual(self.page.locator('#conversation-card').is_visible(), True)
+        self.assertIn('Nada enviado por aqui', self.page.locator('#conversation-scope').inner_text())
 
     def test_denial_and_cancel_do_not_run_exchange(self):
         self.seed()

@@ -24,7 +24,7 @@ REMEDIES = {
     'send_is_microphone': ('O controle selecionado ainda é de voz/microfone', 'Nenhum clique foi feito. Use Corrigir campos e autorize o rascunho temporário para apontar o botão no estado Enviar. Confira o rascunho deixado antes de outra tentativa.'),
     'google_login_blocked': ('Google recusou o login neste navegador controlado', 'Não continue o apontamento nem repita o login pelo programa. Não há correção garantida aqui; a proteção do Google não será contornada.'),
     'output_invalid': ('Saída configurada não pôde ser lida', 'Execute repair e aponte uma resposta inteira do assistente.'),
-    'send_unconfirmed': ('Envio sem confirmação', 'Confira a conversa manualmente. Não reenviamos para evitar duplicação; repare o campo da mensagem do usuário.'),
+    'send_unconfirmed': ('Enviamos, mas o site não confirmou a mensagem', 'Olhe a conversa: se a sua mensagem apareceu, o envio funcionou e não é preciso repetir. Se não apareceu, confira login, modelo e o campo apontado. Não reenviamos automaticamente para não duplicar.'),
     'timeout': ('Resposta não confirmada no prazo', 'Confira a página, conexão e modelo. Se respondeu, repare a seleção de saída; não reenviar automaticamente.'),
     'captcha': ('Verificação humana encontrada', 'Resolva a verificação no navegador, sem automatizá-la, e confirme quando terminar.'),
     'login_required': ('Login necessário ou expirado', 'Faça login manualmente no navegador do projeto e escolha o modelo.'),
@@ -145,6 +145,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
     metrics = {}
     result = ChatResult('page_unavailable', timings=metrics)
     send_state = 'not_sent'
+    send_evidence = None
     phase = 'preflight_ms'
     phase_start = start
     def stage(name):
@@ -159,6 +160,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         diagnostics = dict(kwargs.pop('diagnostics', None) or {})
         if verified:
             diagnostics.setdefault('profile_directory', verified)
+        if send_evidence:
+            diagnostics.setdefault('send_evidence', send_evidence)
         result = ChatResult(*args, timings=metrics, stage=phase.removesuffix('_ms'), diagnostics=diagnostics, **kwargs)
         return result
     try:
@@ -211,8 +214,12 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         sent = send_message(page, composer, button, prompt,
                             strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
                             activation=('click_send',), user_selector=config.user,
-                            verify_timeout_ms=min(5000, config.timeout_ms), before_activate=ready_to_activate)
+                            # Sites reais podem demorar a pintar o balão novo; 5 s
+                            # gerava falso "sem confirmação" com o envio feito.
+                            verify_timeout_ms=min(9000, config.timeout_ms), before_activate=ready_to_activate)
         metrics.update(fill_ms=round(sent.fill_ms, 3), send_ms=round(sent.send_ms, 3))
+        if sent.attempts:
+            send_evidence = sent.attempts[-1].evidence or None
         if not sent.success:
             if any(attempt.error == 'VoiceControlUnavailable' for attempt in sent.attempts):
                 return outcome('send_is_microphone')

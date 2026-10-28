@@ -304,3 +304,62 @@ sem novo teste invalida Online anterior. Plano separado em NEXT_ARCHITECTURE.md;
 RAG pesquisável de 1M não implica contexto nativo de 1M. API e fallback exigem
 contratos e confirmação de envio antes de automatizar decisões potencialmente
 duplicantes. Validação deste marco em PRODUCT_VALIDATION.md.
+
+
+## ADR-020 — Resposta validada é exibida na memória do painel, nunca no recibo
+
+O cartão **Conversa** da 0.7.0 existe porque a resposta só aparecia no log técnico
+recolhido. A exibição não pode reabrir os caminhos que os marcos anteriores
+fecharam: conteúdo em recibo, telemetria de texto, histórico não solicitado ou
+aceitação de resposta antiga.
+
+Decisão: `transcript.Transcript` guarda pares pergunta/resposta por conexão **em
+memória do processo**, com orçamento e descarte em pares. `setup.check` recebe um
+`record` opcional chamado apenas quando houve mensagem enviada com resposta nova
+validada; verificação automática sem mensagem da pessoa nunca entra. Falha ao
+exibir não converte envio bem-sucedido em erro nem dispara reenvio. O estado do
+painel carrega só contagem/revisão; o texto é buscado por rota autenticada e
+limitada à conexão pedida. Renderização usa `textContent`, então HTML da página
+não é interpretado.
+
+Não é histórico do site, não é o RAG da API local e não é persistente: reiniciar
+apaga; excluir a conexão apaga aquele texto. A API de agentes continua com seu
+próprio registro e histórico opt-in, fora desta conversa. Sem autenticação real de
+Gemini/Arena, isto é exibição validada em fixture e DOM emulado, não homologação.
+
+
+## ADR-021 — Confirmação de envio por evidência tolerante, nunca por otimismo
+
+O relato de uso real trouxe “Envio sem confirmação” para uma mensagem que aparecia
+na tela. A regra anterior exigia texto idêntico ao preenchido no último balão do
+usuário, em 5 s — frágil porque sites re-renderizam mensagens (espaços, `NBSP`,
+invisíveis) e podem demorar a pintar o balão.
+
+Decisão: comparar texto normalizado (`NFKC`, invisíveis removidos, espaços
+colapsados); aceitar lista virtualizada que atualiza o mesmo nó; esperar até 9 s
+(teto `timeout_ms`); e aceitar **mensagem nova com campo esvaziado** como evidência
+de que o site consumiu o rascunho. A evidência usada vai no recibo em
+`diagnostics.send_evidence`.
+
+O que permanece proibido: reenvio automático, sucesso com texto divergente e
+rascunho presente, e tratar campo esvaziado sozinho como envio. A mudança só reduz
+falso negativo — não cria caminho para mensagem duplicada. Continua sendo
+observação de DOM; não há garantia de exactly-once em site externo.
+
+Também nesta rodada: HTML do painel passou a ser validado por parser nos testes,
+depois de uma aspa faltante quebrar o id da aba Atividade na 0.7.0.
+
+
+## ADR-022 — A chamada da API termina quando o worker termina
+
+`llm_api` contava requisições ativas até o fim do `finally`, depois de escrever a
+resposta HTTP. Um cliente que revogava a chave ou apagava o histórico logo após
+receber a resposta era recusado com 409 “ocupado”, embora o navegador já estivesse
+livre — o teste de histórico do CI mostrou o problema de forma intermitente.
+
+Decisão: liberar o contador assim que a resposta é produzida (antes de escrever o
+socket), em todos os caminhos, com liberação idempotente. O limite de concorrência
+continua valendo para trabalho real; a transmissão da resposta não é trabalho. Não
+houve afrouxamento de autenticação, de limite de corpo ou de recusa por envio
+ambíguo.
+
