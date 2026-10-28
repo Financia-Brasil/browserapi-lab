@@ -503,8 +503,8 @@ implementado antes do dossiê; o que a pesquisa matou está no §7 dele.
 
 Verificação deste ambiente (sem Chromium): suíte de núcleo verde e checagens em
 jsdom (captura e apontamento), reproduzíveis com
-`node scripts/ui_jsdom_check.js <repo>` (28 checagens: 17 da leitura em camadas,
-11 do painel). **Implementado ≠ testado local ≠ homologado**: os
+`node scripts/ui_jsdom_check.js <repo>` (29 checagens: 17 da leitura em camadas,
+12 do painel). **Implementado ≠ testado local ≠ homologado**: os
 testes de navegador e o uso em site autenticado são o CI e a sua sessão; até lá,
 nada aqui é homologado.
 
@@ -520,6 +520,15 @@ três era “teste chato”: todos reproduziam um defeito de uso.
 | envio confirmado só por nonce quando o site reescreve o texto | contrato do `send_evidence` estava ambíguo | a frase da evidência diz as **duas coisas** (“nonce … e o texto também confere” / “o site reescreveu o texto”); o recibo expõe a camada que confirmou (`confirmation_layer`) |
 | barra lateral de controles lida como conversa | a camada `structure` aceitava qualquer container com três filhos de texto uniformes — `<label>` da lateral incluídos | a “casca” da página (formulário, compositor, `<select>`, `<label>`, `<input>`) não conta como turno; jsdom: “página com um balão só não inventa conversa” |
 
-Provas deste ambiente (sem Chromium): **367 testes, 18 ignorados, OK**; **28
-checagens em jsdom**. Os testes de navegador só rodam no CI — até o log verde,
-nada aqui é homologado.
+Provas deste ambiente (sem Chromium): **367 testes, 18 ignorados, OK**; **29
+checagens em jsdom**.
+
+**CI verde** (`40754469066`, head `f579da6`): `Nucleo Python (sem navegador)`,
+`Integracao real com Chromium` (**485 testes, 1 ignorado, OK**) e `Revisão visual
+e navegação` passaram; `Publicar atualização estável` fica *skipped* por não ser
+`main`. O primeiro CI desta correção (`40752997370`) ainda reprovou porque a
+faixa do título inteira recebia ponteiro e o `<strong>` do cabeçalho
+interceptava o clique — daí a alça de arraste. Evidência visual:
+`results/ci/ui-review-40754469066/ui-redesign/picker-desktop.png`.
+Ainda assim: **implementado ≠ testado local/CI ≠ homologado** — o uso em site
+autenticado com a sua conta é o próximo passo, e é seu.

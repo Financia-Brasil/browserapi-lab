@@ -467,7 +467,7 @@ bloqueia justamente o alvo.
 não muda de tamanho conforme o canto. O custo é que o conteúdo visualmente
 coberto atrás do painel não pode ser lido — por isso o arraste e o botão
 “Mover” continuam existindo. Verificado por `scripts/ui_jsdom_check.js`
-(28 checagens, incluindo “painel não rouba o clique da página”, “controles
+(29 checagens, incluindo “painel não rouba o clique da página”, “controles
 continuam clicáveis” e “painel volta depois de re-render do site”).
 
 **Indicadores para revisitar.** Se a automação voltar a falhar com
