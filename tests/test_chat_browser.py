@@ -124,8 +124,35 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(result.answer, 'browserapi-ok')
         self.assertIn('texto esperado', result.diagnostics.get('send_evidence', ''))
 
-    def test_texto_divergente_sem_campo_esvaziado_nao_vira_sucesso(self):
-        """Contraprova: reescrever o balão sem que o site consuma o rascunho."""
+    def test_balao_novo_com_campo_esvaziado_confirma_e_declara_a_evidencia(self):
+        """O site publica um balão novo, reescreve o texto e consome o rascunho.
+
+        Este é o caminho mais permissivo da confirmação: só vale quando existe
+        mensagem nova **e** o campo ficou vazio. A evidência fica no recibo.
+        """
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const conversation = document.querySelector('#conversation');
+            new MutationObserver(() => {
+                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
+                    if (node.dataset.balChanged) continue;
+                    node.dataset.balChanged = '1';
+                    node.textContent = 'conteúdo renderizado de outro jeito';
+                }
+            }).observe(conversation, {childList: true, subtree: true});
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success', result.diagnostics)
+        self.assertEqual(result.answer, 'browserapi-ok')
+        self.assertIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
+    def test_rascunho_presente_impede_confirmacao_com_texto_divergente(self):
+        """Contraprova: balão reescrito, mas o campo continua com o rascunho.
+
+        Sem texto correspondente e sem esvaziamento, o resultado é ambiguidade
+        — nunca sucesso, e nunca reenvio.
+        """
         config = self.prepare()
         self.page.evaluate("""() => {
             const conversation = document.querySelector('#conversation');
@@ -136,19 +163,25 @@ class TestChatWorkflow(BrowserTestCase):
                     node.textContent = 'conteúdo completamente diferente';
                 }
             }).observe(conversation, {childList: true, subtree: true});
-            // Mantém um texto no campo para o sinal de esvaziamento não valer.
             const composer = document.querySelector('#composer');
-            setInterval(() => {
-                if (!composer.value) {
-                    composer.value = 'rascunho que permanece';
-                    composer.dispatchEvent(new Event('input', {bubbles: true}));
-                }
-            }, 30);
+            let typed = '';
+            composer.addEventListener('input', event => { if (event.target.value) typed = event.target.value; });
+            // Site que NÃO consome o rascunho: devolve o texto logo após o clique.
+            document.querySelector('#send').addEventListener('click', () => {
+                setTimeout(() => {
+                    const field = document.querySelector('#composer');
+                    if (!field.value && typed) {
+                        field.value = typed;
+                        field.dispatchEvent(new Event('input', {bubbles: true}));
+                    }
+                }, 0);
+            }, true);
         }""")
         result = exchange(self.page, config, authorized=True, health_check=True)
-        self.assertNotEqual(result.status, 'success')
+        self.assertNotEqual(result.status, 'success', result.diagnostics)
         self.assertEqual(result.send_state, 'unknown')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+        self.assertNotIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
 
     def test_ambiguous_send_after_fill_never_clicks_or_retries(self):
         config = self.prepare()
@@ -293,12 +326,19 @@ class TestChatWorkflow(BrowserTestCase):
                     '--user-data-dir=' + str(profile), 'about:blank'], stdout=subprocess.DEVNULL, stderr=stderr)
             try:
                 deadline = time.monotonic() + 30
-                while not (profile / 'DevToolsActivePort').exists():
+                # O Chrome cria DevToolsActivePort vazio/parcial antes de escrever
+                # as duas linhas válidas. Esperar só o arquivo existir gerava
+                # falso "sem conexão consentida" no CI (40620094973).
+                address = None
+                while address is None:
                     if process.poll() is not None or time.monotonic() > deadline:
                         raise AssertionError('Chrome descartável não expôs a porta (código %s): %s' % (
                             process.poll(), log.read_text(errors='replace')[-800:]))
-                    self.page.wait_for_timeout(100)
-                yield SimpleNamespace(home=home, profile=profile, address=endpoint(home), process=process)
+                    try:
+                        address = endpoint(home)
+                    except Exception:
+                        self.page.wait_for_timeout(100)
+                yield SimpleNamespace(home=home, profile=profile, address=address, process=process)
             finally:
                 # Somente o Chromium descartável criado acima pertence ao teste.
                 # SIGTERM só no pai podia deixar filhos escrevendo em Default
