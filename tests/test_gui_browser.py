@@ -99,9 +99,9 @@ class TestGraphicalJourney(BrowserTestCase):
     def wait_phase(self, phase):
         self.page.wait_for_function("text => document.querySelector('#phase').textContent === text", arg=phase, timeout=45000)
 
-    def seed(self, mode='contract'):
+    def seed(self, mode='contract', timeout_ms=4000):
         config = ChatConfig('saved', self.chat_server.url(), provider='fixture',
-                            timeout_ms=4000, stability_ms=400, **HYPOTHESES['fixture'])
+                            timeout_ms=timeout_ms, stability_ms=400, **HYPOTHESES['fixture'])
         self.store.save(config)
         return config
 
@@ -402,7 +402,9 @@ class TestGraphicalJourney(BrowserTestCase):
 
     def test_ask_shows_the_new_answer_in_the_panel_conversation(self):
         from playwright.sync_api import expect
-        self.seed()
+        # Este teste é sobre exibição, não sobre prazo: sob carga do runner, 4 s
+        # transformavam contenção de CPU em "resposta não confirmada no prazo".
+        self.seed(timeout_ms=20000)
         self.open_panel()
         self.page.fill('#message', 'Pergunta sintética do painel')
         self.page.click('#ask')

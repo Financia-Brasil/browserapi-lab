@@ -117,3 +117,13 @@ resposta (antes de `send_json`/SSE), inclusive nos caminhos de erro. Novo teste
 sem nenhuma espera. O limite de 4 chamadas simultâneas continua igual; o que muda é
 que a escrita do socket deixou de contar como trabalho do navegador.
 
+## 4ª rodada (40623716624): teste de exibição com prazo apertado
+
+O mesmo teste da conversa voltou a falhar, agora com diagnóstico útil: o painel
+relatou **“Resposta não confirmada no prazo”**. O envio foi confirmado; a espera
+pelo fim da resposta estourou porque esse teste semeava a conexão com
+`timeout_ms=4000` para rodar rápido, e a contenção de CPU do runner (16 jornadas
+gráficas em ~43 s) passava dos 4 s. Não é defeito do produto — o padrão real é
+60 s. O teste de **exibição** passou a semear 20 s; os testes que medem
+confirmação/envio continuam com prazos curtos e contraprovas.
+
