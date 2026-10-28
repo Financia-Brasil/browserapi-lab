@@ -113,13 +113,26 @@ def manual_send_pick(page, config, ask, tell, picker, *, step='', hint='', promp
         if page.evaluate('window.__balTypingCancelled'):
             raise EOFError('Seleção cancelada')
         from .sender import is_recorded_voice
-        while True:
+        # Limite de tentativas: num site onde o botão sempre parece o microfone
+        # registrado, repetir para sempre travaria o mapeamento (visto no CI).
+        for attempt in range(3):
             selected = picker(page, 'botão Enviar', step=step, hint=hint)
-            if not selected or not is_recorded_voice(page.locator(selected), config):
-                break
-            tell('Esse é o estado de voz registrado. Digite no campo para aparecer Enviar, ou pule este campo.')
-        tell('Seu rascunho foi preservado. Apague-o manualmente antes de autorizar um teste; nada foi enviado pelo apontamento.')
-        return selected
+            if not selected:
+                return None
+            readable = page.locator(selected)
+            try:
+                if not is_recorded_voice(readable, config):
+                    tell('Seu rascunho foi preservado. Apague-o manualmente antes de autorizar um teste; '
+                         'nada foi enviado pelo apontamento.')
+                    return selected
+            except Exception:
+                return selected
+            if attempt < 2:
+                tell('Esse botão ainda é o microfone registrado. Digite no campo para ele virar Enviar '
+                     'e clique de novo — ou use "Pular este campo".')
+        tell('Não consegui distinguir o microfone de Enviar. O botão Enviar ficou como estava; '
+             'refaça este campo quando o microfone estiver resolvido.')
+        return None
     finally:
         page.evaluate('() => { if (window.__balTypingCleanup) window.__balTypingCleanup(); delete window.__balTypingCancelled; }')
 
@@ -230,7 +243,7 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
             if key == 'send' and manual_send:
                 selector = manual_send_pick(
                     page, config, ask, tell, picker, step=f'{index} de {total}', hint=hint,
-                    prompt=(prefix + 'digite algo no campo do chat SEM enviar. Quando aparecer Enviar, '
+                    prompt=(prefix + 'digite algo SEM enviar no campo do chat. Quando aparecer Enviar, '
                             'volte aqui e clique em Continuar; depois clique no botão para selecioná-lo. '))
             else:
                 selector = picker(page, PICK_ROLES.get(key, title), step=f'{index} de {total}', hint=hint)

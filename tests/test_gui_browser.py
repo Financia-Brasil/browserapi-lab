@@ -161,14 +161,15 @@ class TestGraphicalJourney(BrowserTestCase):
         kwargs['ask'] = ask
         return real_configure(store,name,session_factory=TrainingSession,**kwargs)
 
-    def skip_other_message_fields(self):
+    def skip_other_message_fields(self, gate=True):
         self.wait_question('A SUA PERGUNTA JÁ ENVIADA')
         self.page.click('#no')
         self.wait_question('A RESPOSTA DO CHAT')
         self.page.click('#no')
         # Uma pergunta única antes de concluir; "Não" segue direto.
-        self.wait_question('algum campo saiu errado')
-        self.page.click('#no')
+        if gate:
+            self.wait_question('algum campo saiu errado')
+            self.page.click('#no')
 
     def test_delete_saved_connection_cancel_then_confirm(self):
         from playwright.sync_api import expect

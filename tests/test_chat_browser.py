@@ -242,7 +242,7 @@ class TestChatWorkflow(BrowserTestCase):
                 config = self.prepare()
                 if case == 'existing':
                     self.page.locator('#composer').fill('rascunho pessoal')
-                replies = iter(['n','s','n' if case == 'denied' else 's','n','n','n'])
+                replies = iter(['n','s','n' if case == 'denied' else 's','n','n','n','n'])
                 def selecting(page, role, **_options):
                     self.assertEqual(role, 'botão Enviar')
                     value = page.locator('#composer').input_value()
@@ -486,6 +486,8 @@ class TestChatWorkflow(BrowserTestCase):
         prompts = []
         def ask(text):
             prompts.append(text)
+            if 'saiu errado' in text:
+                return 'n'  # mapeou tudo de uma vez; refazer é coberto no teste unitário
             if 'digite algo' in text:
                 self.page.locator('#composer').fill('rascunho digitado pela pessoa')
                 self.page.locator('#send').click()
