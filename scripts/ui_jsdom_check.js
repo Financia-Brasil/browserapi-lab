@@ -96,6 +96,16 @@ console.log('— leitura da conversa (capture.py) —');
   check('gemini: última resposta legível', !!last && last.text.includes('Belém'), last && last.text);
 }
 
+// ---------------- página sem conversa parecida: não inventar turnos ----------------
+{
+  const win = load('fake_chat.html');
+  // Um balão só + barra lateral cheia de <label>: antes, os rótulos uniformes
+  // da lateral eram lidos como "turnos" e a última resposta saía da barra.
+  const lonely = read(win, '', '');
+  check('fake: página com um balão só não inventa conversa',
+    lonely.layered.layer === 'none' && lonely.layered.items.length === 0, lonely.layered);
+}
+
 // ---------------- fake_chat: papéis por atributo, seletores num pedaço ----------------
 {
   const win = load('fake_chat.html');
@@ -154,6 +164,11 @@ console.log('— painel do apontamento (picker.js) —');
     win.getComputedStyle(banner).overflow);
   check('largura fixa', banner.style.width === '392px', banner.style.width);
   check('cabeçalho arrastável', win.getComputedStyle(banner.firstChild).cursor === 'move');
+  check('painel não rouba o clique da página', banner.style.pointerEvents === 'none',
+    banner.style.pointerEvents);
+  check('controles continuam clicáveis',
+    win.document.querySelector('[data-picker-confirm]').style.pointerEvents === 'auto',
+    win.document.querySelector('[data-picker-confirm]').style.pointerEvents);
 
   const target = win.document.querySelector('model-response .markdown p');
   target.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -161,6 +176,13 @@ console.log('— painel do apontamento (picker.js) —');
   check('mostra que vai capturar o balão',
     text.includes('Belém') && text.includes('capital do Pará'), text.slice(0, 160));
   check('lista curta (até 3 linhas)', (text.match(/\n/g) || []).length <= 6, text);
+
+  // Site que re-renderiza o body apaga nós injetados. O painel precisa voltar
+  // sozinho — sem isso, o mapeamento morre com "o painel não abriu".
+  banner.remove();
+  win.dispatchEvent(new win.Event('scroll'));
+  check('painel volta depois de re-render do site',
+    !!win.document.querySelector('#__browserapi_picker'));
 
   win.document.querySelector('[data-picker-confirm]').click();
   check('confirma o seletor do balão', win.__balPick && win.__balPick.selector === 'model-response',

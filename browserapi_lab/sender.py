@@ -192,14 +192,17 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
     after_count = after.get("count", 0) or 0
     last = normalize_text(after.get("last"))
     wanted = normalize_text(expected)
-    # Nonce (request_id) só existe se a mensagem foi publicada: é a evidência
-    # mais forte que temos, e independe de o site reformatar o resto do texto.
-    if nonce and after_count > before_count and nonce in last:
-        return True, "nonce do pedido visível no balão novo (envio confirmado)"
     new_node = after_count > before_count
     previous = normalize_text(before.get("last"))
     same_node_changed = (not new_node and bool(previous) and bool(last) and previous != last)
     matches = bool(wanted) and bool(last) and (last == wanted or wanted in last)
+    # Nonce (request_id) só existe se a mensagem foi publicada: é a evidência
+    # mais forte que temos, e independe de o site reformatar o resto do texto.
+    # A frase diz as duas coisas — quem lê o recibo vê se o texto também bateu,
+    # em vez de concluir que a comparação por texto foi abandonada.
+    if nonce and new_node and nonce in last:
+        detail = " e o texto também confere" if matches else " (o site reescreveu o texto)"
+        return True, "nonce do pedido visível no balão novo (envio confirmado)" + detail
     if matches:
         if new_node:
             return True, "nova mensagem do usuário com o texto esperado"

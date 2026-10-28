@@ -46,11 +46,15 @@
   Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '392px',
     maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', zIndex: '2147483647', background: '#fff',
     color: '#1b3029', border: '2px solid #146c50', borderRadius: '8px', padding: '12px',
-    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', overflow: 'hidden' });
+    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', overflow: 'hidden',
+    // O painel nunca rouba o clique da página: passar por cima do campo que a
+    // pessoa precisa apontar continua funcionando. Só os controles e a faixa
+    // de arraste respondem ao ponteiro (definido logo abaixo).
+    pointerEvents: 'none' });
 
   const top = document.createElement('div');
   Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap',
-    cursor: 'move', userSelect: 'none', paddingBottom: '4px' });
+    cursor: 'move', userSelect: 'none', paddingBottom: '4px', pointerEvents: 'auto' });
   top.title = 'Arraste para mover o painel';
   const title = document.createElement('strong');
   title.textContent = 'Selecionar: ' + role;
@@ -301,7 +305,10 @@
     b.textContent = text;
     if (attribute) b.setAttribute(attribute, '');
     Object.assign(b.style, { minHeight: '44px', padding: '8px 16px', border: '1px solid #81978b',
-      borderRadius: '6px', background: '#fff', color: '#1b3029', font: 'inherit', cursor: 'pointer' });
+      borderRadius: '6px', background: '#fff', color: '#1b3029', font: 'inherit', cursor: 'pointer',
+      // O corpo do painel é `pointer-events: none` (ADR-025): só os controles
+      // recebem o ponteiro de volta, por isso isto fica na fábrica.
+      pointerEvents: 'auto' });
     b.onclick = onClick;
     return b;
   }
@@ -347,12 +354,12 @@
              usable: room >= MIN_HEIGHT || !boxes.length };
   }
 
-  function placeBanner() {
+  function measureHeight() {
     banner.style.maxHeight = '';
-    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
-    const natural = Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
-    const boxes = targetBoxes();
-    const union = unionOf(boxes);
+    return Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
+  }
+
+  function chooseCorner(boxes, union, natural) {
     const plans = CORNERS.map(name => layout(name, boxes, union, natural));
     const current = plans[corner];
     let best = current;
@@ -364,6 +371,15 @@
       // sai da frente assim que passar a cobrir o alvo (ex.: depois de rolar).
       if (current && (current.usable || !usable.length) && current.score <= best.score + 1) best = current;
     }
+    return best || plans[0];
+  }
+
+  function placeBanner() {
+    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
+    const boxes = targetBoxes();
+    const union = unionOf(boxes);
+    const natural = measureHeight();
+    const best = chooseCorner(boxes, union, natural);
     corner = best ? best.index : corner;
     applyCorner(best, natural);
   }
@@ -394,8 +410,10 @@
       top: name.startsWith('top') ? MARGIN + 'px' : 'auto',
       bottom: name.startsWith('bottom') ? MARGIN + 'px' : 'auto',
     });
-    // Sem maxHeight: o painel nunca ganha barra de rolagem. Se o conteúdo não
-    // couber na tela, a pessoa arrasta o painel (o conteúdo é fixo e curto).
+    // Tamanho fixo: o limite é a tela, nunca uma faixa curta. Combinado com
+    // `pointer-events: none` no corpo do painel, cobrir o alvo não impede o
+    // clique; e não existe barra de rolagem.
+    banner.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(natural || 0, innerHeight - 2 * MARGIN)) + 'px';
   }
 
   function describe(el) {
@@ -432,6 +450,7 @@
   }
 
   function draw() {
+    ensureAttached();
     drawing = true;
     confirm.hidden = !chosen;
     outer.hidden = inner.hidden = back.hidden = !chosen;
@@ -462,7 +481,10 @@
     drawing = false;
   }
   function confirmationState() {
-    for (const b of banner.querySelectorAll('button')) b.style.opacity = b.disabled ? '0.45' : '1';
+    for (const b of banner.querySelectorAll('button')) {
+      b.style.opacity = b.disabled ? '0.45' : '1';
+      b.style.pointerEvents = 'auto';
+    }
   }
   function reset() {
     chosen = null;
@@ -521,11 +543,19 @@
     const run = () => { scheduled = false; if (!drawing) draw(); };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
   };
+  /* Sites que re-renderizam o body (React/Vue recriando o container raiz)
+   * removem nós injetados sem avisar. Sem reanexar, o painel desaparece no
+   * meio do mapeamento e a próxima checagem diz "o painel não abriu". */
+  const ensureAttached = () => {
+    if (!banner.isConnected && document.body) document.body.append(banner);
+    if (!marks.isConnected && document.body) document.body.append(marks);
+  };
   const observer = new MutationObserver(records => {
     if (drawing) return;
     for (const record of records) {
       const target = record.target;
       if (banner.contains(target) || marks.contains(target)) continue;
+      ensureAttached();
       schedule();
       return;
     }
@@ -567,7 +597,7 @@
     document.removeEventListener('click', click, true);
     document.removeEventListener('keydown', key, true);
     window.removeEventListener('scroll', draw, true);
-    window.removeEventListener('resize', draw);
+    window.removeEventListener('resize', onResize);
     banner.remove();
     marks.remove();
     delete window.__balPickerCleanup;
@@ -575,7 +605,8 @@
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
   window.addEventListener('scroll', draw, true);
-  window.addEventListener('resize', () => { locked = false; draw(); });
+  const onResize = () => { locked = false; draw(); };
+  window.addEventListener('resize', onResize);
   window.__balPickerCleanup = cleanup;
   window.__balPickerContainer = messageRole ? messageContainer : null;
   if (window.__balTypingCleanup) window.__balTypingCleanup();

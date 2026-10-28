@@ -435,3 +435,39 @@ curta espera demais); API interna do site (contraria ADR-008).
 Indicadores para revisitar: proporção de leituras resolvidas por camada (exposta
 no recibo); se a camada 2 ficar em zero por 30 dias em site React, a rota morreu;
 se a confirmação passar a citar “contagem” em 20 envios seguidos, a camada 1 caiu.
+
+## ADR-025 — o painel do apontamento nunca intercepta o ponteiro
+
+**Contexto.** O painel passou a ter tamanho fixo, ancorado no canto escolhido
+pela geometria do alvo (ADR-024). O CI de navegador mostrou a consequência: com o
+campo de mensagem no rodapé, o painel — 392 px de largura, ancorado embaixo —
+cobria o próprio elemento que a pessoa devia clicar. O Playwright recusou o
+clique com *“`<div id="__browserapi_picker">` subtree intercepts pointer events”*
+e o teste ficou 30 s esperando. O uso real teria o mesmo efeito: o painel
+bloqueia justamente o alvo.
+
+**Decisão.**
+
+* o **corpo** do painel tem `pointer-events: none`: clicar “através” dele
+  atinge a página, então cobrir o alvo deixa de ser um defeito. A faixa do
+  título (arraste) e os botões voltam a `pointer-events: auto` — são os únicos
+  pontos que precisam de ponteiro;
+* o painel **continua com tamanho fixo e sem rolagem** (`overflow: hidden`); o
+  limite de altura é a tela, não a faixa livre (uma faixa curta não pode virar
+  barra de rolagem);
+* a escolha de canto segue a geometria (menor sobreposição com o alvo), mas
+  agora a sobreposição é só visual, não funcional;
+* o texto de conferência continua curto (três linhas) porque o corpo não rola.
+
+**Consequências.** O arraste funciona igual, o alvo é sempre clicável, e o painel
+não muda de tamanho conforme o canto. O custo é que o conteúdo visualmente
+coberto atrás do painel não pode ser lido — por isso o arraste e o botão
+“Mover” continuam existindo. Verificado por `scripts/ui_jsdom_check.js`
+(28 checagens, incluindo “painel não rouba o clique da página”, “controles
+continuam clicáveis” e “painel volta depois de re-render do site”).
+
+**Indicadores para revisitar.** Se a automação voltar a falhar com
+*intercepts pointer events*, é porque algum elemento novo dentro do painel ficou
+sem `pointer-events: auto`. Se alguém reclamar de não conseguir selecionar texto
+atrás do painel, é o preço do arraste — a alternativa (painel fora da tela) foi
+rejeitada.

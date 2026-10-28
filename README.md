@@ -13,6 +13,14 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
+**Correção na 0.10.1:** o painel do apontamento passou a **não interceptar o
+clique** (o corpo deixa o ponteiro atravessar; só os botões e a faixa de arraste
+respondem) — antes, de tamanho fixo, ele cobria o próprio campo que a pessoa
+devia apontar. O painel também **volta sozinho** se o site re-renderizar o
+`body`, e a checagem “o painel abriu?” aceita a escolha feita antes dela (o
+reparo do botão Enviar parava com “o painel não abriu”). Ainda: a leitura em
+camadas não confunde uma barra lateral de formulário com conversa.
+
 **Novo na 0.10.0:** a leitura da conversa passou a ter **camadas** — papel
 declarado na página, depois o estado do React (o que o app já sabe), e só por
 último o layout. Quando o mapeamento apontado não lê a conversa de forma

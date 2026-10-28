@@ -43,6 +43,28 @@ class StepUnavailable(RuntimeError):
     """
 
 
+PANEL_READY_MS = 3000
+
+
+def _panel_ready(page) -> bool:
+    """O painel abriu (ou a escolha já existe)?
+
+    Não é uma leitura instantânea: alguns chats re-renderizam o ``body`` ao
+    receber foco/estilo e o painel recriado leva um instante para aparecer. E,
+    quando a própria página automatiza o apontamento (ou a pessoa é rápida), o
+    painel pode abrir e fechar antes da checagem — a escolha existente prova que
+    ele abriu. Sem isso, o campo era perdido com "o painel não abriu".
+    """
+    try:
+        page.wait_for_function(
+            "() => !!document.querySelector('#__browserapi_picker')"
+            " || (window.__balPick !== null && window.__balPick !== undefined)",
+            timeout=PANEL_READY_MS)
+        return True
+    except Exception:
+        return False
+
+
 def pick(page, role, cancelled=None, *, step='', hint=''):
     """Abre o apontamento guiado e devolve o seletor.
 
@@ -56,7 +78,7 @@ def pick(page, role, cancelled=None, *, step='', hint=''):
         page.bring_to_front()
         page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
         page.evaluate(script, {'role': role, 'step': step, 'hint': hint})
-        opened = page.evaluate("() => !!document.querySelector('#__browserapi_picker')")
+        opened = _panel_ready(page)
     except Exception as problem:  # página fechada, script recusado pela CSP, aba trocada
         raise StepUnavailable('Não consegui abrir o apontamento nesta página (%s). '
                              'Nada foi alterado.' % type(problem).__name__) from problem

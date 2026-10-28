@@ -122,7 +122,14 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(result.status, 'success', result.diagnostics)
         self.assertEqual(result.send_state, 'confirmed')
         self.assertEqual(result.answer, 'browserapi-ok')
-        self.assertIn('texto esperado', result.diagnostics.get('send_evidence', ''))
+        # Quando o pedido leva um nonce (request_id), ele é a evidência mais
+        # forte: existe no balão só se a mensagem foi publicada. O texto
+        # normalizado continua valendo quando não há nonce.
+        evidence = result.diagnostics.get('send_evidence', '')
+        self.assertTrue('nonce' in evidence or 'texto esperado' in evidence, evidence)
+        self.assertIn(result.diagnostics.get('confirmation_layer'), ('marker', 'framework',
+                                                                    'structure', 'configured',
+                                                                    'configured-legacy'))
 
     def test_balao_novo_com_campo_esvaziado_confirma_e_declara_a_evidencia(self):
         """O site publica um balão novo, reescreve o texto e consome o rascunho.

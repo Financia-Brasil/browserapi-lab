@@ -46,8 +46,11 @@ CAPTURE_SCRIPT = r"""(args) => {
   const MARKER_SELECTOR = '[data-message-author-role],[data-message-role],user-query,model-response,'
     + '[data-role="user"],[data-role="assistant"],[data-role=user],[data-role=assistant],'
     + '[data-author],[data-sender]';
+  // "Casca" da página: compositor e controles. Um container de conversa não tem
+  // formulário dentro; sem isso, uma barra lateral cheia de <label> virava
+  // "conversa" (dois turnos de texto uniforme) e a última resposta saía errada.
   const SHELL = 'textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"],'
-    + 'button[type="submit"],input[type="submit"]';
+    + 'button[type="submit"],input[type="submit"],select,input,label,[role="combobox"]';
 
   const visible = el => {
     if (!el || !el.getBoundingClientRect) return false;

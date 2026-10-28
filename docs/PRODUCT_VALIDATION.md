@@ -503,7 +503,23 @@ implementado antes do dossiê; o que a pesquisa matou está no §7 dele.
 
 Verificação deste ambiente (sem Chromium): suíte de núcleo verde e checagens em
 jsdom (captura e apontamento), reproduzíveis com
-`node scripts/ui_jsdom_check.js <repo>` (24 checagens: 16 da leitura em camadas,
-8 do painel). **Implementado ≠ testado local ≠ homologado**: os
+`node scripts/ui_jsdom_check.js <repo>` (28 checagens: 17 da leitura em camadas,
+11 do painel). **Implementado ≠ testado local ≠ homologado**: os
 testes de navegador e o uso em site autenticado são o CI e a sua sessão; até lá,
+nada aqui é homologado.
+
+## 0.10.1 — os três vermelhos de navegador do PR #12 (2026-10-28)
+
+O núcleo Python passou no CI, mas os jobs de navegador reprovaram. Nenhum dos
+três era “teste chato”: todos reproduziam um defeito de uso.
+
+| Falha no CI | O que acontecia de verdade | Correção |
+|---|---|---|
+| `#composer` não clicável — “`#__browserapi_picker` subtree intercepts pointer events” (timeout de 30 s) | o painel, de tamanho fixo e ancorado embaixo, cobria o campo que a pessoa precisa clicar | corpo do painel com `pointer-events: none`; faixa de arraste e botões com `auto` (ADR-025) |
+| reparo do botão Enviar: “O painel de seleção não abriu nesta página” | duas causas: (a) a checagem “abriu?” era uma leitura instantânea — entre a injeção e a leitura a escolha podia já ter acontecido; (b) site que re-renderiza o `body` apaga o painel injetado | (a) a checagem espera até 3 s e aceita escolha existente (`window.__balPick`); (b) `ensureAttached()` reanexa o painel quando ele sai do documento; testes: `tests/test_setup.py` (4 casos) e jsdom “painel volta depois de re-render do site” |
+| envio confirmado só por nonce quando o site reescreve o texto | contrato do `send_evidence` estava ambíguo | a frase da evidência diz as **duas coisas** (“nonce … e o texto também confere” / “o site reescreveu o texto”); o recibo expõe a camada que confirmou (`confirmation_layer`) |
+| barra lateral de controles lida como conversa | a camada `structure` aceitava qualquer container com três filhos de texto uniformes — `<label>` da lateral incluídos | a “casca” da página (formulário, compositor, `<select>`, `<label>`, `<input>`) não conta como turno; jsdom: “página com um balão só não inventa conversa” |
+
+Provas deste ambiente (sem Chromium): **367 testes, 18 ignorados, OK**; **28
+checagens em jsdom**. Os testes de navegador só rodam no CI — até o log verde,
 nada aqui é homologado.
