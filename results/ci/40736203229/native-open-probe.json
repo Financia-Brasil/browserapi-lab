@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-28T17:30:53+00:00",
+  "outcome": "FAIL",
+  "error": "TimeoutError: timed out",
+  "steps": [
+    {
+      "t": 24.45,
+      "step": "chrome_started"
+    }
+  ],
+  "scope": "Chrome descartável em pasta temporária; não é o seu Chrome nem uma conta real.",
+  "chrome": "Google Chrome 156.0.8078.47",
+  "display_available": true,
+  "handoff": [],
+  "chrome_log_filtered": [
+    "",
+    "DevTools listening on ws://127.0.0.1:46873/devtools/browser/a45a703a-6c9e-4de8-99ca-2a5bd6e44e34"
+  ]
+}

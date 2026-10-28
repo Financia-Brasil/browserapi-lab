@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.9.0';
+const PANEL_VERSION = '0.9.1';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -575,7 +575,9 @@ $('open-permission').onclick=()=>openProfile('permission');
 let serviceSignature='';
 function renderService(value){
   const a=value.api_service || {};
-  $('api-status').textContent=a.message || 'API não disponível neste modo de execução.';
+  $('api-status').textContent=(a.message || 'API não disponível neste modo de execução.')
+    + (a.enabled && a.port ? ` Escutando em 127.0.0.1:${a.port}.` : '');
+  $('api-test').disabled=!a.available;
   $('api-toggle').textContent=a.enabled ? 'Desativar API' : 'Autorizar e iniciar API';
   $('api-toggle').disabled=!a.available || incompatible() || (!a.enabled && busy());
   $('api-url').value=a.url || ''; $('api-key').value=a.key || '';
@@ -596,6 +598,15 @@ function renderService(value){
   for(const id of ['api-models','api-headless','api-lightweight','api-retrieval','api-fallback','api-personal','api-remember']) $(id).disabled=!!a.enabled || busy() || incompatible();
 }
 $('api-show').onclick=()=>{$('api-key').type=$('api-key').type==='password' ? 'text':'password';};
+$('api-test').onclick=async()=>{
+  const out=$('api-test-result');
+  out.dataset.error='false'; out.textContent='Testando 127.0.0.1…';
+  try{
+    const result=await api('api-check',{});
+    out.dataset.error=String(!result.ok);
+    out.textContent=result.message || (result.ok ? 'API respondendo.' : 'Sem resposta.');
+  }catch(err){out.dataset.error='true';out.textContent=err.message;}
+};
 $('api-toggle').onclick=async()=>{
   const active=!!state?.api_service?.enabled;
   if(!active && !confirm('Autorizar agentes com esta chave a enviar mensagens pelos chats selecionados, sem confirmação por chamada? Mantenha login/modelo corretos. Não compartilhe a chave.')) return;

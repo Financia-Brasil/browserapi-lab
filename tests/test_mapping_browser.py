@@ -18,7 +18,7 @@ from _harness import BrowserTestCase, REPO_ROOT
 from browserapi_lab.chat import exchange
 from browserapi_lab.config import ChatConfig
 from browserapi_lab.discovery import install_probe
-from browserapi_lab.setup import HYPOTHESES, pick, repair_fields
+from browserapi_lab.setup import HYPOTHESES, pick, repair_fields, verify_transcript
 
 GEMINI_LIKE = {
     'composer': '.ql-editor',
@@ -75,6 +75,60 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         self.assertIn('Olá!', result.answer)
         self.assertIn('Como posso ajudar você hoje?', result.answer)
         self.assertIn('Resposta sintética da fixture', result.answer)
+
+    def fill_conversation(self, count=3):
+        self.page.evaluate("""(count) => {
+            for (let index = 1; index <= count; index += 1) {
+                GeminiLike.send('pergunta ' + index);
+            }
+        }""", count)
+        self.page.wait_for_timeout(500)
+
+    def test_transcript_check_requires_three_messages_in_the_right_order(self):
+        config = self.open_fixture()
+        self.fill_conversation(3)
+        tells = []
+        ok, problems, pairs = verify_transcript(self.page, config, tells.append)
+        self.assertTrue(ok, problems)
+        # A fixture já abre com um par (pergunta + resposta) e ganhou mais três.
+        self.assertEqual([item['role'] for item in pairs], ['user', 'assistant'] * 4)
+        self.assertIn('pergunta 1', pairs[2]['text'])
+        self.assertTrue(any('Você:' in line for line in tells), tells)
+        self.assertTrue(any('Chat:' in line for line in tells), tells)
+
+    def test_transcript_check_refuses_a_selector_that_mixes_the_two_layers(self):
+        config = self.open_fixture()
+        self.fill_conversation(3)
+        # O relato: "identificou 2 saídas quando selecionei uma".
+        config.assistant = 'model-response, model-response message-content'
+        ok, problems, pairs = verify_transcript(self.page, config, lambda *_: None)
+        self.assertTrue(ok, problems)  # camada interna não conta duas vezes
+        self.assertEqual(len([item for item in pairs if item['role'] == 'assistant']), 4)
+        # Seletor que pega as duas conversas: a conferência recusa.
+        config.assistant = 'user-query, model-response'
+        ok, problems, _ = verify_transcript(self.page, config, lambda *_: None)
+        self.assertFalse(ok)
+        self.assertTrue(any('mesmo elemento casa' in problem or 'mesmo número' in problem
+                            for problem in problems), problems)
+
+    def test_transcript_check_does_not_confuse_repeated_text_with_duplicates(self):
+        config = self.open_fixture()
+        self.page.evaluate("() => { GeminiLike.send('igual'); GeminiLike.send('igual'); GeminiLike.send('igual'); }")
+        self.page.wait_for_timeout(500)
+        ok, problems, pairs = verify_transcript(self.page, config, lambda *_: None)
+        self.assertTrue(ok, problems)
+        self.assertEqual(len(pairs), 8)  # a mensagem inicial do fixture + 3 pares
+
+    def test_preview_shows_the_layer_and_lists_what_will_be_captured(self):
+        self.open_fixture()
+        self.fill_conversation(2)
+        self.run_picker('resposta do assistente', step='5 de 5')
+        self.page.locator('model-response .markdown p').first.click()
+        preview = self.page.locator('#__browserapi_picker').inner_text()
+        self.assertIn('camada', preview.lower())
+        # Três respostas na tela (a inicial e as duas do teste), sem duplicar pedaço.
+        self.assertIn('3 elementos casam', preview)
+        self.assertIn('1.', preview)
 
     def test_text_candidates_are_balloons_not_buttons(self):
         self.open_fixture()
@@ -228,6 +282,86 @@ class TestGuidedMappingUnit(unittest.TestCase):
             pick(BrokenPage(), 'campo de mensagem', step='1 de 5')
         self.assertIn('Não consegui abrir o apontamento', str(caught.exception))
         self.assertIn('Nada foi alterado', str(caught.exception))
+
+    def test_verification_shows_the_pairs_and_says_exactly_what_is_missing(self):
+        from browserapi_lab.setup import verify_transcript
+
+        class Page:
+            def __init__(self, items):
+                self.items = items
+
+            def evaluate(self, *_args, **_kwargs):
+                return {'overlap': 0, 'items': self.items}
+
+        pairs = []
+        for index in (1, 2, 3):
+            pairs.append({'role': 'user', 'text': f'pergunta {index}'})
+            pairs.append({'role': 'assistant', 'text': f'resposta {index}'})
+        tells = []
+        ok, problems, found = verify_transcript(Page(pairs), self.config(), tells.append)
+        self.assertTrue(ok, problems)
+        self.assertEqual(len(found), 6)
+        self.assertTrue(any('Você: “pergunta 1”' in line for line in tells), tells)
+
+        # Com menos de três de cada lado não há o que conferir: avisa e segue.
+        tells = []
+        ok, problems, _ = verify_transcript(Page(pairs[:2]), self.config(), tells.append)
+        self.assertTrue(ok)
+        self.assertEqual(problems, [])
+        self.assertTrue(any('precisa de 3 perguntas' in line for line in tells), tells)
+
+    def test_mapping_stops_when_three_messages_do_not_confirm(self):
+        from browserapi_lab.setup import verify_transcript  # noqa: F401 (contrato do módulo)
+        asked = []
+
+        class BrowserPage:
+            url = 'https://example.com/app'
+            locator = object()  # marcador de página real; a conferência só roda nele
+
+            def evaluate(self, *_args, **_kwargs):
+                # Três de cada lado, mas fora de ordem: a conferência recusa.
+                return {'overlap': 0, 'items': [
+                    {'role': 'user', 'text': 'p1'}, {'role': 'user', 'text': 'p2'},
+                    {'role': 'assistant', 'text': 'r1'}, {'role': 'assistant', 'text': 'r2'},
+                    {'role': 'user', 'text': 'p3'}, {'role': 'assistant', 'text': 'r3'}]}
+
+            def bring_to_front(self):
+                pass
+
+        def ask(text):
+            asked.append(text)
+            return 's' if 'Apontar' in text else 'n'
+
+        with self.assertRaises(EOFError) as caught:
+            repair_fields(BrowserPage(), self.config(), ask=ask, tell=lambda *_: None,
+                          picker=lambda _page, _role, **_options: '#alvo',
+                          fields=('user', 'assistant'))
+        self.assertIn('Mapeamento não concluído', str(caught.exception))
+        self.assertTrue(any('Refazer os balões' in text for text in asked), asked)
+        self.assertTrue(any('Continuar o mapeamento assim mesmo' in text for text in asked), asked)
+
+    def test_mapping_accepts_when_the_three_messages_confirm(self):
+        class BrowserPage:
+            url = 'https://example.com/app'
+            locator = object()
+
+            def evaluate(self, *_args, **_kwargs):
+                items = []
+                for index in (1, 2, 3):
+                    items.append({'role': 'user', 'text': f'p{index}'})
+                    items.append({'role': 'assistant', 'text': f'r{index}'})
+                return {'overlap': 0, 'items': items}
+
+            def bring_to_front(self):
+                pass
+
+        tells = []
+        config = repair_fields(BrowserPage(), self.config(), ask=lambda text: 's' if 'Apontar' in text else 'n',
+                               tell=tells.append, picker=lambda _page, _role, **_options: '#alvo',
+                               fields=('user', 'assistant'))
+        self.assertEqual(config.user, '#alvo')
+        self.assertEqual(config.assistant, '#alvo')
+        self.assertTrue(any('Conferência concluída' in line for line in tells), tells)
 
     def test_captured_field_can_be_redone_without_restarting(self):
         picks = iter(['#c-amplo', '#c-novo'])

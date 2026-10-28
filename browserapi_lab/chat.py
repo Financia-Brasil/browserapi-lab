@@ -254,6 +254,12 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             }''', config.assistant)
             if nested:
                 continue
+            # Seletor de resposta que também casa com a pergunta transformaria a
+            # pergunta em resposta. Melhor falhar do que ler o texto errado.
+            if config.user and item.evaluate(
+                    r'(el, selector) => { try { return el.matches(selector); } catch (error) { return false; } }',
+                    config.user):
+                continue
             # Captura o BALÃO inteiro, não o pedaço apontado no passado
             # (uso real: Gemini divide a resposta em vários <span>).
             html = item.evaluate('''el => {

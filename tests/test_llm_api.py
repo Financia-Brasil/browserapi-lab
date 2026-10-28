@@ -71,6 +71,30 @@ class TestLocalAPI(unittest.TestCase):
         self.assertEqual(FakeWarm.calls,0)
         self.assertEqual(self.service.server.server_address[0],'127.0.0.1')
 
+    def test_root_and_missing_key_explain_what_to_use_instead(self):
+        """O relato: `curl` na raiz recebia "not found" e parecia API fora do ar."""
+        code,value=self.request('/')
+        self.assertEqual(code,404)
+        self.assertIn('/v1/models',value['error']['message'])
+        connection=http.client.HTTPConnection('127.0.0.1',self.service.server.server_port,timeout=8)
+        connection.request('GET','/v1/models')
+        response=connection.getresponse();body=json.loads(response.read())
+        connection.close()
+        self.assertEqual(response.status,401)
+        self.assertEqual(body['error']['code'],'missing_api_key')
+        self.assertIn('Authorization: Bearer',body['error']['message'])
+
+    def test_probe_tests_the_real_socket_and_explains_when_it_is_off(self):
+        result=self.service.probe()
+        self.assertTrue(result['ok'],result)
+        self.assertEqual(result['port'],self.service.server.server_port)
+        self.assertIn('Respondendo em 127.0.0.1',result['message'])
+        self.assertIn('saved',result['models'])
+        self.service.configure({'enabled':False})
+        off=self.service.probe()
+        self.assertFalse(off['ok'])
+        self.assertIn('API desativada',off['message'])
+
     def test_json_sse_idempotency_and_private_prompt_not_cached_or_logged(self):
         headers={'Idempotency-Key':'operation-1'}
         code,value=self.request(body=self.body(),headers=headers)
@@ -180,6 +204,37 @@ class TestLocalAPI(unittest.TestCase):
         code,value=self.request(body=body)
         self.assertEqual(code,200);self.assertTrue(value['browserapi']['context']['reduced'])
         self.assertEqual(FakeWarm.calls,1)
+
+
+class TestLocalAPIPort(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.store=ConfigStore(Path(self.tmp.name)/'config')
+        self.config_=ChatConfig('saved','https://example.com',**HYPOTHESES['fixture'])
+        self.store.save(self.config_)
+        self.store.save_status('saved',ChatResult('success',True).receipt(self.config_))
+        self.panel=Panel(self.store,Path(self.tmp.name)/'data')
+
+    def tearDown(self):
+        self.panel.close();self.tmp.cleanup()
+
+    def test_busy_port_says_so_instead_of_failing_silently(self):
+        import socket
+        holder=socket.socket();holder.bind(('127.0.0.1',0));holder.listen(1)
+        try:
+            port=holder.getsockname()[1]
+            service=APIService(self.panel,port=port);self.panel.api_service=service
+            with self.assertRaises(APIError) as caught:
+                service.configure({'enabled':True,'names':['saved']})
+            self.assertEqual(caught.exception.code,'port_busy')
+            self.assertIn('já está em uso',str(caught.exception))
+            self.assertFalse(service.snapshot()['enabled'])
+            # Nada ficou pela metade: nenhuma política foi gravada como ativa.
+            self.assertFalse(service.path.exists() and json.loads(service.path.read_text())['enabled'])
+        finally:
+            holder.close()
+            try: service.close()
+            except Exception: pass
 
 
 class TestWarmRouting(unittest.TestCase):

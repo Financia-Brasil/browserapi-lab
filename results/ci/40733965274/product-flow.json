@@ -1,0 +1,11 @@
+{
+  "iterations": 10,
+  "failures": 0,
+  "same_conversation": true,
+  "capture_p95_ms": 547.4,
+  "capture_budget_ms": 900,
+  "total_p50_ms": 866.6969999999999,
+  "total_p95_ms": 1008.259,
+  "browser_version": "156.0.8078.4",
+  "scope": "Contrato sintético local; não mede API ou chat real."
+}
