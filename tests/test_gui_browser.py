@@ -397,10 +397,11 @@ class TestGraphicalJourney(BrowserTestCase):
         expect(self.page.locator('#conversation .turn')).to_have_count(2)
         text = self.page.locator('#conversation').inner_text()
         self.assertIn('Pergunta sintética do painel', text)
-        self.assertIn('Passos', text)
+        # Neste fixture a resposta de contrato é JSON; o que importa é que o
+        # texto capturado da página apareça inteiro e só na conversa.
+        self.assertIn('browserapi-ok', text)
         self.assertIn('1 pergunta', self.page.locator('#conversation-scope').inner_text())
-        # O log de operação não repete a resposta longa; ela vive na conversa.
-        self.assertNotIn('Passos', self.page.locator('#log').text_content() or '')
+        self.assertNotIn('browserapi-ok', self.page.locator('#log').text_content() or '')
         self.assertEqual(self.panel.transcript.snapshot('saved')['messages'][1]['role'], 'assistant')
         self.assertGreater(self.panel.transcript.snapshot('saved')['messages'][1]['total_ms'], 0)
         evidence = REPO_ROOT/'results/ci/ui-redesign'
