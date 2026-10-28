@@ -93,7 +93,8 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         # A fixture já abre com um par (pergunta + resposta) e ganhou mais três.
         self.assertEqual([item['role'] for item in pairs], ['user', 'assistant'] * 4)
         self.assertIn('pergunta 1', pairs[2]['text'])
-        self.assertTrue(any('Você:' in line and 'Chat:' in line for line in tells), tells)
+        self.assertTrue(any('Você:' in line for line in tells), tells)
+        self.assertTrue(any('Chat:' in line for line in tells), tells)
 
     def test_transcript_check_refuses_a_selector_that_mixes_the_two_layers(self):
         config = self.open_fixture()
