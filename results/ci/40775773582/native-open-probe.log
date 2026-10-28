@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-28T21:55:26+00:00",
+  "outcome": "PASS",
+  "error": null,
+  "steps": [
+    {
+      "t": 10.84,
+      "step": "chrome_started"
+    },
+    {
+      "t": 24.23,
+      "step": "handoff_diagnostic",
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "opens_requested_page": {
+        "about_blank_with_fragment": false,
+        "chrome_version": false,
+        "chrome_inspect": false,
+        "http_loopback": true
+      }
+    },
+    {
+      "t": 25.5,
+      "step": "session",
+      "directory": "Default",
+      "identity": "9DE92639",
+      "verified_tag": "Default",
+      "seconds": 1.26
+    },
+    {
+      "t": 26.8,
+      "step": "session",
+      "directory": "Profile 1",
+      "identity": "3A06BC94",
+      "verified_tag": "Profile 1",
+      "seconds": 1.27
+    },
+    {
+      "t": 28.07,
+      "step": "reopen",
+      "directory": "Profile 1",
+      "value": "Profile 1"
+    },
+    {
+      "t": 29.41,
+      "step": "reopen",
+      "directory": "Default",
+      "value": "Default"
+    },
+    {
+      "t": 30.56,
+      "step": "unknown_profile",
+      "rejected": true
+    }
+  ],
+  "scope": "Chrome descartável em pasta temporária; não é o seu Chrome nem uma conta real.",
+  "chrome": "Google Chrome 156.0.8078.47",
+  "display_available": true,
+  "handoff": [
+    {
+      "label": "about_blank_with_fragment",
+      "target": "about:blank",
+      "directory": "Default",
+      "lock": "runnervm48cm3-3210",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "",
+      "seconds": 0.62,
+      "new_targets": [
+        "chrome://newtab/"
+      ]
+    },
+    {
+      "label": "chrome_version",
+      "target": "chrome://version/",
+      "directory": "Default",
+      "lock": "runnervm48cm3-3210",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[3429:3429:0100/000000.047265:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[3428:3428:0100/000000.047498:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.08,
+      "new_targets": []
+    },
+    {
+      "label": "chrome_inspect",
+      "target": "chrome://inspect/",
+      "directory": "Default",
+      "lock": "runnervm48cm3-3210",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[3537:3537:0100/000000.144836:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[3538:3538:0100/000000.150282:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.08,
+      "new_targets": []
+    },
+    {
+      "label": "http_loopback",
+      "target": "http://localhost:42323/browserapi-handoff-http",
+      "directory": "Default",
+      "lock": "runnervm48cm3-3210",
+      "socket_exists": true,
+      "exit_code": 0,
+      "stdout": "Opening in existing browser session.\n",
+      "stderr": "[3672:3672:0100/000000.221125:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n[3673:3673:0100/000000.225808:ERROR:content/zygote/zygote_linux.cc:662] write: Broken pipe (32)\n",
+      "seconds": 0.07,
+      "new_targets": [
+        "http://localhost:42323/browserapi-handoff-http"
+      ]
+    }
+  ],
+  "process_states": {
+    "total": 18,
+    "zumbis": 0
+  },
+  "launch_opens_requested_page": {
+    "about_blank_with_fragment": false,
+    "chrome_version": false,
+    "chrome_inspect": false,
+    "http_loopback": true
+  },
+  "sessions": [
+    {
+      "directory": "Default",
+      "identity": "9DE92639",
+      "verified_tag": "Default",
+      "seconds": 1.26
+    },
+    {
+      "directory": "Profile 1",
+      "identity": "3A06BC94",
+      "verified_tag": "Profile 1",
+      "seconds": 1.27
+    }
+  ],
+  "reopen_isolation": {
+    "Profile 1": "Profile 1",
+    "Default": "Default"
+  },
+  "unknown_profile_rejected": true,
+  "targets_seen": [
+    {
+      "url": "about:blank",
+      "context": "9DE92639"
+    },
+    {
+      "url": "chrome://newtab/",
+      "context": "9DE92639"
+    },
+    {
+      "url": "http://127.0.0.1:42323/",
+      "context": "9DE92639"
+    },
+    {
+      "url": "http://localhost:42323/browserapi-handoff-http",
+      "context": "9DE92639"
+    },
+    {
+      "url": "chrome://newtab/",
+      "context": "9DE92639"
+    },
+    {
+      "url": "chrome://newtab/",
+      "context": "9DE92639"
+    },
+    {
+      "url": "http://127.0.0.1:42323/",
+      "context": "3A06BC94"
+    }
+  ],
+  "probe_tabs": 2,
+  "probe_tab_context_ids": 2,
+  "playwright_contexts": 1,
+  "checks": {
+    "tags_match_directories": true,
+    "identities_differ": true,
+    "isolation_matches": true,
+    "unknown_profile_rejected": true,
+    "two_tabs_two_identities": true
+  }
+}
