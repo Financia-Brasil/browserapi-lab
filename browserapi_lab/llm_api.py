@@ -5,7 +5,9 @@ SSE é bufferizado. Histórico persistente apenas com opt-in explícito.
 """
 from collections import OrderedDict
 from dataclasses import dataclass, field
+import errno
 import hashlib
+import http.client
 import json
 import math
 import re
@@ -176,7 +178,8 @@ class APIService:
 
     def snapshot(self):
         with self.lock:
-            return {'available':True,'enabled':self.server is not None,'key':self.state['key'],
+            return {'available':True,'enabled':self.server is not None,'running':self.server is not None,
+                    'port':self.server.server_port if self.server else self.port,'key':self.state['key'],
                     'url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1',
                     'names':self.state.get('names',[]),'headless':self.state.get('headless',False),
                     'lightweight':self.state.get('lightweight',False),'retrieval':self.state.get('retrieval',False),
@@ -231,7 +234,18 @@ class APIService:
             with self.lock:
                 if self.server or self.active:
                     raise APIError('Desative antes de mudar a política','busy',409)
-                server=APIServer(self,self.port)
+                try:
+                    server=APIServer(self,self.port)
+                except OSError as problem:
+                    # Antes, uma porta ocupada virava "não foi possível
+                    # iniciar" sem dizer nada: a pessoa autorizava e o curl
+                    # continuava recusando a conexão.
+                    if getattr(problem,'errno',None)==errno.EADDRINUSE:
+                        raise APIError(f'A porta {self.port} já está em uso por outro programa. '
+                                       'Feche-o (ou reinicie o computador) e autorize de novo. '
+                                       'Nenhuma porta foi aberta pela API.','port_busy',409) from problem
+                    raise APIError(f'Não foi possível abrir a porta {self.port} para a API '
+                                   f'({type(problem).__name__}). Nada foi ativado.','port_unavailable',409) from problem
                 policy={key:value.get(key,False) for key in ('headless','lightweight','retrieval','fallback','personal_consent','remember')}
                 self.state.update(policy,names=list(names),enabled=True)
                 try:
@@ -245,6 +259,52 @@ class APIService:
                 self.thread=threading.Thread(target=server.serve_forever,daemon=True)
                 self.thread.start()
                 self.notice='Ativa: a chave autoriza envios sem perguntar Sim a cada chamada. Login/modelo continuam manuais.'
+                # Autorizar sem conferir deixava a pessoa com a porta fechada e
+                # nenhuma pista. Aqui a API se testa pelo mesmo caminho do agente.
+                check=self.probe()
+                if not check['ok']:
+                    self.close()
+                    self.state['enabled']=False
+                    ConfigStore.write_json(self.path,self.state)
+                    raise APIError('A API não respondeu em 127.0.0.1:%d. %s Nada ficou ativo.'
+                                   % (self.port,check['message']),'port_unreachable',409)
+
+    def probe(self,timeout=3.0):
+        """Confere a porta como um agente faria: loopback + chave.
+
+        Não abre navegador, não envia mensagem e não troca o modelo: é só o
+        caminho de rede até ``/v1/models``.
+        """
+        with self.lock:
+            server=self.server
+            key=self.state['key']
+            names=list(self.state.get('names',[]))
+        if server is None:
+            return {'ok':False,'port':None,'message':'API desativada: nada está escutando. '
+                    'Clique em “Autorizar e iniciar API” e mantenha esta janela aberta.'}
+        port=server.server_port
+        connection=None
+        try:
+            connection=http.client.HTTPConnection('127.0.0.1',port,timeout=timeout)
+            connection.request('GET','/v1/models',headers={'Authorization':'Bearer '+key})
+            response=connection.getresponse()
+            raw=response.read()
+            if response.status!=200:
+                return {'ok':False,'port':port,'status':response.status,
+                        'message':f'A porta {port} respondeu HTTP {response.status}. '
+                                  'Confira a chave exibida no painel e tente de novo.'}
+            data=json.loads(raw.decode() or '{}')
+            models=[item.get('id') for item in data.get('data',[]) if isinstance(item,dict)]
+            return {'ok':True,'port':port,'models':models,'status':200,
+                    'message':f'Respondendo em 127.0.0.1:{port}/v1 · {len(models)-1 if models else len(names)} chat(s) autorizado(s).'}
+        except (OSError,ValueError) as problem:
+            return {'ok':False,'port':port,
+                    'message':f'A porta {port} está aberta no programa, mas não respondeu ({type(problem).__name__}). '
+                              'A API só existe enquanto esta janela estiver aberta.'}
+        finally:
+            if connection is not None:
+                try: connection.close()
+                except Exception: pass
 
     def busy(self):
         with self.lock:
@@ -396,9 +456,18 @@ class APIHandler(BaseHTTPRequestHandler):
                 and self.headers.get('Origin',f'http://127.0.0.1:{port}')==f'http://127.0.0.1:{port}'
                 and secrets.compare_digest(supplied.encode(),('Bearer '+self.server.service.state['key']).encode()))
 
+    def missing_key(self):
+        return not (self.headers.get('Authorization') or '').strip()
+
     def do_GET(self):
         if not self.authorized():
+            if self.missing_key():
+                return self.send_json(401,{'error':{'message':'Falta a chave: use Authorization: Bearer <chave do painel>',
+                                                    'type':'authentication_error','code':'missing_api_key'}})
             return self.send_json(401,{'error':{'message':'Unauthorized','type':'authentication_error','code':'invalid_api_key'}})
+        if self.path=='/':
+            return self.send_json(404,{'error':{'message':'A API não tem página inicial. Use /v1/models ou /v1/chat/completions',
+                                                'code':'not_found'}})
         if self.path!='/v1/models':
             return self.send_json(404,{'error':{'message':'Not found','code':'not_found'}})
         names=self.server.service.state['names']

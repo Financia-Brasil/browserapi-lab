@@ -13,7 +13,12 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
-**Novo na 0.9.0:** mapeamento guiado de verdade — **Passo N de M** com instrução
+**Novo na 0.9.1:** o mapeamento passou a **conferir a leitura da conversa** — exige
+três perguntas suas com as três respostas na tela, mostra o texto de cada par, na
+ordem, e recusa seletor que mistura pergunta com resposta ou conta a mesma camada
+duas vezes. A API local ganhou **Testar conexão** e diz o motivo quando a porta não
+abre (inclusive “já está em uso”). A 0.9.0 trouxe o mapeamento guiado de verdade —
+ **Passo N de M** com instrução
 por campo, prévia **“Vai capturar: …”** antes de confirmar, **Pular este campo**
 (sem perder o resto), **refazer** um campo no fim e captura do **balão inteiro**
 (a resposta do Gemini vinha partida em vários `<span>`). A 0.8.0 trouxe a

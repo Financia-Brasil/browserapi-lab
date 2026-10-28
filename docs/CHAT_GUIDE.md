@@ -117,6 +117,26 @@ ao balão completo (o Gemini, por exemplo, divide a resposta em vários `<span>`
 - **Cancelar mapeamento** encerra tudo.
 - No fim, cada campo pode ser **refeito** sem recomeçar do zero.
 
+**Camadas.** Um balão tem várias camadas dentro (parágrafo, texto, moldura). O
+painel mostra em que camada você está e quais textos vão ser capturados, em lista
+numerada. **Camada maior** sobe para o balão inteiro; **Camada menor** desce para
+o pedaço. Camada interna não conta duas vezes: uma resposta nunca vira duas.
+
+**Três mensagens, conferidas.** Antes de concluir, o programa lê as mensagens já
+enviadas e exige pelo menos **três perguntas suas com as três respostas** na tela.
+Ele mostra o texto de cada par, na ordem, e recusa quando:
+
+| Problema | Mensagem |
+|---|---|
+| menos de três de um lado | “encontrei N pergunta(s)…; o mínimo é 3” |
+| números diferentes | “N pergunta(s) contra M resposta(s)” |
+| duas do mesmo papel seguidas | “mensagens fora de ordem” |
+| resposta inclui a pergunta | “aponte a camada menor (só o balão da resposta)” |
+| texto repetido | “mensagens com o mesmo texto contadas duas vezes” |
+
+Se não conferir, você pode refazer os dois balões na hora. Continuar sem conferir
+é possível, mas o aviso é explícito: o teste pode responder “envio não confirmado”.
+
 Não exige código. Cliques de seleção são interceptados; o teste automatizado
 verifica que apontar Enviar com rascunho preenchido não envia a mensagem na fixture.
 

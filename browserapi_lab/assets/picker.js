@@ -175,7 +175,21 @@
     return el;
   };
   const query = value => {
-    try { return [...document.querySelectorAll(value)].filter(visible); } catch (error) { return []; }
+    try {
+      const items = [...document.querySelectorAll(value)].filter(visible);
+      // Um seletor pode casar com o balão E com o pedaço dentro dele. Contar os
+      // dois fazia "uma resposta" aparecer como duas na prévia e no mapeamento.
+      return items.filter(el => !items.some(other => other !== el && other.contains(el)));
+    } catch (error) { return []; }
+  };
+  // Profundidade do nó escolhido dentro das camadas de mensagem: é o que
+  // permite dizer "camada 2 de 3" e voltar para o balão inteiro.
+  const layerOf = el => {
+    let depth = 1;
+    for (let up = el && el.parentElement; up && up !== document.body && depth < 9; up = up.parentElement) {
+      if (up.matches && (up.matches(ROLE_MARK) || looksLikeMessageContainer(up))) depth += 1;
+    }
+    return depth;
   };
 
   function identify(el) {
@@ -197,7 +211,18 @@
         s = (attr ? author.tagName.toLowerCase() + '[' + attr + '=' + JSON.stringify(author.getAttribute(attr)) + ']'
           : author.tagName.toLowerCase()) + ' ' + s;
       }
-      if (messageRole || query(s).length === 1) return s;
+      if (!messageRole && query(s).length === 1) return s;
+      if (messageRole) {
+        // Ler a conversa exige o seletor que casa com TODAS as mensagens daquele
+        // lado. Se o nome completo casa com uma só, tenta a versão mais curta.
+        if (query(s).length > 1) return s;
+        for (let take = classes.length - 1; take >= 1; take -= 1) {
+          const shorter = tag + classes.slice(0, take).map(c => '.' + CSS.escape(c)).join('');
+          const total = query(shorter).length;
+          if (total > 1 && total <= 200) return shorter;
+        }
+        return s;
+      }
     }
     const tag = el.tagName.toLowerCase();
     // Em mensagens o seletor DEVE casar com todas as mensagens daquele papel:
@@ -353,13 +378,27 @@
   function describe(el) {
     const text = captureTextOf(el);
     previewText.textContent = text ? '“' + (text.length > 140 ? text.slice(0, 140) + '…' : text) + '”' : '(sem texto legível)';
-    const count = query(selector).length;
+    const matched = query(selector);
+    const count = matched.length;
     previewLabel.textContent = 'Vai capturar: ';
     const parts = [];
     if (count > 1) parts.push(count + ' elementos casam com este seletor');
+    if (messageRole) parts.push('camada ' + layerOf(el) + ' (balão inteiro é o menor número)');
     if (fragile) parts.push('seleção por posição: pode precisar de ajuste quando o chat mudar');
-    if (messageRole && count > 1) parts.push('as outras mensagens do mesmo tipo também serão lidas');
-    status.textContent = parts.join(' · ') || 'Confira o texto acima e clique em “Usar esta área”.';
+    if (messageRole) {
+      const mixed = matched.filter(item => {
+        const found = roleOf(item);
+        return found && found !== role;
+      }).length;
+      if (mixed) parts.push(mixed + ' do outro papel também casariam: use “Camada menor”/“Camada maior”');
+    }
+    // Lista numerada: a pessoa confere se são as mensagens certas e na ordem
+    // certa antes de confirmar (três ou mais é o mínimo exigido no mapeamento).
+    const lines = matched.slice(0, 5).map((item, index) =>
+      (index + 1) + '. ' + ((captureTextOf(item) || '(sem texto legível)').slice(0, 60)));
+    status.textContent = [parts.join(' · '), lines.join('\n'),
+      count > 5 ? '… e mais ' + (count - 5) + '.' : ''].filter(Boolean).join('\n');
+    status.style.whiteSpace = 'pre-line';
     confirm.disabled = !count;
   }
 

@@ -24,6 +24,31 @@ voltar habilitada após reiniciar se os recibos e a configuração continuarem
 válidos. A chave autoriza todos os chats/IDs locais: **não é isolamento multiusuário**.
 Não compartilhe a chave, não exponha a porta à rede. Não há CORS para sites externos.
 
+## `curl` recusou a conexão (erro 7)
+
+`curl: (7) Failed to connect to 127.0.0.1 port 8765` significa que **nada está
+escutando**. Não é token errado. As causas, em ordem:
+
+1. **A janela do aplicativo foi fechada.** A API é uma thread do programa
+   instalado, não um serviço do sistema: fechou a janela, a porta fecha.
+2. **A API não foi autorizada.** Clique em **Autorizar e iniciar API** e confira a
+   mensagem do cartão. Se o cartão disser “abra o aplicativo instalado”, você está
+   rodando pelo código-fonte — a API só existe no pacote instalado.
+3. **A porta 8765 estava ocupada.** Agora isso é informado (“já está em uso por
+   outro programa”) em vez de um erro genérico.
+4. **Algum chat autorizado não tem teste válido.** Cada chat precisa de recibo
+   `compatible_in_this_run` da execução atual.
+
+O botão **Testar conexão** faz exatamente o caminho de um agente (loopback +
+chave) e mostra o resultado, sem abrir navegador e sem enviar mensagem.
+
+O teste com `curl` precisa de caminho e chave — a raiz `/` responde 404 de
+propósito, e sem `Authorization` a resposta é 401:
+
+```bash
+curl -i http://127.0.0.1:8765/v1/models -H "Authorization: Bearer SUA_CHAVE"
+```
+
 ## Contrato para integradores
 
 - `GET /v1/models`: aliases locais aprovados e `auto`. O alias não comprova o modelo

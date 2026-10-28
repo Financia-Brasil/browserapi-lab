@@ -525,6 +525,14 @@ class Handler(BaseHTTPRequestHandler):
                 if self.server.panel.api_service is None:
                     raise PanelInputError('Abra o aplicativo pelo menu para gerenciar a API.')
                 self.server.panel.api_service.configure(payload)
+            elif self.path == '/api/api-check':
+                # Testar a porta é diferente de autorizar: não muda política,
+                # não abre navegador e não envia mensagem.
+                if self.server.panel.api_service is None:
+                    return self.send(200, {'ok': False, 'port': None,
+                                           'message': 'A API só existe dentro do aplicativo instalado. '
+                                                      'Abra-o pelo menu e autorize a API.'})
+                return self.send(200, self.server.panel.api_service.probe())
             elif self.path == '/api/updates':
                 updater = self.server.panel.updater
                 if updater is None or type(payload.get('enabled')) is not bool:
@@ -538,7 +546,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, {'ok': True})
         except PanelInputError as error:
             self.send(400, {'error': str(error)})
-        except (ValueError, TypeError, OSError):
+        except (ValueError, TypeError, OSError) as error:
+            # Erros da API local têm código e mensagem próprios (porta ocupada,
+            # chat sem teste): engolir isso em "não foi possível" escondia a causa.
+            from .llm_api import APIError
+            if isinstance(error, APIError):
+                return self.send(error.http, {'error': str(error), 'code': error.code})
             self.send(400, {'error': 'Não foi possível iniciar. Confira os dados ou aguarde a operação atual terminar.'})
 
 

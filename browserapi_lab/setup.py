@@ -90,6 +90,96 @@ def pick(page, role, cancelled=None, *, step='', hint=''):
     return None if value.get('cancelled') else value.get('selector')
 
 
+TRANSCRIPT_MINIMUM = 3
+
+# Lê as mensagens na ordem do documento, sem contar camada aninhada duas vezes.
+# Não altera nada na página: só leitura para conferência.
+TRANSCRIPT_SCRIPT = r"""([userSelector, assistantSelector]) => {
+  const visible = el => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 2 && r.height > 2 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
+  const pick = selector => {
+    let nodes = [];
+    try { nodes = [...document.querySelectorAll(selector)]; } catch (error) { return []; }
+    nodes = nodes.filter(visible);
+    return nodes.filter(el => !nodes.some(other => other !== el && other.contains(el)));
+  };
+  const textOf = el => {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('button,[role=button],script,style,[aria-hidden="true"]').forEach(item => item.remove());
+    return ((clone.textContent) || '').replace(/\s+/g, ' ').trim();
+  };
+  const items = [];
+  for (const el of pick(userSelector)) items.push({role: 'user', el: el, text: textOf(el)});
+  for (const el of pick(assistantSelector)) items.push({role: 'assistant', el: el, text: textOf(el)});
+  items.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+  return items.map(item => ({role: item.role, text: item.text.slice(0, 400)}));
+}"""
+
+
+def transcript_messages(page, config):
+    """Mensagens já na página, na ordem em que aparecem, com o papel de cada uma."""
+    if not getattr(config, 'user', '') or not getattr(config, 'assistant', ''):
+        return []
+    if not hasattr(page, 'evaluate'):
+        return []
+    try:
+        value = page.evaluate(TRANSCRIPT_SCRIPT, [config.user, config.assistant])
+    except Exception:
+        return []
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)
+            and item.get('role') in ('user', 'assistant') and isinstance(item.get('text'), str)]
+
+
+def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
+    """Confere se o mapeamento lê as mensagens certas, na ordem certa.
+
+    Motivo (uso real): uma conversa já usada tinha duas perguntas e duas
+    respostas, mas o seletor da resposta também pegava a pergunta — e o envio
+    virava falso "não confirmado". Aqui a conferência é explícita e mostra o
+    texto de cada mensagem antes de concluir o mapeamento.
+
+    Devolve ``(ok, problemas, pares)``.
+    """
+    pairs = [item for item in transcript_messages(page, config) if item['text']]
+    users = [item for item in pairs if item['role'] == 'user']
+    answers = [item for item in pairs if item['role'] == 'assistant']
+    problems = []
+    if len(users) < minimum:
+        problems.append(f'encontrei {len(users)} pergunta(s) sua(s) na página; o mínimo é {minimum}')
+    if len(answers) < minimum:
+        problems.append(f'encontrei {len(answers)} resposta(s) do chat; o mínimo é {minimum}')
+    if users and answers and len(users) != len(answers):
+        problems.append(f'{len(users)} pergunta(s) contra {len(answers)} resposta(s): '
+                        f'os dois seletores precisam casar com o mesmo número de mensagens')
+    sequence = [item['role'] for item in pairs]
+    repeated = [index for index in range(1, len(sequence)) if sequence[index] == sequence[index - 1]]
+    if repeated:
+        problems.append('as mensagens aparecem fora de ordem (duas do mesmo papel seguidas)')
+    for index in range(min(len(users), len(answers))):
+        question, answer = users[index]['text'], answers[index]['text']
+        if question and answer and question in answer:
+            problems.append(f'a área da resposta {index + 1} também inclui a sua pergunta: '
+                            f'aponte a camada menor (só o balão da resposta)')
+            break
+    texts = [item['text'] for item in pairs]
+    if len(set(texts)) != len(texts):
+        problems.append('há mensagens com o mesmo texto contadas duas vezes: '
+                        'aponte a camada menor para não duplicar')
+    if pairs:
+        tell('Conferência do que já está na tela:')
+        for index in range(min(len(users), len(answers))):
+            question = users[index]['text'][:70]
+            answer = answers[index]['text'][:70]
+            tell(f'  {index + 1}. Você: “{question}”')
+            tell(f'     Chat: “{answer}”')
+    return not problems, problems, pairs
+
+
 def element_preview(page, selector, prefer_last=False):
     """Texto e contagem que um seletor captura — para o usuário conferir.
 
@@ -212,6 +302,8 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
     if {'user', 'assistant'} & set(order):
         tell('Para os balões da conversa, envie você mesmo uma pergunta no chat, espere a resposta e volte. '
              'O campo onde se digita NÃO é a pergunta já enviada.')
+        tell(f'Para conferir a leitura, deixe pelo menos {TRANSCRIPT_MINIMUM} perguntas suas com as '
+             f'{TRANSCRIPT_MINIMUM} respostas na tela: no fim eu mostro o texto de cada uma, na ordem.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
 
     def record(key, selector):
@@ -306,6 +398,37 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
 
     for index, key in enumerate(order, 1):
         run_step(key, index)
+
+    # Conferência obrigatória das mensagens apontadas: sem isso, um seletor que
+    # pega a pergunta junto com a resposta passava como "mapeado" e o envio
+    # terminava em falso "não confirmado".
+    if (set(captured) & {'user', 'assistant'} and hasattr(page, 'locator')
+            and config.user and config.assistant):
+        rounds = 0
+        while True:
+            ok, problems, pairs = verify_transcript(page, config, tell)
+            if ok:
+                tell(f'Conferência concluída: {len(pairs) // 2} par(es) de pergunta e resposta, na ordem certa.')
+                break
+            for problem in problems:
+                tell('Conferência falhou: ' + problem + '.')
+            both_steps = {'user', 'assistant'} <= set(order)
+            redo_now = rounds < 2 and both_steps and confirmed(
+                ask, 'Refazer os balões de pergunta e resposta agora? '
+                     f'Preciso de {TRANSCRIPT_MINIMUM} mensagens já enviadas de cada lado.')
+            if redo_now:
+                for key in ('user', 'assistant'):
+                    if key in order:
+                        run_step(key, order.index(key) + 1)
+                rounds += 1
+                continue
+            if confirmed(ask, 'Continuar o mapeamento assim mesmo? O teste pode responder '
+                               '“envio não confirmado”, porque a leitura das mensagens não confere.'):
+                tell('Seguindo com aviso: a leitura das mensagens já enviadas não foi conferida.')
+                break
+            raise EOFError('Mapeamento não concluído: a leitura das mensagens já enviadas não confere. '
+                           f'Deixe {TRANSCRIPT_MINIMUM} perguntas suas e {TRANSCRIPT_MINIMUM} respostas na tela, '
+                           'use “Corrigir campos” e aponte os dois balões de novo. Nada foi enviado.')
 
     # Refazer sem recomeçar: uma pergunta única; só quem responde Sim percorre
     # os campos de novo (ninguém deve clicar "Não" cinco vezes para concluir).
