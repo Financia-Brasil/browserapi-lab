@@ -1,0 +1,19 @@
+{
+  "scope": "synthetic_http_api_real_chromium",
+  "audit": [
+    {
+      "messages": 1,
+      "reused": false,
+      "url_path": "fake_chat.html"
+    },
+    {
+      "messages": 2,
+      "reused": true,
+      "url_path": "conversation-existing"
+    }
+  ],
+  "idempotency_verified": true,
+  "buffered_sse": true,
+  "image_block_opt_in": true,
+  "usage": "zero_plus_note"
+}
