@@ -561,3 +561,47 @@ automático) e `node scripts/ui_jsdom_check.js <repo>` **29 checagens** de leitu
 e apontamento. Os testes de navegador (incluindo o novo
 `test_quick_flow_points_to_the_next_step_and_the_address_checker`) rodam no CI.
 **Implementado ≠ testado local/CI ≠ homologado.**
+
+## 0.12.0 — a API fala o idioma das CLIs de agente (2026-10-28)
+
+Relato: *“também tem que ter todos os endpoints ao ponto de funcionar numa CLI
+como claude code da anthropic”*, depois do erro real **`Error: Parâmetro não
+suportado; tools/temperature/limites nativos não são simulados`**.
+
+**A decisão que mudou tudo:** recusar `tools`/`temperature`/`max_tokens` era o
+defeito, não a proteção. Uma CLI manda esses campos sempre; quem recusa quebra a
+chamada antes de qualquer conversa. Agora o contrato é *aceitar, declarar o que
+foi ignorado e recusar somente o campo realmente desconhecido* (400 com o nome).
+
+| Antes | Agora |
+|---|---|
+| só `/v1/chat/completions` | `/v1/messages` (Anthropic), `/v1/responses`, `/v1/completions`, `/v1/models`, `/v1/messages/count_tokens`, `GET /v1` (índice) |
+| `Authorization` apenas | `Authorization: Bearer` **ou** `x-api-key` (SDK Anthropic), `anthropic-version` aceito |
+| `tools` → 400 | **emuladas por protocolo de texto**: `browserapi.tools: "emulated"`, `stop_reason: tool_use` / `finish_reason: tool_calls` quando o formato é reconhecido |
+| `usage: null` | zeros + `usage.browserapi.note` (“o site não informa tokens”) + caracteres em `browserapi` |
+| `temperature` → 400 | aceito e listado em `browserapi.ignored` e no cabeçalho `X-BrowserAPI-Ignored` |
+| `/` → 404 genérico | 404 **explicativo** citando `/v1/models`, para não parecer “API fora do ar” |
+
+**O que é emulação, dito sem maquiagem:** a ferramenta não é nativa. O programa
+instrui o modelo a responder `{"tool_calls":[{"name":…,"arguments":{…}}]}` e
+interpreta o texto; nome fora da lista enviada **não** vira chamada; o programa
+nunca executa comando nenhum — quem executa é o agente. SSE entrega a sequência
+de eventos do dialeto, mas com o texto **bufferizado**: o site entrega a resposta
+inteira, então não há token a token.
+
+**Defeitos reais encontrados no caminho** (todos com teste de regressão):
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| `/v1/messages` com `tools` derrubava a conexão **sem resposta** (`RemoteDisconnected`) | `report['tools_emulated']` era lido antes de `plan()` criar `report` (`UnboundLocalError`) | `report` montado antes do orçamento; exceção interna vira 500 JSON (“nada foi reenviado”) |
+| `tool_result` aparecia como `null` no histórico | assinatura de `transcript_line` com parâmetros opcionais na ordem errada | assinatura posicional única `(kind, name, payload, is_error)`; `tool_result` nomeia a ferramenta pelo `tool_use_id` |
+| worker morto devolvia 200 vazio | `job.result is None` não tratado | 502 explícito |
+| SSE quebrava leitor estrito | `Content-Type` saía com `; charset` | `text/event-stream` puro |
+
+**Provas deste ambiente (sem Chromium):** `discover -s tests` **396 testes, 18
+ignorados, OK**; `tests/test_tool_calls.py` **14 casos** novos;
+`node scripts/panel_jsdom_check.js <repo>` **17 checagens**, incluindo o bloco
+de variáveis do agente e a rota `/v1/messages` no painel. O caminho completo com
+Chromium (`test_anthropic_messages_route_end_to_end_with_real_browser`) roda no
+CI, porque aqui não há navegador instalado. **Implementado ≠ testado local/CI ≠
+homologado** — e nenhum teste toca conta real.

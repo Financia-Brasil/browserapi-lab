@@ -18,6 +18,7 @@ from browserapi_lab.setup import HYPOTHESES
 class FakeWarm:
     calls=0
     prompts=[]
+    answer='fixture-answer'
     block=None
     entered=None
     def __init__(self,store):self.store=store
@@ -28,7 +29,7 @@ class FakeWarm:
         if self.entered:self.entered.set()
         if self.block:self.block.wait(5)
         job.config=self.store.load(job.names[0])
-        job.result=ChatResult('success',True,answer='fixture-answer',send_state='confirmed')
+        job.result=ChatResult('success',True,answer=type(self).answer,send_state='confirmed')
         job.attempts=[{'model':job.config.name,'status':'success','send_state':'confirmed'}]
 
 
@@ -42,6 +43,7 @@ class TestLocalAPI(unittest.TestCase):
         self.panel=Panel(self.store,Path(self.tmp.name)/'data')
         self.patch=patch('browserapi_lab.llm_api.WarmBrowser',FakeWarm);self.patch.start()
         FakeWarm.calls=0;FakeWarm.prompts=[];FakeWarm.block=FakeWarm.entered=None
+        FakeWarm.answer='fixture-answer'
         self.service=APIService(self.panel,port=0);self.panel.api_service=self.service
         self.service.configure({'enabled':True,'names':['saved']})
         self.key=self.service.state['key']
@@ -68,8 +70,16 @@ class TestLocalAPI(unittest.TestCase):
         self.assertEqual(self.request('/v1/models',headers={'Origin':'https://evil.example'})[0],401)
         code,value=self.request('/v1/models')
         self.assertEqual(code,200);self.assertEqual(value['data'][0]['id'],'saved')
-        self.assertEqual(self.request(body=self.body(temperature=.2))[0],400)
-        self.assertEqual(FakeWarm.calls,0)
+        # CLI de agente manda temperature/max_tokens: aceitar e registrar como
+        # ignorado é o que faz o agente funcionar; recusar quebrava a chamada.
+        code,value=self.request(body=self.body(temperature=.2,max_tokens=64))
+        self.assertEqual(code,200)
+        self.assertIn('temperature',value['browserapi']['ignored'])
+        self.assertIn('max_tokens',value['browserapi']['ignored'])
+        # Campo desconhecido de verdade continua sendo erro, com o nome do campo.
+        code,value=self.request(body=self.body(whatever=1))
+        self.assertEqual(code,400)
+        self.assertIn('whatever',value['error']['message'])
         self.assertEqual(self.service.server.server_address[0],'127.0.0.1')
 
     def test_root_and_missing_key_explain_what_to_use_instead(self):
@@ -99,7 +109,10 @@ class TestLocalAPI(unittest.TestCase):
     def test_json_sse_idempotency_and_private_prompt_not_cached_or_logged(self):
         headers={'Idempotency-Key':'operation-1'}
         code,value=self.request(body=self.body(),headers=headers)
-        self.assertEqual(code,200);self.assertIsNone(value['usage'])
+        # usage não é inventado: zeros + explicação de que o site não informa.
+        self.assertEqual(code,200)
+        self.assertEqual(value['usage']['total_tokens'],0)
+        self.assertIn('não informa tokens',value['usage']['browserapi']['note'])
         self.assertEqual(value['choices'][0]['message']['content'],'fixture-answer')
         self.assertEqual(self.request(body=self.body(),headers=headers)[1]['id'],value['id'])
         self.assertEqual(FakeWarm.calls,1)
@@ -354,3 +367,124 @@ class TestEndpointDiagnosis(unittest.TestCase):
         self.assertIn('BROWSERAPI_KEY', example)
         self.assertIn('meu-gemini', example)
         self.assertNotIn('Bearer sk-', example)
+
+
+class TestAgentProtocols(unittest.TestCase):
+    """O que uma CLI precisa: /v1/messages (Anthropic), tools e parâmetros tolerados.
+
+    Relato do uso real: o agente recebeu "Parâmetro não suportado;
+    tools/temperature/limites nativos não são simulados" e parou.
+    """
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.store=ConfigStore(Path(self.tmp.name)/'config')
+        self.config=ChatConfig('saved','https://example.com',**HYPOTHESES['fixture'])
+        self.store.save(self.config)
+        self.store.save_status('saved',ChatResult('success',True).receipt(self.config))
+        self.panel=Panel(self.store,Path(self.tmp.name)/'data')
+        self.patch=patch('browserapi_lab.llm_api.WarmBrowser',FakeWarm);self.patch.start()
+        FakeWarm.calls=0;FakeWarm.prompts=[];FakeWarm.block=FakeWarm.entered=None
+        FakeWarm.answer='fixture-answer'
+        self.service=APIService(self.panel,port=0);self.panel.api_service=self.service
+        self.service.configure({'enabled':True,'names':['saved']})
+        self.key=self.service.state['key']
+
+    def tearDown(self):
+        self.service.close();self.panel.close();self.patch.stop();self.tmp.cleanup()
+
+    def call(self,path,body,headers=None):
+        connection=http.client.HTTPConnection('127.0.0.1',self.service.server.server_port,timeout=8)
+        values={'Authorization':'Bearer '+self.key,'Content-Type':'application/json'}
+        values.update(headers or {})
+        connection.request('POST',path,json.dumps(body),values)
+        response=connection.getresponse();raw=response.read()
+        mime=response.getheader('Content-Type')
+        connection.close()
+        return response.status,(raw.decode() if mime=='text/event-stream' else json.loads(raw)),response
+
+    def anthropic(self,**extra):
+        body={'model':'saved','max_tokens':1024,'temperature':0.2,
+              'system':[{'type':'text','text':'Você é um agente de terminal.'}],
+              'messages':[{'role':'user','content':[{'type':'text','text':'quais arquivos existem?'}]}]}
+        body.update(extra)
+        return body
+
+    def test_messages_endpoint_accepts_what_claude_code_sends(self):
+        status,value,response=self.call('/v1/messages',self.anthropic())
+        self.assertEqual(status,200,value)
+        self.assertEqual(value['type'],'message')
+        self.assertEqual(value['role'],'assistant')
+        self.assertEqual(value['content'][0]['text'],'fixture-answer')
+        self.assertEqual(value['stop_reason'],'end_turn')
+        self.assertEqual(value['usage']['output_tokens'],0)
+        # O que o navegador não tem é dito, não fingido.
+        self.assertIn('temperature',value['browserapi']['ignored'])
+        self.assertIn('max_tokens',value['browserapi']['ignored'])
+        self.assertIn('temperature',response.getheader('X-BrowserAPI-Ignored') or '')
+        self.assertEqual(FakeWarm.calls,1)
+
+    def test_x_api_key_header_is_enough_for_anthropic_sdk(self):
+        status,value,_=self.call('/v1/messages',self.anthropic(),
+                                 headers={'Authorization':'','x-api-key':self.key,
+                                          'anthropic-version':'2023-06-01'})
+        self.assertEqual(status,200,value)
+
+    def test_tool_call_comes_back_as_tool_use_block(self):
+        FakeWarm.answer='```json\n{"tool_calls":[{"name":"Read","arguments":{"path":"a.txt"}}]}\n```'
+        tools=[{'name':'Read','description':'lê arquivo',
+                'input_schema':{'type':'object','properties':{'path':{'type':'string'}}}}]
+        status,value,_=self.call('/v1/messages',self.anthropic(tools=tools))
+        self.assertEqual(status,200,value)
+        self.assertEqual(value['stop_reason'],'tool_use')
+        block=value['content'][0]
+        self.assertEqual(block['type'],'tool_use')
+        self.assertEqual(block['name'],'Read')
+        self.assertEqual(block['input'],{'path':'a.txt'})
+        self.assertEqual(value['browserapi']['tools'],'emulated')
+        # O protocolo foi para o chat: a lista de ferramentas foi digitada lá.
+        self.assertIn('FERRAMENTAS DISPONÍVEIS',FakeWarm.prompts[-1])
+        self.assertIn('Read',FakeWarm.prompts[-1])
+
+    def test_tool_result_turn_is_read_back_as_text(self):
+        body=self.anthropic(messages=[
+            {'role':'user','content':[{'type':'text','text':'liste'}]},
+            {'role':'assistant','content':[{'type':'tool_use','id':'toolu_1','name':'Bash',
+                                            'input':{'command':'ls'}}]},
+            {'role':'user','content':[{'type':'tool_result','tool_use_id':'toolu_1',
+                                       'content':[{'type':'text','text':'a.txt'}]}]}])
+        status,value,_=self.call('/v1/messages',body)
+        self.assertEqual(status,200,value)
+        prompt=FakeWarm.prompts[-1]
+        self.assertIn('chamada de ferramenta Bash',prompt)
+        self.assertIn('resultado da ferramenta',prompt)
+        self.assertIn('a.txt',prompt)
+
+    def test_streaming_messages_uses_anthropic_event_names(self):
+        FakeWarm.answer='```json\n{"tool_calls":[{"name":"Bash","arguments":{"command":"ls"}}]}\n```'
+        tools=[{'name':'Bash','description':'roda comando','input_schema':{'type':'object'}}]
+        status,text,_=self.call('/v1/messages',self.anthropic(stream=True,tools=tools))
+        self.assertEqual(status,200,text[:200])
+        for event in ('message_start','content_block_start','input_json_delta',
+                      'content_block_stop','message_delta','message_stop'):
+            self.assertIn(event,text)
+        self.assertIn('"stop_reason": "tool_use"',text)
+
+    def test_count_tokens_embeddings_and_responses_routes(self):
+        status,value,_=self.call('/v1/messages/count_tokens',{'model':'saved','messages':[]})
+        self.assertEqual(status,200);self.assertEqual(value['input_tokens'],0)
+        self.assertIn('tokens',value['browserapi']['usage'])
+        status,value,_=self.call('/v1/embeddings',{'model':'saved','input':'x'})
+        self.assertEqual(status,501)
+        self.assertEqual(value['error']['code'],'not_supported')
+        status,value,_=self.call('/v1/responses',{'model':'saved','input':'oi',
+                                                  'max_output_tokens':10})
+        self.assertEqual(status,200,value)
+        self.assertEqual(value['output'][0]['content'][0]['text'],'fixture-answer')
+        self.assertIn('max_output_tokens',value['browserapi']['ignored'])
+
+    def test_unknown_parameter_is_named_and_kept_as_error(self):
+        status,value,_=self.call('/v1/messages',self.anthropic(whatever=1))
+        self.assertEqual(status,400)
+        self.assertIn('whatever',value['error']['message'])
+        self.assertEqual(FakeWarm.calls,0)

@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.11.0';
+const PANEL_VERSION = '0.12.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -692,6 +692,8 @@ function renderService(value){
   $('api-url').value=a.url || '';
   $('api-endpoint').value=a.chat_url || '';
   $('api-snippet').textContent=a.example || '';
+  $('agent-snippet').textContent=a.agent_example || '';
+  $('messages-url-display').textContent=(a.messages_url || '/v1/messages').replace(/^https?:\/\/[^/]+/,'');
   $('copy-endpoint').disabled=!a.chat_url; $('copy-snippet').disabled=!a.example;
   $('api-key').value=a.key || '';
   $('copy-api-url').disabled=!a.url; $('copy-api-key').disabled=!a.key; $('api-show').disabled=!a.key;
@@ -772,6 +774,11 @@ $('copy-snippet').onclick=async()=>{
   try{await navigator.clipboard.writeText($('api-snippet').textContent);
       $('snippet-feedback').textContent='Exemplo copiado. Troque a chave pela sua.';}
   catch(err){$('snippet-feedback').textContent='Selecione o exemplo e copie com Ctrl+C.';}
+};
+$('copy-agent').onclick=async()=>{
+  try{await navigator.clipboard.writeText($('agent-snippet').textContent);
+      $('agent-feedback').textContent='Variáveis copiadas. Troque a chave pela sua.';}
+  catch(err){$('agent-feedback').textContent='Selecione o texto e copie com Ctrl+C.';}
 };
 $('result-retry').onclick=()=>{const chat=flowChat();if(chat)task('check',{name:chat.name});};
 

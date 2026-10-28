@@ -45,6 +45,9 @@ function state(overrides = {}) {
       chat_url: 'http://127.0.0.1:8765/v1/chat/completions',
       models_url: 'http://127.0.0.1:8765/v1/models',
       example: 'curl http://127.0.0.1:8765/v1/chat/completions',
+      messages_url: 'http://127.0.0.1:8765/v1/messages',
+      agent_example: 'export ANTHROPIC_BASE_URL="http://127.0.0.1:8765"\n'
+        + 'export ANTHROPIC_AUTH_TOKEN="<cole aqui a chave local>"',
       message: 'Desativada. Autorize explicitamente antes de usar agentes.',
     },
     updates: {managed: false, enabled: false, message: 'Atualização não gerenciada.'},
@@ -122,6 +125,13 @@ async function main() {
     q('api-url').value === 'http://127.0.0.1:8765/v1', q('api-url').value);
   check('exemplo copiável aparece', q('api-snippet').textContent.includes('curl'),
     q('api-snippet').textContent);
+  check('variáveis do agente aparecem (Claude Code)',
+    q('agent-snippet').textContent.includes('ANTHROPIC_BASE_URL')
+    && q('agent-snippet').textContent.includes('ANTHROPIC_AUTH_TOKEN'),
+    q('agent-snippet').textContent);
+  check('rota do agente é /v1/messages',
+    q('messages-url-display').textContent === '/v1/messages',
+    q('messages-url-display').textContent);
 
   // Clicar em "Ligar API" leva à aba certa sem enviar nada.
   q('quick-action').click();

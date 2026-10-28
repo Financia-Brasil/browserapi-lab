@@ -188,6 +188,7 @@ jobs:
           if [ -d results/ci/ui-redesign ]; then cp -r results/ci/ui-redesign "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/resource-modes.json ]; then cp results/ci/resource-modes.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/llm-api-flow.json ]; then cp results/ci/llm-api-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
+          if [ -f results/ci/anthropic-flow.json ]; then cp results/ci/anthropic-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -f results/ci/product-flow.json ]; then cp results/ci/product-flow.json "results/ci/${GITHUB_RUN_ID}/"; fi
           if [ -d results/ci/benchmark ]; then cp -r results/ci/benchmark "results/ci/${GITHUB_RUN_ID}/"; fi
           git restore results/ci/resumo.md results/ci/doctor-browser.json

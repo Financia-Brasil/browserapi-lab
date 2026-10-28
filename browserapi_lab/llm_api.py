@@ -73,7 +73,12 @@ def diagnose_endpoint(text, port=8765):
     if route in ('', '/v1'):
         return {'ok': False, 'normalized': raw, 'message':
                 'Falta a rota de conversa. Sem ela a resposta é "Not found" (404): '
-                f'use http://127.0.0.1:{port}/v1/chat/completions'}
+                f'use http://127.0.0.1:{port}/v1/chat/completions ou, no Claude Code, '
+                f'ANTHROPIC_BASE_URL=http://127.0.0.1:{port} (sem /v1).'}
+    if route == '/v1/messages':
+        return {'ok': True, 'normalized': raw, 'message':
+                'Endereço do Claude Code correto. Ele chama /v1/messages sozinho a partir da base '
+                f'http://127.0.0.1:{port}. Use ANTHROPIC_BASE_URL sem /v1.'}
     if route == '/v1/models':
         return {'ok': True, 'normalized': raw, 'message':
                 'Este endereço lista os modelos. Para conversar, troque /v1/models por /v1/chat/completions.'}
@@ -98,11 +103,23 @@ def endpoint_example(port=8765, model='meu-gemini'):
             '  -H "Content-Type: application/json" \\\n'
             f'  -d \'{{"model":"{model}","messages":[{{"role":"user","content":"Ola"}}]}}\'')
 
+def agent_env_example(port=8765, model='meu-gemini'):
+    """Variáveis de ambiente para uma CLI que fala a API Anthropic.
 
-class APIError(ValueError):
-    def __init__(self,message,code='invalid_request',http=400):
-        super().__init__(message)
-        self.code,self.http=code,http
+    ``ANTHROPIC_BASE_URL`` é a base **sem** ``/v1``: o SDK acrescenta
+    ``/v1/messages``. A chave vai em ``ANTHROPIC_AUTH_TOKEN`` para não entrar em
+    histórico de shell nem em captura de tela.
+    """
+    return ('export ANTHROPIC_BASE_URL="http://127.0.0.1:%d"\n'
+            'export ANTHROPIC_AUTH_TOKEN="<cole aqui a chave local>"\n'
+            'export ANTHROPIC_MODEL="%s"' % (port, model))
+
+
+# APIError e os adaptadores de protocolo vivem em ``api_compat`` para não
+# criar ciclo de importação; continuam disponíveis por ``llm_api``.
+from .api_compat import APIError, body as reply_body, normalize as normalize_request
+from .api_compat import prompt_messages, sse as reply_sse
+from . import tool_calls
 
 
 @dataclass
@@ -259,6 +276,9 @@ class APIService:
                     'models_url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1/models',
                     'example':endpoint_example(self.server.server_port if self.server else self.port,
                                                (self.state.get('names') or ['meu-gemini'])[0]),
+                    'messages_url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1/messages',
+                    'agent_example':agent_env_example(self.server.server_port if self.server else self.port,
+                                                      (self.state.get('names') or ['meu-gemini'])[0]),
                     'names':self.state.get('names',[]),'headless':self.state.get('headless',False),
                     'lightweight':self.state.get('lightweight',False),'retrieval':self.state.get('retrieval',False),
                     'fallback':self.state.get('fallback',False),'remember':self.state.get('remember',False),'personal_consent':self.state.get('personal_consent',False),'message':self.notice}
@@ -418,9 +438,10 @@ class APIService:
                     pass
 
     def submit(self,payload,key):
-        allowed={'model','messages','stream','documents','conversation_id'}
+        allowed={'model','messages','stream','documents','conversation_id','tools','tool_choice',
+                 'ignored','kind'}
         if not isinstance(payload,dict) or set(payload)-allowed:
-            raise APIError('Parâmetro não suportado; tools/temperature/limites nativos não são simulados')
+            raise APIError('Parâmetro não suportado: o corpo precisa ser normalizado antes do envio')
         if type(payload.get('stream',False)) is not bool:
             raise APIError('stream deve ser booleano')
         if not isinstance(key,str) or len(key)>128 or any(ord(c)<33 or ord(c)>126 for c in key):
@@ -467,8 +488,20 @@ class APIService:
                     messages=[{'role':prior[i][0],'content':prior[i][1]} for i in recent_indices]+messages
                 cold='\n\n'.join(f'[histórico registro {i+1} ({r})]\n{t}' for i,(r,t) in enumerate(prior) if i not in recent_indices)
                 documents=([cold] if cold else [])+(documents or [])
-            text,report=plan(messages,documents,retrieve=self.state.get('retrieval',False))
+            # CLI de agente manda prompt grande (instruções + esquemas de
+            # ferramentas). Recusar por orçamento fixo quebrava o uso; o teto
+            # agora acompanha o pedido e continua explícito no relatório.
+            if payload.get('tools'):
+                # O protocolo de ferramentas entra como instrução; o orçamento
+                # é medido depois dele, porque é ele que ocupa espaço.
+                messages=prompt_messages({'messages':messages,'tools':payload['tools'],
+                                          'tool_choice':payload.get('tool_choice')})
+            budget=max(24_000,min(160_000,sum(len(item['content']) for item in messages)+4_000))
+            text,report=plan(messages,documents,retrieve=self.state.get('retrieval',False),
+                             budget=budget)
             report.update(history_persisted=bool(scope),history_limit_characters=self.history.limit if scope else None)
+            if payload.get('tools'):
+                report['tools_emulated']=len(payload['tools'])
             options={k:self.state.get(k,False) for k in ('headless','lightweight','retrieval','fallback')}
             job=Job(text,names,options,report,owner=self,cache_key=key,scope=scope,
                     question=payload['messages'][-1]['content'] if scope else '',
@@ -510,6 +543,11 @@ class APIServer(ThreadingHTTPServer):
 
 
 class APIHandler(BaseHTTPRequestHandler):
+    # Rotas e o dialeto que cada uma fala. Ter todas é o que permite uma CLI
+    # (Claude Code fala Anthropic) apontar para cá sem adaptador.
+    ROUTES={'/v1/chat/completions':'openai-chat','/v1/messages':'anthropic',
+            '/v1/completions':'openai-completions','/v1/responses':'openai-responses'}
+
     def setup(self):
         super().setup()
         self.connection.settimeout(15)
@@ -523,40 +561,98 @@ class APIHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type','application/json; charset=utf-8')
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
+        # Quem só vê cabeçalho (log de CLI) descobre aqui o que foi ignorado.
+        if getattr(self,'_ignored',''):
+            self.send_header('X-BrowserAPI-Ignored',self._ignored)
         self.send_header('Content-Length',str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
 
+    def send_events(self,raw):
+        self.send_response(200)
+        self.send_header('Content-Type','text/event-stream')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('X-Accel-Buffering','no')
+        self.send_header('Content-Length',str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def supplied_key(self):
+        """Aceita ``Authorization: Bearer`` e ``x-api-key`` (Anthropic SDK)."""
+        bearer=(self.headers.get('Authorization','') or '').strip()
+        if bearer.lower().startswith('bearer '):
+            return bearer[7:].strip()
+        return (self.headers.get('x-api-key','') or '').strip()
+
     def authorized(self):
         port=self.server.server_port
-        supplied=self.headers.get('Authorization','')
+        supplied=self.supplied_key()
+        expected=self.server.service.state['key']
         return (self.headers.get('Host') in (f'127.0.0.1:{port}',f'localhost:{port}')
                 and self.headers.get('Origin',f'http://127.0.0.1:{port}')==f'http://127.0.0.1:{port}'
-                and secrets.compare_digest(supplied.encode(),('Bearer '+self.server.service.state['key']).encode()))
+                and secrets.compare_digest(supplied.encode(),expected.encode()))
 
     def missing_key(self):
-        return not (self.headers.get('Authorization') or '').strip()
+        return not self.supplied_key()
+
+    def route(self):
+        return self.path.split('?')[0].rstrip('/') or '/'
 
     def do_GET(self):
         if not self.authorized():
             if self.missing_key():
-                return self.send_json(401,{'error':{'message':'Falta a chave: use Authorization: Bearer <chave do painel>',
-                                                    'type':'authentication_error','code':'missing_api_key'}})
+                return self.send_json(401,{'error':{'message':'Falta a chave: envie Authorization: Bearer <chave do painel> ou x-api-key','type':'authentication_error','code':'missing_api_key'}})
             return self.send_json(401,{'error':{'message':'Unauthorized','type':'authentication_error','code':'invalid_api_key'}})
-        if self.path=='/':
-            return self.send_json(404,{'error':{'message':'A API não tem página inicial. Use /v1/models ou /v1/chat/completions',
-                                                'code':'not_found'}})
-        if self.path!='/v1/models':
-            return self.send_json(404,{'error':{'message':'Not found','code':'not_found'}})
-        names=self.server.service.state['names']
-        return self.send_json(200,{'object':'list','data':[{'id':n,'object':'model','created':0,'owned_by':'browserapi-local-alias'} for n in [*names,'auto']]})
+        route=self.route()
+        if route=='/':
+            return self.send_json(404,{'error':{'message':'A API não tem página inicial. Use '
+                                                '/v1/messages (Claude Code) ou /v1/chat/completions '
+                                                '(OpenAI). Também há /v1/responses e /v1/models.',
+                                                'code':'not_found','endpoints':sorted(self.ROUTES)}})
+        if route=='/v1':
+            return self.send_json(200,{'object':'browserapi.index','endpoints':sorted(self.ROUTES),
+                                       'extra':['/v1/models','/v1/messages/count_tokens'],
+                                       'note':'Chave em Authorization: Bearer ou x-api-key. Só loopback.'})
+        if route=='/v1/models':
+            names=self.server.service.state['names']
+            return self.send_json(200,{'object':'list','data':[{'id':n,'object':'model','created':0,
+                                                               'owned_by':'browserapi-local-alias'} for n in [*names,'auto']]})
+        return self.send_json(404,{'error':{'message':'Not found','code':'not_found'}})
+
+    def read_payload(self):
+        length=int(self.headers.get('Content-Length','0'))
+        if not 0<length<=16_000_000:
+            raise APIError('Corpo excede limite de 16 MB','request_too_large',413)
+        if self.headers.get('Content-Type','').split(';')[0]!='application/json':
+            raise APIError('Use application/json','invalid_content_type',415)
+        raw=self.rfile.read(length)
+        if (self.headers.get('Content-Encoding') or '').lower()=='gzip':
+            import gzip
+            try:
+                raw=gzip.decompress(raw)
+            except OSError:
+                raise APIError('Corpo gzip inválido','invalid_encoding',400) from None
+        return json.loads(raw)
 
     def do_POST(self):
         service=self.server.service
         if not self.authorized():
             return self.send_json(401,{'error':{'message':'Unauthorized','type':'authentication_error','code':'invalid_api_key'}})
-        if self.path!='/v1/chat/completions':
-            return self.send_json(404,{'error':{'message':'Not found','code':'not_found'}})
+        route=self.route()
+        style=self.ROUTES.get(route)
+        if route=='/v1/messages/count_tokens':
+            # A CLI usa isto só para avisar sobre contexto. Contar tokens não é
+            # possível aqui; devolver zero com explicação é melhor que inventar.
+            return self.send_json(200,{'input_tokens':0,'browserapi':{
+                'usage':'O site não informa tokens; a contagem é feita em caracteres.',
+                'note':'contexto local em caracteres, não tokens'}})
+        if route in ('/v1/embeddings','/v1/audio/transcriptions','/v1/images/generations'):
+            return self.send_json(501,{'error':{'message':'A API local só faz conversa em texto; '
+                                                          'este endpoint não é emulado.',
+                                                'type':'not_supported','code':'not_supported'}})
+        if style is None:
+            return self.send_json(404,{'error':{'message':'Not found. Rotas: '+', '.join(sorted(self.ROUTES)),
+                                                'code':'not_found'}})
         with service.lock:
             if service.active>=4:
                 return self.send_json(429,{'error':{'message':'Capacidade local ocupada','code':'local_capacity'}})
@@ -571,39 +667,33 @@ class APIHandler(BaseHTTPRequestHandler):
                 with service.lock:
                     service.active-=1
         try:
-            self.connection.settimeout(15)
-            length=int(self.headers.get('Content-Length','0'))
-            if not 0<length<=16_000_000:
-                raise APIError('Corpo excede limite de 16 MB','request_too_large',413)
-            if self.headers.get('Content-Type','').split(';')[0]!='application/json':
-                raise APIError('Use application/json','invalid_content_type',415)
-            payload=json.loads(self.rfile.read(length))
-            job=service.submit(payload,self.headers.get('Idempotency-Key',''))
+            payload=self.read_payload()
+            request=normalize_request(style,payload)
+            job=service.submit(request,self.headers.get('Idempotency-Key',''))
             if not job.done.wait(600):
                 raise APIError('Prazo local excedido; envio pode ter sido aceito, não repita sem conferir','request_pending',504)
             if job.error:
                 raise job.error
+            if job.result is None:
+                # Worker morreu sem resultado: antes isso derrubava a conexão
+                # sem resposta nenhuma e a CLI só via "connection reset".
+                raise APIError('A execução terminou sem resposta; confira o painel e o navegador',
+                               'execution_failed',502)
             result=job.result
             if result.status!='success':
                 code=504 if result.status=='timeout' else 429 if result.status=='rate_limit' else 409
                 raise APIError('A fonte não confirmou a resposta; confira o navegador antes de repetir',result.status,code)
-            body={'id':job.identifier,'object':'chat.completion','created':int(job.created_at),'model':job.config.name,
-                  'choices':[{'index':0,'message':{'role':'assistant','content':result.answer},'finish_reason':'stop'}],
-                  'usage':None,'browserapi':{'context':job.context,'attempts':job.attempts,'streaming':'buffered'}}
-            if not payload.get('stream'):
+            parsed=tool_calls.parse(result.answer or '',request['tools'])
+            if request['stream']:
+                raw=reply_sse(style,request,job,parsed)
                 release()
-                return self.send_json(200,body)
-            chunk={'id':body['id'],'object':'chat.completion.chunk','created':body['created'],'model':body['model'],
-                   'choices':[{'index':0,'delta':{'role':'assistant','content':result.answer},'finish_reason':None}]}
-            end=dict(chunk,choices=[{'index':0,'delta':{},'finish_reason':'stop'}])
-            raw=('data: '+json.dumps(chunk,ensure_ascii=False)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n').encode()
+                return self.send_events(raw)
+            reply=reply_body(style,request,job,parsed)
             release()
-            self.send_response(200)
-            self.send_header('Content-Type','text/event-stream')
-            self.send_header('Cache-Control','no-store')
-            self.send_header('Content-Length',str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
+            if request.get('ignored'):
+                # Cabeçalho para quem não lê o corpo (logs de CLI, por exemplo).
+                self._ignored=','.join(request['ignored'])
+            return self.send_json(200,reply)
         except (ContextError,ValueError,TypeError,KeyError,RecursionError) as error:
             release()
             if not isinstance(error,APIError):
@@ -614,5 +704,15 @@ class APIHandler(BaseHTTPRequestHandler):
                 pass
         except OSError:
             pass
+        except Exception:
+            # Nunca derrubar o socket sem resposta: uma CLI só mostra "erro de
+            # rede" e não há como diagnosticar. Sem detalhes internos na saída.
+            release()
+            try:
+                self.send_json(500,{'error':{'message':'Falha interna ao montar a resposta; '
+                                                       'nada foi reenviado. Confira o painel.',
+                                             'type':'api_error','code':'internal_error'}})
+            except OSError:
+                pass
         finally:
             release()
