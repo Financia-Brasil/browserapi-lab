@@ -163,7 +163,13 @@ console.log('— painel do apontamento (picker.js) —');
   check('sem barra de rolagem', win.getComputedStyle(banner).overflow === 'hidden',
     win.getComputedStyle(banner).overflow);
   check('largura fixa', banner.style.width === '392px', banner.style.width);
-  check('cabeçalho arrastável', win.getComputedStyle(banner.firstChild).cursor === 'move');
+  const grip = win.document.querySelector('[data-picker-grip]');
+  check('alça de arraste existe e é a única parte arrastável',
+    !!grip && win.getComputedStyle(grip).cursor === 'move'
+    && win.getComputedStyle(banner.firstChild).pointerEvents === 'none',
+    grip && [win.getComputedStyle(grip).cursor, win.getComputedStyle(banner.firstChild).pointerEvents]);
+  check('título não intercepta o clique', win.getComputedStyle(banner.querySelector('strong')).pointerEvents !== 'auto',
+    win.getComputedStyle(banner.querySelector('strong')).pointerEvents);
   check('painel não rouba o clique da página', banner.style.pointerEvents === 'none',
     banner.style.pointerEvents);
   check('controles continuam clicáveis',

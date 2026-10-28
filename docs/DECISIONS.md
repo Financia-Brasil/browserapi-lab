@@ -449,9 +449,13 @@ bloqueia justamente o alvo.
 **Decisão.**
 
 * o **corpo** do painel tem `pointer-events: none`: clicar “através” dele
-  atinge a página, então cobrir o alvo deixa de ser um defeito. A faixa do
-  título (arraste) e os botões voltam a `pointer-events: auto` — são os únicos
-  pontos que precisam de ponteiro;
+  atinge a página, então cobrir o alvo deixa de ser um defeito. Só os **botões**
+  e a **alça de arraste** (`⠿`, 24 px) voltam a `pointer-events: auto`. O
+  primeiro CI mostrou que deixar o título inteiro arrastável era suficiente
+  para o `<strong>` do cabeçalho interceptar o clique — por isso a alça;
+* a pontuação de canto pesa 12× a sobreposição com o que se precisa clicar
+  (campo, botão) contra 1× para blocos grandes: o painel sai da frente do
+  campo antes de sair de qualquer container;
 * o painel **continua com tamanho fixo e sem rolagem** (`overflow: hidden`); o
   limite de altura é a tela, não a faixa livre (uma faixa curta não pode virar
   barra de rolagem);

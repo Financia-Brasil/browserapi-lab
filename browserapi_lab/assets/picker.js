@@ -53,13 +53,23 @@
     pointerEvents: 'none' });
 
   const top = document.createElement('div');
+  // A faixa do título é `none` como o resto do corpo: se ela recebesse o
+  // ponteiro, o <strong> do título interceptaria o clique no alvo sempre que o
+  // painel estivesse por cima dele (foi assim que o CI reprovou: "subtree
+  // intercepts pointer events"). Arrasta-se pela alça, que é pequena.
   Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap',
-    cursor: 'move', userSelect: 'none', paddingBottom: '4px', pointerEvents: 'auto' });
-  top.title = 'Arraste para mover o painel';
+    userSelect: 'none', paddingBottom: '4px', pointerEvents: 'none' });
+  const grip = document.createElement('span');
+  grip.setAttribute('data-picker-grip', '');
+  grip.setAttribute('aria-hidden', 'true');
+  grip.textContent = '⠿';
+  Object.assign(grip.style, { cursor: 'move', pointerEvents: 'auto', fontSize: '18px',
+    lineHeight: '1', padding: '4px 2px', color: '#5d6f66' });
+  grip.title = 'Arraste para mover o painel';
   const title = document.createElement('strong');
   title.textContent = 'Selecionar: ' + role;
   title.style.fontSize = '16px';
-  top.append(title);
+  top.append(grip, title);
   if (step) {
     const chip = document.createElement('span');
     chip.textContent = 'Passo ' + step;
@@ -327,9 +337,19 @@
     * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 
   function targetBoxes() {
-    return (chosen ? query(selector) : candidates()).slice(0, 40)
-      .map(el => el.getBoundingClientRect())
-      .filter(r => r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight
+    const nodes = (chosen ? query(selector) : candidates()).slice(0, 40);
+    const important = 'textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"],'
+      + 'input,button,[role="button"]';
+    return nodes.map(el => {
+      const rect = el.getBoundingClientRect();
+      // O que a pessoa precisa clicar (campo, botão) pesa mais que um container
+      // grande: o painel sai da frente do campo antes de sair de qualquer bloco.
+      let weight = 1;
+      try { if (el.matches(important) || (el.closest && el.closest(important))) weight = 12; }
+      catch (error) { weight = 1; }
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
+        width: rect.width, height: rect.height, weight };
+    }).filter(r => r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight
                    && r.right > 0 && r.left < innerWidth);
   }
 
@@ -350,7 +370,7 @@
     const top = name.startsWith('top') ? MARGIN : innerHeight - height - MARGIN;
     const rect = { left, top, right: left + width, bottom: top + height };
     return { index: CORNERS.indexOf(name), height, room,
-             score: boxes.reduce((sum, box) => sum + area(rect, box), 0),
+             score: boxes.reduce((sum, box) => sum + area(rect, box) * (box.weight || 1), 0),
              usable: room >= MIN_HEIGHT || !boxes.length };
   }
 
@@ -566,7 +586,7 @@
   // Arrastar pela faixa do título. Clique em botão continua sendo clique.
   let dragging = null;
   const startDrag = event => {
-    if (!event.composedPath().includes(top)) return;
+    if (!event.composedPath().includes(grip)) return;
     event.preventDefault();
     const rect = banner.getBoundingClientRect();
     dragging = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
