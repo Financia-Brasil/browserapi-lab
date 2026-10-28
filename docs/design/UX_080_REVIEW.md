@@ -64,17 +64,21 @@ anteriores porque nenhum deles abria a aba Atividade.
    esvaziado_nao_vira_sucesso` esperava falha, mas o fixture esvazia o campo — o
    caminho “balão novo + campo esvaziado” confirma por projeto. O teste foi dividido
    em dois: um documenta essa regra mais permissiva (com evidência declarada no
-   recibo) e outro mantém a contraprova, devolvendo o rascunho imediatamente após o
-   clique para o campo nunca ficar vazio.
+   recibo) e outro usa uma contraprova determinística (clique em Enviar
+   interceptado: nada é publicado, o campo mantém o texto). A versão intermediária,
+   que tentava devolver o rascunho por `setTimeout`, foi descartada por depender do
+   timing do fixture.
 2. **Flake pré-existente, não relacionado:** `test_same_origin_tab_in_another_browser_
    context_is_never_used` falhou porque o Chrome descartável cria
    `DevToolsActivePort` vazio/parcial antes das duas linhas válidas; o helper do
    teste esperava só o arquivo existir. Agora ele espera o endpoint ficar legível.
    Sem mudança no produto: a leitura estrita de produção continua igual.
 3. **Falha silenciosa no teste da conversa** (`#conversation .turn` = 0): o teste
-   esperava 5 s por um turno sem dizer por quê. Passou a ler o recibo primeiro e
-   falhar com `status`/`diagnóstico`/log — se for envio não confirmado, a próxima
-   execução mostra isso explicitamente em vez de estourar tempo.
+   esperava 5 s por um turno sem dizer por quê. Agora consulta a conversa do painel
+   (fonte de verdade de `ask`, que não grava recibo de compatibilidade) e mostra o
+   log e as últimas mensagens na falha. A primeira tentativa usou
+   `store.status('saved')` — errado por contrato: `ask` não produz recibo, e o teste
+   acusou `None` em vez do turno. Corrigido para ler `panel.transcript`.
 
 Nenhum desses pontos foi convertido em prazo maior, reenvio automático ou teste
 mais frouxo no produto.

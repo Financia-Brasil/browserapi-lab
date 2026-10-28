@@ -411,12 +411,11 @@ class TestGraphicalJourney(BrowserTestCase):
         self.wait_question('Autoriza enviar a mensagem informada')
         self.page.click('#yes')
         self.wait_phase('Concluído')
-        # Falha com o motivo real (ex.: envio não confirmado) em vez de esperar
-        # 5 s por um turno que nunca viria.
-        receipt = self.store.status('saved') or {}
-        log_text = self.page.locator('#log').inner_text()
-        self.assertEqual(receipt.get('status'), 'success',
-                         (receipt.get('message'), receipt.get('diagnostics'), log_text))
+        # `ask` não grava recibo de compatibilidade: a fonte de verdade do turno
+        # é a conversa do painel. Falhar aqui mostra o que o painel relatou.
+        snapshot = self.panel.transcript.snapshot('saved')
+        self.assertEqual(len(snapshot['messages']), 2,
+                         (self.page.locator('#log').inner_text(), self.panel.snapshot()['messages'][-3:]))
         expect(self.page.locator('#conversation-card')).to_be_visible()
         expect(self.page.locator('#conversation .turn')).to_have_count(2)
         # O painel só exibe o turno depois de um novo poll do estado.

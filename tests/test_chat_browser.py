@@ -147,41 +147,24 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
 
-    def test_rascunho_presente_impede_confirmacao_com_texto_divergente(self):
-        """Contraprova: balão reescrito, mas o campo continua com o rascunho.
+    def test_clique_bloqueado_sem_mensagem_nova_nao_confirma_envio(self):
+        """Contraprova realista: nada foi publicado no chat, então não há sucesso.
 
-        Sem texto correspondente e sem esvaziamento, o resultado é ambiguidade
-        — nunca sucesso, e nunca reenvio.
+        O clique em Enviar é interceptado (site com botão inerte/erro de rede).
+        O balão não muda, o campo mantém o texto: sem evidência, sem confirmação.
         """
         config = self.prepare()
         self.page.evaluate("""() => {
-            const conversation = document.querySelector('#conversation');
-            new MutationObserver(() => {
-                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
-                    if (node.dataset.balChanged) continue;
-                    node.dataset.balChanged = '1';
-                    node.textContent = 'conteúdo completamente diferente';
-                }
-            }).observe(conversation, {childList: true, subtree: true});
-            const composer = document.querySelector('#composer');
-            let typed = '';
-            composer.addEventListener('input', event => { if (event.target.value) typed = event.target.value; });
-            // Site que NÃO consome o rascunho: devolve o texto logo após o clique.
-            document.querySelector('#send').addEventListener('click', () => {
-                setTimeout(() => {
-                    const field = document.querySelector('#composer');
-                    if (!field.value && typed) {
-                        field.value = typed;
-                        field.dispatchEvent(new Event('input', {bubbles: true}));
-                    }
-                }, 0);
+            document.querySelector('#send').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopImmediatePropagation();
             }, true);
         }""")
         result = exchange(self.page, config, authorized=True, health_check=True)
         self.assertNotEqual(result.status, 'success', result.diagnostics)
         self.assertEqual(result.send_state, 'unknown')
-        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
         self.assertNotIn('campo esvaziado', result.diagnostics.get('send_evidence', ''))
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
 
     def test_ambiguous_send_after_fill_never_clicks_or_retries(self):
         config = self.prepare()
