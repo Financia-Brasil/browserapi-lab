@@ -60,3 +60,37 @@ class TestEvidenciaReal(unittest.TestCase):
     def test_normalizacao_nao_aproxima_textos_diferentes(self):
         self.assertNotEqual(normalize_text('Enviar agora'), normalize_text('Enviar depois'))
         self.assertEqual(normalize_text(' a\u00a0\u200b\n b '), 'a b')
+
+class TestEvidenceSpeaksBothLanguages(unittest.TestCase):
+    """A frase da evidência precisa dizer o que foi observado, não só "ok".
+
+    Quando o site reescreve o texto (NBSP, zero-width, reformatação), o nonce é
+    a prova e a comparação por texto legitimamente falha. O recibo registra as
+    duas coisas para o diagnóstico não sugerir que o texto foi ignorado.
+    """
+
+    def test_nonce_with_rewritten_text_says_the_site_rewrote_it(self):
+        ok, reason = evidence_of_send({'count': 0, 'last': None},
+                                      {'count': 1, 'last': '9f2a'}, 'pedido 9f2a',
+                                      nonce='9f2a')
+        self.assertTrue(ok)
+        self.assertIn('nonce', reason)
+        self.assertIn('reescreveu', reason)
+
+    def test_nonce_with_matching_text_says_both(self):
+        ok, reason = evidence_of_send({'count': 0, 'last': None},
+                                      {'count': 1, 'last': 'pedido 9f2a'}, 'pedido 9f2a',
+                                      nonce='9f2a')
+        self.assertTrue(ok)
+        self.assertIn('nonce', reason)
+        self.assertIn('texto também confere', reason)
+
+    def test_nonce_without_a_new_message_is_not_evidence(self):
+        ok, _reason = evidence_of_send({'count': 1, 'last': 'pedido 9f2a'},
+                                       {'count': 1, 'last': 'pedido 9f2a'}, 'pedido 9f2a',
+                                       nonce='9f2a')
+        self.assertFalse(ok)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -38,17 +38,38 @@
   banner.id = '__browserapi_picker';
   banner.setAttribute('role', 'region');
   banner.setAttribute('aria-label', (step ? 'Passo ' + step + ': ' : '') + 'Selecionar ' + role);
-  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '400px',
+  /* Tamanho fixo e sem barra de rolagem (pedido do uso real: com rolagem o
+   * conteúdo saía da vista e o painel cobria o balão). O conteúdo é compacto
+   * por construção — três linhas de conferência — e o painel é arrastável.
+   * Tudo por propriedade CSSOM: CSP com style-src restrito não bloqueia isto,
+   * enquanto style="…"/cssText seria bloqueado. */
+  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '392px',
     maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', zIndex: '2147483647', background: '#fff',
     color: '#1b3029', border: '2px solid #146c50', borderRadius: '8px', padding: '12px',
-    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', maxHeight: 'calc(100vh - 32px)', overflow: 'auto' });
+    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', overflow: 'hidden',
+    // O painel nunca rouba o clique da página: passar por cima do campo que a
+    // pessoa precisa apontar continua funcionando. Só os controles e a faixa
+    // de arraste respondem ao ponteiro (definido logo abaixo).
+    pointerEvents: 'none' });
 
   const top = document.createElement('div');
-  Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' });
+  // A faixa do título é `none` como o resto do corpo: se ela recebesse o
+  // ponteiro, o <strong> do título interceptaria o clique no alvo sempre que o
+  // painel estivesse por cima dele (foi assim que o CI reprovou: "subtree
+  // intercepts pointer events"). Arrasta-se pela alça, que é pequena.
+  Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap',
+    userSelect: 'none', paddingBottom: '4px', pointerEvents: 'none' });
+  const grip = document.createElement('span');
+  grip.setAttribute('data-picker-grip', '');
+  grip.setAttribute('aria-hidden', 'true');
+  grip.textContent = '⠿';
+  Object.assign(grip.style, { cursor: 'move', pointerEvents: 'auto', fontSize: '18px',
+    lineHeight: '1', padding: '4px 2px', color: '#5d6f66' });
+  grip.title = 'Arraste para mover o painel';
   const title = document.createElement('strong');
   title.textContent = 'Selecionar: ' + role;
   title.style.fontSize = '16px';
-  top.append(title);
+  top.append(grip, title);
   if (step) {
     const chip = document.createElement('span');
     chip.textContent = 'Passo ' + step;
@@ -71,7 +92,7 @@
   const previewText = document.createElement('span');
   previewText.textContent = 'nada ainda — clique em uma área destacada.';
   Object.assign(previewText.style, { wordBreak: 'break-word', display: '-webkit-box',
-    WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' });
+    WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' });
   previewBox.append(previewLabel, previewText);
 
   const status = document.createElement('p');
@@ -284,7 +305,7 @@
   });
   const back = button('Voltar', () => { const el = history.pop(); if (el) preview(el, false); });
   const another = button('Escolher outra', reset);
-  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; locked = true; placeBanner(); });
+  const move = button('Mover', () => { manualPos = null; corner = (corner + 1) % CORNERS.length; locked = true; placeBanner(); });
   const skip = button('Pular este campo', () => finish({ cancelled: true }), 'data-picker-skip');
   const abort = button('Cancelar mapeamento', () => finish({ abort: true }), 'data-picker-abort');
 
@@ -294,7 +315,10 @@
     b.textContent = text;
     if (attribute) b.setAttribute(attribute, '');
     Object.assign(b.style, { minHeight: '44px', padding: '8px 16px', border: '1px solid #81978b',
-      borderRadius: '6px', background: '#fff', color: '#1b3029', font: 'inherit', cursor: 'pointer' });
+      borderRadius: '6px', background: '#fff', color: '#1b3029', font: 'inherit', cursor: 'pointer',
+      // O corpo do painel é `pointer-events: none` (ADR-025): só os controles
+      // recebem o ponteiro de volta, por isso isto fica na fábrica.
+      pointerEvents: 'auto' });
     b.onclick = onClick;
     return b;
   }
@@ -313,9 +337,19 @@
     * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 
   function targetBoxes() {
-    return (chosen ? query(selector) : candidates()).slice(0, 40)
-      .map(el => el.getBoundingClientRect())
-      .filter(r => r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight
+    const nodes = (chosen ? query(selector) : candidates()).slice(0, 40);
+    const important = 'textarea,[contenteditable="true"],[contenteditable=""],[role="textbox"],'
+      + 'input,button,[role="button"]';
+    return nodes.map(el => {
+      const rect = el.getBoundingClientRect();
+      // O que a pessoa precisa clicar (campo, botão) pesa mais que um container
+      // grande: o painel sai da frente do campo antes de sair de qualquer bloco.
+      let weight = 1;
+      try { if (el.matches(important) || (el.closest && el.closest(important))) weight = 12; }
+      catch (error) { weight = 1; }
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
+        width: rect.width, height: rect.height, weight };
+    }).filter(r => r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight
                    && r.right > 0 && r.left < innerWidth);
   }
 
@@ -336,16 +370,16 @@
     const top = name.startsWith('top') ? MARGIN : innerHeight - height - MARGIN;
     const rect = { left, top, right: left + width, bottom: top + height };
     return { index: CORNERS.indexOf(name), height, room,
-             score: boxes.reduce((sum, box) => sum + area(rect, box), 0),
+             score: boxes.reduce((sum, box) => sum + area(rect, box) * (box.weight || 1), 0),
              usable: room >= MIN_HEIGHT || !boxes.length };
   }
 
-  function placeBanner() {
-    // Sem o limite antigo: a altura "natural" é o conteúdo inteiro.
+  function measureHeight() {
     banner.style.maxHeight = '';
-    const natural = Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
-    const boxes = targetBoxes();
-    const union = unionOf(boxes);
+    return Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
+  }
+
+  function chooseCorner(boxes, union, natural) {
     const plans = CORNERS.map(name => layout(name, boxes, union, natural));
     const current = plans[corner];
     let best = current;
@@ -357,11 +391,38 @@
       // sai da frente assim que passar a cobrir o alvo (ex.: depois de rolar).
       if (current && (current.usable || !usable.length) && current.score <= best.score + 1) best = current;
     }
+    return best || plans[0];
+  }
+
+  function placeBanner() {
+    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
+    const boxes = targetBoxes();
+    const union = unionOf(boxes);
+    const natural = measureHeight();
+    const best = chooseCorner(boxes, union, natural);
     corner = best ? best.index : corner;
     applyCorner(best, natural);
   }
 
+  let manualPos = null;  // posição escolhida arrastando: manda sobre os cantos
+
+  function clampPosition(left, top) {
+    const width = banner.offsetWidth || 392;
+    const height = banner.offsetHeight || 240;
+    return {
+      left: Math.max(8, Math.min(left, innerWidth - width - 8)),
+      top: Math.max(8, Math.min(top, innerHeight - Math.min(height, innerHeight - 16) - 8)),
+    };
+  }
+
+  function placeAt(left, top) {
+    const spot = clampPosition(left, top);
+    manualPos = spot;
+    Object.assign(banner.style, { left: spot.left + 'px', top: spot.top + 'px', right: 'auto', bottom: 'auto' });
+  }
+
   function applyCorner(plan, natural) {
+    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
     const name = CORNERS[corner];
     Object.assign(banner.style, {
       left: name.endsWith('left') ? MARGIN + 'px' : 'auto',
@@ -369,10 +430,10 @@
       top: name.startsWith('top') ? MARGIN + 'px' : 'auto',
       bottom: name.startsWith('bottom') ? MARGIN + 'px' : 'auto',
     });
-    // Faixa curta demais (menos de MIN_HEIGHT) deixaria o painel ilegível:
-    // nesse caso ele mantém a altura natural e a pessoa usa "Mover".
-    const height = plan && plan.height >= MIN_HEIGHT ? plan.height : natural;
-    banner.style.maxHeight = Math.max(0, Math.min(height || 0, innerHeight - 2 * MARGIN)) + 'px';
+    // Tamanho fixo: o limite é a tela, nunca uma faixa curta. Combinado com
+    // `pointer-events: none` no corpo do painel, cobrir o alvo não impede o
+    // clique; e não existe barra de rolagem.
+    banner.style.maxHeight = Math.max(MIN_HEIGHT, Math.min(natural || 0, innerHeight - 2 * MARGIN)) + 'px';
   }
 
   function describe(el) {
@@ -386,23 +447,31 @@
     if (messageRole) parts.push('camada ' + layerOf(el) + ' (balão inteiro é o menor número)');
     if (fragile) parts.push('seleção por posição: pode precisar de ajuste quando o chat mudar');
     if (messageRole) {
-      const mixed = matched.filter(item => {
+      // Comparar com o papel normalizado: 'assistant' nunca é igual ao rótulo
+      // 'resposta do assistente', e a mensagem de camada trocada aparecia
+      // sempre, mesmo com a seleção certa.
+      const wanted = role === 'mensagem do usuário' ? 'user'
+        : role === 'resposta do assistente' ? 'assistant' : '';
+      const mixed = wanted ? matched.filter(item => {
         const found = roleOf(item);
-        return found && found !== role;
-      }).length;
+        return found && found !== wanted;
+      }).length : 0;
       if (mixed) parts.push(mixed + ' do outro papel também casariam: use “Camada menor”/“Camada maior”');
     }
     // Lista numerada: a pessoa confere se são as mensagens certas e na ordem
     // certa antes de confirmar (três ou mais é o mínimo exigido no mapeamento).
-    const lines = matched.slice(0, 5).map((item, index) =>
-      (index + 1) + '. ' + ((captureTextOf(item) || '(sem texto legível)').slice(0, 60)));
-    status.textContent = [parts.join(' · '), lines.join('\n'),
-      count > 5 ? '… e mais ' + (count - 5) + '.' : ''].filter(Boolean).join('\n');
+    // Três linhas bastam para conferir a ordem; o resto é contagem, não texto.
+    const lines = matched.slice(0, 3).map((item, index) =>
+      (index + 1) + '. ' + ((captureTextOf(item) || '(sem texto legível)').slice(0, 48)));
+    if (count > 3) parts.push('+' + (count - 3) + ' fora da lista');
+    status.textContent = [parts.join(' · '), lines.join('\n')].filter(Boolean).join('\n');
     status.style.whiteSpace = 'pre-line';
     confirm.disabled = !count;
   }
 
   function draw() {
+    ensureAttached();
+    drawing = true;
     confirm.hidden = !chosen;
     outer.hidden = inner.hidden = back.hidden = !chosen;
     another.hidden = false;
@@ -429,9 +498,13 @@
       box.append(badge);
       marks.append(box);
     });
+    drawing = false;
   }
   function confirmationState() {
-    for (const b of banner.querySelectorAll('button')) b.style.opacity = b.disabled ? '0.45' : '1';
+    for (const b of banner.querySelectorAll('button')) {
+      b.style.opacity = b.disabled ? '0.45' : '1';
+      b.style.pointerEvents = 'auto';
+    }
   }
   function reset() {
     chosen = null;
@@ -479,17 +552,72 @@
       if (!confirm.disabled && chosen) finish({ selector });
     }
   };
-  const timer = setInterval(draw, 350);
+  /* Redesenho por mutação (ADR-010): antes era um intervalo de 350 ms, que
+   * redesenhava sem necessidade e ainda podia perder o instante em que o balão
+   * aparece. O observer só agenda quando algo fora do painel muda. */
+  let scheduled = false;
+  let drawing = false;
+  const schedule = () => {
+    if (scheduled || drawing) return;
+    scheduled = true;
+    const run = () => { scheduled = false; if (!drawing) draw(); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
+  };
+  /* Sites que re-renderizam o body (React/Vue recriando o container raiz)
+   * removem nós injetados sem avisar. Sem reanexar, o painel desaparece no
+   * meio do mapeamento e a próxima checagem diz "o painel não abriu". */
+  const ensureAttached = () => {
+    if (!banner.isConnected && document.body) document.body.append(banner);
+    if (!marks.isConnected && document.body) document.body.append(marks);
+  };
+  const observer = new MutationObserver(records => {
+    if (drawing) return;
+    for (const record of records) {
+      const target = record.target;
+      if (banner.contains(target) || marks.contains(target)) continue;
+      ensureAttached();
+      schedule();
+      return;
+    }
+  });
+  try { observer.observe(document.body, { childList: true, subtree: true, characterData: true }); }
+  catch (error) { /* ambiente sem MutationObserver: os eventos de scroll/resize seguem */ }
+
+  // Arrastar pela faixa do título. Clique em botão continua sendo clique.
+  let dragging = null;
+  const startDrag = event => {
+    if (!event.composedPath().includes(grip)) return;
+    event.preventDefault();
+    const rect = banner.getBoundingClientRect();
+    dragging = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    locked = true;
+    try { top.setPointerCapture(event.pointerId); } catch (error) { /* ok */ }
+  };
+  const drag = event => {
+    if (!dragging) return;
+    event.preventDefault();
+    placeAt(event.clientX - dragging.dx, event.clientY - dragging.dy);
+  };
+  const endDrag = () => { dragging = null; };
+  banner.addEventListener('pointerdown', startDrag);
+  window.addEventListener('pointermove', drag, true);
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
+
   function finish(value) {
     window.__balPick = value;
     cleanup();
   }
   function cleanup() {
-    clearInterval(timer);
+    try { observer.disconnect(); } catch (error) { /* já desconectado */ }
+    banner.removeEventListener('pointerdown', startDrag);
+    window.removeEventListener('pointermove', drag, true);
+    window.removeEventListener('pointerup', endDrag, true);
+    window.removeEventListener('pointercancel', endDrag, true);
     document.removeEventListener('click', click, true);
     document.removeEventListener('keydown', key, true);
     window.removeEventListener('scroll', draw, true);
-    window.removeEventListener('resize', draw);
+    window.removeEventListener('resize', onResize);
     banner.remove();
     marks.remove();
     delete window.__balPickerCleanup;
@@ -497,7 +625,8 @@
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
   window.addEventListener('scroll', draw, true);
-  window.addEventListener('resize', () => { locked = false; draw(); });
+  const onResize = () => { locked = false; draw(); };
+  window.addEventListener('resize', onResize);
   window.__balPickerCleanup = cleanup;
   window.__balPickerContainer = messageRole ? messageContainer : null;
   if (window.__balTypingCleanup) window.__balTypingCleanup();

@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.9.1';
+const PANEL_VERSION = '0.10.1';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -10,7 +10,26 @@ let selected = null;
 let chatSignature = '';
 let pending = false;
 let conversation = {name: null, revision: -1, data: null};
-function error(text) { $('error').textContent = text; $('error').hidden = !text; }
+function error(text) { $('error').textContent = text; $('error').hidden = !text; highlightConsent(text); }
+
+/* Falta de autorização do Chrome pessoal precisa ser visível e acionável.
+ * Antes, a recusa "Confirme acesso amplo ao Chrome pessoal" aparecia sozinha e a
+ * caixa que a resolve estava dentro de um <details> recolhido: a pessoa não
+ * tinha como saber onde clicar. */
+function highlightConsent(text) {
+  const block = $('consent-block'), alert = $('consent-alert');
+  if (!block || !alert) return;
+  const needs = /acesso amplo|consent_required|chrome pessoal/i.test(String(text || ''));
+  alert.hidden = !needs;
+  block.dataset.alert = needs ? 'true' : 'false';
+  if (!needs) return;
+  const names = [...($('api-models')?.selectedOptions || [])].map(option => option.value).filter(Boolean);
+  alert.textContent = 'Falta autorizar o acesso amplo ao Chrome pessoal'
+    + (names.length ? ` para ${names.join(', ')}` : '')
+    + '. Marque a caixa logo abaixo e clique em “Autorizar e iniciar API” de novo. Nada foi enviado.';
+  try { block.scrollIntoView({ block: 'center' }); } catch (err) { /* ambiente sem scroll */ }
+  $('api-personal').focus({ preventScroll: true });
+}
 async function api(path, body) {
   const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST',
     headers: {'X-BrowserAPI-Token': token, 'Content-Type': 'application/json'},
@@ -431,6 +450,11 @@ function render(value) {
   $('updates-status').textContent = [value.updates?.message,value.updates?.rollback_notice].filter(Boolean).join(' ') || 'Atualização não gerenciada.';
   $('auto-update').checked = !!value.updates?.enabled;
   $('auto-update').disabled = !value.updates?.managed;
+  $('updates-check').disabled = !value.updates?.managed || busy();
+  const checkedAt=value.updates?.checked_at;
+  $('updates-checked').textContent = checkedAt
+    ? `Última verificação: ${checkedAt.replace('T',' ').replace('Z',' UTC')} · próxima automática em ${Math.round((value.updates?.retry_seconds||1800)/60)} min`
+    : 'Ainda não verificado nesta execução.';
 
   const oldPrompt = state?.prompt?.id;
   const previousPhase = state?.phase;
@@ -522,6 +546,14 @@ async function poll() {
 poll();
 
 $('auto-update').addEventListener('change', async () => { try { await api('updates',{enabled:$('auto-update').checked}); await refresh(); } catch (err) { error(err.message); } });
+/* Verificar agora: a verificação automática não depende mais de clicar na caixa. */
+$('updates-check').onclick=async()=>{
+  const button=$('updates-check');
+  button.disabled=true; $('updates-status').textContent='Verificando agora…';
+  try{ await api('updates',{check:true}); await refresh(); }
+  catch(err){ error(err.message); }
+  finally{ button.disabled=busy(); }
+};
 
 let profileRows=[];
 async function scanProfiles(){
@@ -598,6 +630,10 @@ function renderService(value){
   for(const id of ['api-models','api-headless','api-lightweight','api-retrieval','api-fallback','api-personal','api-remember']) $(id).disabled=!!a.enabled || busy() || incompatible();
 }
 $('api-show').onclick=()=>{$('api-key').type=$('api-key').type==='password' ? 'text':'password';};
+$('api-personal').addEventListener('change',()=>{
+  if(!$('api-personal').checked) return;
+  $('consent-alert').hidden=true; $('consent-block').dataset.alert='false';
+});
 $('api-test').onclick=async()=>{
   const out=$('api-test-result');
   out.dataset.error='false'; out.textContent='Testando 127.0.0.1…';

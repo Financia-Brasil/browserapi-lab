@@ -1,7 +1,10 @@
 """Observabilidade local limitada; não persiste conteúdo, cookies, seletores ou tokens."""
 from collections import deque
 import copy
+import json
 import math
+import os
+from pathlib import Path
 import threading
 import time
 
@@ -28,8 +31,21 @@ def clean_timings(values):
     return {key: round(float(value), 3) for key, value in values.items() if key in TIMING_KEYS and numeric(value)}
 
 
+SCHEMA_VERSION = 1
+PHASES = ('done', 'error', 'cancelled')
+
+
 class Telemetry:
-    def __init__(self, limit=100, clock=time.monotonic):
+    """Histórico agregado da janela limitada, opcionalmente persistido.
+
+    O que vai para o disco é só o que já passa pela lista branca: operação,
+    nome da conexão, estado, tempos, contagens de caracteres e tentativas. Nunca
+    prompt, resposta, URL, seletor, cookie ou token. Sem caminho, o
+    comportamento é o antigo (memória pura); com caminho, a atualização do
+    aplicativo deixa de apagar a aba Atividade.
+    """
+
+    def __init__(self, limit=100, clock=time.monotonic, path=None):
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise ValueError('Limite de histórico inválido')
         self.limit = limit
@@ -38,6 +54,99 @@ class Telemetry:
         self.lock = threading.RLock()
         self.sequence = 0
         self.active = None
+        self.path = Path(path) if path is not None else None
+        self.persisted = False
+        if self.path is not None:
+            self._load()
+
+    # --- persistência (agregado, nunca conteúdo) -------------------------
+    def _clean_record(self, value, now_epoch):
+        """Aceita do disco só o que a lista branca já permitiria hoje."""
+        if not isinstance(value, dict):
+            return None
+        record_id = value.get('id')
+        operation = value.get('operation')
+        phase = value.get('phase')
+        status = value.get('status')
+        at = value.get('at')
+        if type(record_id) is not int or record_id < 1:
+            return None
+        if operation not in OPERATIONS or phase not in PHASES:
+            return None
+        if status is not None and status not in STATUS:
+            return None
+        if not isinstance(at, str) or len(at) != 20:
+            return None
+        name = value.get('name')
+        if name is not None:
+            try:
+                name = safe_name(name)
+            except ValueError:
+                return None
+        saved = value.get('saved_at')
+        saved = saved if numeric(saved) else now_epoch
+        age_ms = max(0.0, (now_epoch - saved) * 1000.0)
+        attempts = []
+        for item in value.get('attempts') or []:
+            if not isinstance(item, dict) or item.get('status') not in STATUS:
+                continue
+            try:
+                attempts.append({'name': safe_name(item.get('name')), 'status': item['status']})
+            except ValueError:
+                continue
+        prompt_chars = value.get('prompt_chars')
+        response_chars = value.get('response_chars')
+        return {'id': record_id, 'operation': operation, 'name': name, 'phase': phase,
+                'status': status, 'timings': clean_timings(value.get('timings')),
+                'prompt_chars': prompt_chars if numeric(prompt_chars) else None,
+                'response_chars': response_chars if numeric(response_chars) else None,
+                'at': at, 'attempts': attempts[:8],
+                'observed': self.clock() - age_ms / 1000.0}
+
+    def _load(self):
+        try:
+            if not self.path.is_file() or self.path.stat().st_size > 2_000_000:
+                return
+            value = json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError, ValueError, UnicodeDecodeError):
+            return
+        if not isinstance(value, dict) or value.get('schema_version') != SCHEMA_VERSION:
+            return
+        now_epoch = time.time()
+        records = value.get('records')
+        if not isinstance(records, list):
+            return
+        loaded = []
+        for item in records[-self.limit:]:
+            clean = self._clean_record(item, now_epoch)
+            if clean is not None:
+                loaded.append(clean)
+        with self.lock:
+            for record in loaded:
+                self.records.append(record)
+                self.sequence = max(self.sequence, record['id'])
+        self.persisted = bool(loaded)
+
+    def _save(self):
+        if self.path is None:
+            return
+        with self.lock:
+            records = [{key: value for key, value in copy.deepcopy(record).items() if key != 'observed'}
+                       for record in self.records]
+            saved_at = time.time()
+            payload = {'schema_version': SCHEMA_VERSION, 'saved_at': saved_at,
+                       'sequence': self.sequence,
+                       'records': [{**record, 'saved_at': saved_at} for record in records]}
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            temporary = self.path.with_suffix('.tmp')
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding='utf-8')
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, self.path)
+            self.persisted = True
+        except OSError:
+            # Disco cheio ou sem permissão não pode derrubar a operação.
+            self.persisted = False
 
     def begin(self, operation, name=None):
         if operation not in OPERATIONS:
@@ -101,6 +210,7 @@ class Telemetry:
                     attempts.append({'name':name,'status':item['status']})
             record['attempts']=attempts
             self.records.append(record)
+        self._save()
 
     def snapshot(self):
         with self.lock:
@@ -127,7 +237,8 @@ class Telemetry:
         response_chars = sum(r.get('response_chars') or 0 for r in requests)
         for record in records:
             record.pop('observed')
-        return {'scope':'current_process_rolling_window', 'limit':self.limit, 'history':records,
+        scope = 'rolling_window_persisted' if self.persisted else 'current_process_rolling_window'
+        return {'scope':scope, 'persisted':self.persisted, 'limit':self.limit, 'history':records,
                 'usage':{'prompt_chars':prompt_chars, 'response_chars':response_chars,
                          'total_chars':prompt_chars+response_chars,
                          'measured_responses':sum(1 for r in requests if r.get('response_chars')),

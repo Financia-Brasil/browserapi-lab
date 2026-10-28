@@ -388,3 +388,90 @@ Decisão:
 Alternativas rejeitadas: pedir CSS ao usuário (contraria o produto), capturar
 `innerText` do ancestral de maior texto (pegaria a conversa inteira), e confiar em
 classes específicas do Gemini (quebrariam em qualquer mudança do site).
+
+## ADR-024 — Leitura da conversa em camadas; o mapeamento é conferência, não descoberta
+
+Contexto: o mapeamento apontado à mão era a **única** fonte de verdade para ler a
+conversa. Um seletor apontado num pedaço ou que casava com a pergunta junto com a
+resposta passou a produzir dois efeitos ruins: resposta lida errada e **falso
+“envio não confirmado”** com a mensagem na tela. Pesquisa registrada em
+`pesquisa/2026-10-28-arquitetura-captura-e-ui.md` (pré-registro congelado em
+`pesquisa/2026-10-28-preregistro.md`) mostrou que exportadores maduros leem o
+**estado do app** quando existe, e que a comparação por texto/estrutura sozinha
+quebra a cada mudança de layout.
+
+Decisão — `browserapi_lab/capture.py`, na ordem da força da evidência:
+
+1. **papel declarado** (`user-query`, `model-response`, `data-message-author-role`,
+   `data-role`, `data-author`, rótulo acessível);
+2. **estado do React** (`__reactProps$…`/`__reactFiber$…` → `memoizedProps`): leitura
+   do que já está na página, sem integrar API interna nem injetar script do site;
+3. **estrutura** (container do transcript + ordem do DOM; alinhamento só como
+   desempate) — último recurso, marcado como frágil.
+
+Regras de escolha:
+
+* se a leitura **apontada** está limpa (sem sobreposição, lados iguais, papéis
+  alternados), ela manda — foi conferida por uma pessoa;
+* se está suja e existe camada forte equilibrada, a camada assume com **aviso
+  explícito** na conferência e no recibo (`fallback: true`);
+* a camada **estrutura** sozinha nunca substitui o mapeamento (alternância inventa
+  papel quando o site foge do padrão);
+* toda leitura sobe ao **balão inteiro** (ADR-023) antes de medir texto.
+
+Confirmação de envio: a mesma fonte de verdade (`capture.user_state`) e, quando há
+nonce (`request_id`), o nonce no balão novo é a evidência mais forte. O caminho
+antigo por consulta ao seletor apontado ficou como último recurso.
+
+Fim de resposta: além de “sem Stop” e janela de estabilidade, o laço exige
+**três leituras estáveis seguidas** (`min_stable_samples`). O botão parar
+desaparece antes do texto terminar em vários SDKs.
+
+Alternativas rejeitadas: lista de seletores por site (quebra a cada redesign);
+geometria como filtro duro (falha quando o layout discorda da ordem); esperar
+`networkidle` (SSE/heartbeat nunca ficam idle); tempo fixo (resposta longa estoura,
+curta espera demais); API interna do site (contraria ADR-008).
+
+Indicadores para revisitar: proporção de leituras resolvidas por camada (exposta
+no recibo); se a camada 2 ficar em zero por 30 dias em site React, a rota morreu;
+se a confirmação passar a citar “contagem” em 20 envios seguidos, a camada 1 caiu.
+
+## ADR-025 — o painel do apontamento nunca intercepta o ponteiro
+
+**Contexto.** O painel passou a ter tamanho fixo, ancorado no canto escolhido
+pela geometria do alvo (ADR-024). O CI de navegador mostrou a consequência: com o
+campo de mensagem no rodapé, o painel — 392 px de largura, ancorado embaixo —
+cobria o próprio elemento que a pessoa devia clicar. O Playwright recusou o
+clique com *“`<div id="__browserapi_picker">` subtree intercepts pointer events”*
+e o teste ficou 30 s esperando. O uso real teria o mesmo efeito: o painel
+bloqueia justamente o alvo.
+
+**Decisão.**
+
+* o **corpo** do painel tem `pointer-events: none`: clicar “através” dele
+  atinge a página, então cobrir o alvo deixa de ser um defeito. Só os **botões**
+  e a **alça de arraste** (`⠿`, 24 px) voltam a `pointer-events: auto`. O
+  primeiro CI mostrou que deixar o título inteiro arrastável era suficiente
+  para o `<strong>` do cabeçalho interceptar o clique — por isso a alça;
+* a pontuação de canto pesa 12× a sobreposição com o que se precisa clicar
+  (campo, botão) contra 1× para blocos grandes: o painel sai da frente do
+  campo antes de sair de qualquer container;
+* o painel **continua com tamanho fixo e sem rolagem** (`overflow: hidden`); o
+  limite de altura é a tela, não a faixa livre (uma faixa curta não pode virar
+  barra de rolagem);
+* a escolha de canto segue a geometria (menor sobreposição com o alvo), mas
+  agora a sobreposição é só visual, não funcional;
+* o texto de conferência continua curto (três linhas) porque o corpo não rola.
+
+**Consequências.** O arraste funciona igual, o alvo é sempre clicável, e o painel
+não muda de tamanho conforme o canto. O custo é que o conteúdo visualmente
+coberto atrás do painel não pode ser lido — por isso o arraste e o botão
+“Mover” continuam existindo. Verificado por `scripts/ui_jsdom_check.js`
+(29 checagens, incluindo “painel não rouba o clique da página”, “controles
+continuam clicáveis” e “painel volta depois de re-render do site”).
+
+**Indicadores para revisitar.** Se a automação voltar a falhar com
+*intercepts pointer events*, é porque algum elemento novo dentro do painel ficou
+sem `pointer-events: auto`. Se alguém reclamar de não conseguir selecionar texto
+atrás do painel, é o preço do arraste — a alternativa (painel fora da tela) foi
+rejeitada.

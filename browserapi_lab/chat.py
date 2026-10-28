@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import secrets
 import time
 
+from . import capture
 from .browser import BrowserConfig, BrowserSession
 from .config import origin
 from .discovery import ScoredCandidate, install_probe
@@ -134,6 +135,9 @@ def preflight(page, config):
         page.locator(config.assistant).count()
     except Exception:
         return 'output_invalid'
+    # Leitor de camadas já instalado no pré-voo: a confirmação do envio e a
+    # captura da resposta passam a usar a mesma fonte de verdade.
+    capture.ensure(page)
     return None
 
 
@@ -146,6 +150,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
     result = ChatResult('page_unavailable', timings=metrics)
     send_state = 'not_sent'
     send_evidence = None
+    confirmation_layer = None
     phase = 'preflight_ms'
     phase_start = start
     def stage(name):
@@ -162,6 +167,8 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
             diagnostics.setdefault('profile_directory', verified)
         if send_evidence:
             diagnostics.setdefault('send_evidence', send_evidence)
+        if confirmation_layer:
+            diagnostics.setdefault('confirmation_layer', confirmation_layer)
         result = ChatResult(*args, timings=metrics, stage=phase.removesuffix('_ms'), diagnostics=diagnostics, **kwargs)
         return result
     try:
@@ -176,7 +183,11 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                 diagnostics = {'expected_origin': display_origin(config.url),
                                'observed_origin': display_origin(page.url)}
             return outcome(problem, diagnostics=diagnostics)
-        outputs_before = page.locator(config.assistant).count()
+        # Baseline pela leitura em camadas: um seletor que casa com a pergunta
+        # e com a resposta inflava esta contagem e a resposta saía errada.
+        before_report = capture.report(page, config.user, config.assistant)
+        answers_before = [item for item in before_report['items'] if item['role'] == 'assistant']
+        outputs_before = len(answers_before) or page.locator(config.assistant).count()
         locator = page.locator(config.composer)
         data = locator.evaluate('''el => ({tag:el.tagName.toLowerCase(),
                 contenteditable:el.getAttribute('contenteditable')})''')
@@ -216,10 +227,12 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                             activation=('click_send',), user_selector=config.user,
                             # Sites reais podem demorar a pintar o balão novo; 5 s
                             # gerava falso "sem confirmação" com o envio feito.
-                            verify_timeout_ms=min(9000, config.timeout_ms), before_activate=ready_to_activate)
+                            verify_timeout_ms=min(9000, config.timeout_ms), before_activate=ready_to_activate,
+                            nonce=request_id)
         metrics.update(fill_ms=round(sent.fill_ms, 3), send_ms=round(sent.send_ms, 3))
         if sent.attempts:
             send_evidence = sent.attempts[-1].evidence or None
+            confirmation_layer = sent.attempts[-1].layer or None
         if not sent.success:
             if any(attempt.error == 'VoiceControlUnavailable' for attempt in sent.attempts):
                 return outcome('send_is_microphone')
@@ -233,44 +246,25 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         check_cancel()
         stage('response_wait_ms')
         observation = wait_for_completion(page, WatchConfig(stability_window_ms=config.stability_ms,
-                                                           timeout_ms=config.timeout_ms), config.root, on_poll=check_cancel)
+                                                           timeout_ms=config.timeout_ms,
+                                                           min_stable_samples=3),
+                                          config.root, on_poll=check_cancel)
         if observation.status != 'success':
             block = read_ui(page, config.root).blocking
             return outcome(block or ('timeout' if observation.status == 'timeout' else 'page_unavailable'))
         stage('parse_ms')
-        outputs = page.locator(config.assistant)
-        fresh = []
-        for index in range(outputs_before, outputs.count()):
-            item = outputs.nth(index)
-            if not item.is_visible():
-                continue
-            # Um seletor pode casar com o balão e com um pedaço dentro dele.
-            # Contar os dois transformaria uma resposta em duas ("ambíguo").
-            nested = item.evaluate('''(el, selector) => {
-                try {
-                    const parent = el.parentElement;
-                    return !!(parent && parent.closest(selector));
-                } catch (error) { return false; }
-            }''', config.assistant)
-            if nested:
-                continue
-            # Seletor de resposta que também casa com a pergunta transformaria a
-            # pergunta em resposta. Melhor falhar do que ler o texto errado.
-            if config.user and item.evaluate(
-                    r'(el, selector) => { try { return el.matches(selector); } catch (error) { return false; } }',
-                    config.user):
-                continue
-            # Captura o BALÃO inteiro, não o pedaço apontado no passado
-            # (uso real: Gemini divide a resposta em vários <span>).
-            html = item.evaluate('''el => {
-                if (!window.__bal || !window.__bal.wholeMessageHtmlOf) return null;
-                try { return window.__bal.wholeMessageHtmlOf(el); } catch (error) { return null; }
-            }''')
-            if not html:
-                html = item.inner_html()
-            fresh.append(html)
-        if not fresh:
+        after_report = capture.report(page, config.user, config.assistant)
+        answers_after = [item for item in after_report['items'] if item['role'] == 'assistant']
+        previous = answers_before[-1]['text'] if answers_before else ''
+        latest = answers_after[-1]['text'] if answers_after else ''
+        fresh_new = len(answers_after) > len(answers_before) or (bool(latest) and latest != previous)
+        if not fresh_new:
             return outcome('output_invalid')
+        captured = capture.last_answer(page, config.assistant)
+        html = (captured or {}).get('html') or ''
+        if not html:
+            return outcome('output_invalid')
+        fresh = [html]
         if health_check:
             texts = [html_to_text(html) for html in fresh]
             selection = select_output(texts, request_id)
@@ -282,8 +276,6 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                 return outcome('contract_invalid')
             answer = value['answer']
         else:
-            if len(fresh) != 1:
-                return outcome('ambiguous_output')
             answer = html_to_markdown(fresh[0])
         summary = page.evaluate('window.__bal.streamSummary()')
         first = summary.get('first_token_ms')

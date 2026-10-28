@@ -46,6 +46,7 @@ class SendAttempt:
     evidence: str = ""
     error: Optional[str] = None
     composer_confirmed: bool = False
+    layer: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,6 +57,7 @@ class SendAttempt:
             "verify_ms": round(self.verify_ms, 2),
             "evidence": self.evidence,
             "composer_confirmed": self.composer_confirmed,
+            "layer": self.layer,
             "error": self.error,
         }
 
@@ -120,7 +122,7 @@ def control_kind(candidate: ScoredCandidate | Dict[str, Any]) -> str:
 # Evidência
 # --------------------------------------------------------------------------
 
-COUNT_USER_MESSAGES = """(args) => {
+LEGACY_COUNT_USER_MESSAGES = """(args) => {
   const nodes = document.querySelectorAll(args.selector || '[data-role="user"], .message[data-role="user"]');
   let ultimo = null;
   if (nodes.length) {
@@ -132,7 +134,28 @@ COUNT_USER_MESSAGES = """(args) => {
 
 
 def user_message_state(page: Any, selector: Optional[str] = None) -> Dict[str, Any]:
-    return page.evaluate(COUNT_USER_MESSAGES, {"selector": selector})
+    """Quantas mensagens do usuário existem e qual é a última.
+
+    Lê pelo ``capture`` (camadas: papel declarado → estado do React → layout) e
+    usa o seletor apontado como dica. Era aqui que um seletor que casava com a
+    pergunta *e* com a resposta produzia "envio não confirmado" com a mensagem
+    na tela: a contagem subia dois, o texto comparado era o da resposta.
+    """
+    from . import capture
+    capture.ensure(page)
+    state = capture.user_state(page, selector or "")
+    if state["count"] or not selector:
+        return {"count": state["count"], "last": state["last"], "layer": state["layer"]}
+    # Página sem marcador nenhum e sem layout reconhecível: último recurso, o
+    # seletor apontado, para não trocar "sem confirmação" por "sem envio".
+    try:
+        legacy = page.evaluate(LEGACY_COUNT_USER_MESSAGES, {"selector": selector})
+    except Exception:
+        return {"count": 0, "last": None, "layer": "none"}
+    if not isinstance(legacy, dict):
+        return {"count": 0, "last": None, "layer": "none"}
+    return {"count": legacy.get("count") or 0, "last": legacy.get("last"),
+            "layer": "configured-legacy" if legacy.get("count") else "none"}
 
 
 def normalize_text(value: Any) -> str:
@@ -151,7 +174,8 @@ def normalize_text(value: Any) -> str:
 
 
 def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: str,
-                     composer_cleared: Optional[bool] = None) -> Tuple[bool, str]:
+                     composer_cleared: Optional[bool] = None,
+                     nonce: Optional[str] = None) -> Tuple[bool, str]:
     """Confirmação por evidência observada; nunca por otimismo.
 
     Aceita, nesta ordem:
@@ -172,6 +196,13 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
     previous = normalize_text(before.get("last"))
     same_node_changed = (not new_node and bool(previous) and bool(last) and previous != last)
     matches = bool(wanted) and bool(last) and (last == wanted or wanted in last)
+    # Nonce (request_id) só existe se a mensagem foi publicada: é a evidência
+    # mais forte que temos, e independe de o site reformatar o resto do texto.
+    # A frase diz as duas coisas — quem lê o recibo vê se o texto também bateu,
+    # em vez de concluir que a comparação por texto foi abandonada.
+    if nonce and new_node and nonce in last:
+        detail = " e o texto também confere" if matches else " (o site reescreveu o texto)"
+        return True, "nonce do pedido visível no balão novo (envio confirmado)" + detail
     if matches:
         if new_node:
             return True, "nova mensagem do usuário com o texto esperado"
@@ -311,6 +342,7 @@ def send_message(
     settle_poll_ms: float = 50.0,
     user_selector: Optional[str] = None,
     before_activate: Any = None,
+    nonce: Optional[str] = None,
 ) -> SendResult:
     """Tenta enviar ``text`` combinando preenchimento e ativação até haver evidência.
 
@@ -348,11 +380,12 @@ def send_message(
                 attempt.send_ms = (time.perf_counter() - t1) * 1000.0
 
                 t2 = time.perf_counter()
-                ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms,
-                                              user_selector, composer_getter=lambda: read_composer(locator),
-                                              filled=filled_value)
+                ok, evidence, layer = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms,
+                                                     user_selector, composer_getter=lambda: read_composer(locator),
+                                                     filled=filled_value, nonce=nonce)
                 attempt.verify_ms = (time.perf_counter() - t2) * 1000.0
                 attempt.evidence = evidence
+                attempt.layer = layer
                 attempt.composer_confirmed = composer_evidence(
                     text, filled_value or "", read_composer(locator), ok).confirmed
                 if ok:
@@ -390,11 +423,14 @@ def send_message(
 
 def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
                    timeout_ms: float, poll_ms: float, user_selector: Optional[str] = None,
-                   composer_getter: Any = None, filled: Optional[str] = None) -> Tuple[bool, str]:
+                   composer_getter: Any = None, filled: Optional[str] = None,
+                   nonce: Optional[str] = None) -> Tuple[bool, str, str]:
     deadline = time.perf_counter() + (timeout_ms / 1000.0)
     last_reason = "sem evidência"
+    layer = ""
     while time.perf_counter() < deadline:
         after = user_message_state(page, user_selector)
+        layer = str(after.get("layer") or "")
         cleared = False
         if composer_getter is not None and filled:
             try:
@@ -402,9 +438,9 @@ def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
                 cleared = current is not None and not current.strip()
             except Exception:
                 cleared = False
-        ok, reason = evidence_of_send(before, after, text, composer_cleared=cleared)
+        ok, reason = evidence_of_send(before, after, text, composer_cleared=cleared, nonce=nonce)
         if ok:
-            return True, reason
+            return True, reason, layer
         last_reason = reason
         page.wait_for_timeout(poll_ms)
-    return False, last_reason
+    return False, last_reason, layer

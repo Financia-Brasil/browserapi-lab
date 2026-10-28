@@ -189,24 +189,40 @@ class UpdateStore:
 
 
 class Updater:
-    def __init__(self,store,current,on_ready,fetch=github,interval=21600):
+    """Verificação periódica de versão estável, sem depender de clique.
+
+    Antes, o intervalo era de 6 h e a única forma de forçar era marcar e
+    desmarcar a caixinha na interface (isso acordava a thread). Agora: 30 min
+    quando está tudo em dia, 5 min depois de uma falha, e a interface tem
+    "Verificar agora". A aplicação continua acontecendo sozinha quando o
+    programa está livre.
+    """
+
+    def __init__(self,store,current,on_ready,fetch=github,interval=1800,retry_interval=300):
         self.store,self.current,self.on_ready,self.fetch = store,current,on_ready,fetch
         self.interval = interval
+        self.retry_interval = retry_interval
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.lock = threading.RLock()
         self.state = {'managed':True,'status':'idle','message':'Atualizações automáticas do repositório oficial.'}
         self.thread = None
+        self.checked_at = None
 
     def snapshot(self):
         with self.lock:
-            return dict(self.state,enabled=self.store.read().get('enabled',True),rollback_notice=self.store.read().get('notice',''))
+            return dict(self.state,enabled=self.store.read().get('enabled',True),
+                        rollback_notice=self.store.read().get('notice',''),
+                        checked_at=self.checked_at,
+                        retry_seconds=self.retry_interval if self.state.get('status')=='error' else self.interval)
 
     def status(self,status,message):
         with self.lock:
             self.state.update(status=status,message=message)
 
     def check(self):
+        with self.lock:
+            self.checked_at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         if not self.store.read().get('enabled',True):
             return
         try:
@@ -224,15 +240,18 @@ class Updater:
             self.store.stage(manifest,raw)
             self.status('ready','Atualização pronta; será aplicada quando o programa estiver livre.')
         except Exception:
-            self.status('error','Não foi possível atualizar agora. A versão atual foi preservada; nova tentativa automática mais tarde.')
+            self.status('error','Não foi possível verificar agora. A versão atual foi preservada; '
+                                'a próxima tentativa automática é em poucos minutos.')
 
     def run(self):
-        # Não bloquear abertura da interface por rede; uma thread, sem retries rápidos.
+        # Não bloquear abertura da interface por rede; uma thread só.
         if self.stop.wait(5):
             return
         while not self.stop.is_set():
             self.check()
-            deadline = time.monotonic()+self.interval
+            # Falhou? volta cedo; deu certo? espera o intervalo normal.
+            wait = self.retry_interval if self.snapshot().get('status') == 'error' else self.interval
+            deadline = time.monotonic()+wait
             while not self.stop.is_set():
                 if self.store.read().get('enabled',True) and self.store.read().get('pending'):
                     if self.on_ready():

@@ -4,7 +4,9 @@
 
 Instale uma vez o `.deb` com supervisor. Depois disso, ao abrir BrowserAPI, ele
 consulta a release estável mais recente de **Financia-Brasil/browserapi-lab** no
-GitHub após 5 segundos e novamente a cada 6 horas enquanto estiver aberto.
+GitHub após 5 segundos e novamente a cada **30 minutos** enquanto estiver aberto —
+**5 minutos** depois de uma falha de rede. O botão **Verificar agora**, em Configurações,
+pede uma verificação imediata; antes, o único atalho era marcar e desmarcar a caixinha.
 Não instala um serviço permanente quando o aplicativo está fechado.
 
 Atualizações compatíveis são baixadas, verificadas e aplicadas automaticamente

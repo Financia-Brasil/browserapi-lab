@@ -252,3 +252,34 @@ class TestUpdates(unittest.TestCase):
         with patch.dict(os.environ,{'XDG_DATA_HOME':self.tmp.name}), patch('browserapi_lab.bootstrap.os.geteuid',return_value=1000), patch('browserapi_lab.bootstrap.subprocess.Popen',return_value=child) as spawn:
             self.assertEqual(bootstrap._supervise(['--no-open']),0)
         self.assertEqual(spawn.call_args.args[0][0],str(python))
+
+
+class TestRitmoDoVerificador(unittest.TestCase):
+    """O relato: “tenho que marcar e desmarcar a caixinha pra atualizar”.
+
+    A verificação precisa acontecer sozinha e voltar cedo depois de falhar.
+    """
+
+    def test_intervalo_curto_e_retentativa_mais_curta(self):
+        updater = Updater(UpdateStore(Path(tempfile.mkdtemp())), '0.3.0', lambda: False, Mock())
+        self.assertEqual(updater.interval, 1800)
+        self.assertEqual(updater.retry_interval, 300)
+        self.assertEqual(updater.snapshot()['retry_seconds'], 1800)
+
+    def test_apos_falha_a_proxima_tentativa_e_em_minutos(self):
+        updater = Updater(UpdateStore(Path(tempfile.mkdtemp())), '0.3.0', lambda: False,
+                          Mock(side_effect=OSError('rede')))
+        updater.check()
+        snapshot = updater.snapshot()
+        self.assertEqual(snapshot['status'], 'error')
+        self.assertEqual(snapshot['retry_seconds'], 300)
+        self.assertIn('poucos minutos', snapshot['message'])
+        self.assertIsNotNone(snapshot['checked_at'])
+
+    def test_check_nao_bloqueia_quando_desativado(self):
+        store = UpdateStore(Path(tempfile.mkdtemp()))
+        store.write(enabled=False)
+        updater = Updater(store, '0.3.0', lambda: False, Mock())
+        updater.check()
+        updater.fetch.assert_not_called()
+        self.assertIsNotNone(updater.snapshot()['checked_at'])

@@ -1,7 +1,10 @@
 """Janela estatística limitada, sem conteúdo e sem sucesso/uso inventado."""
 import json
+import tempfile
 import threading
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 from browserapi_lab.telemetry import Telemetry, clean_timings
 
 
@@ -163,3 +166,84 @@ class TestTelemetry(unittest.TestCase):
         self.assertIsNone(record['response_chars'])
         self.assertEqual(telemetry.snapshot()['usage']['total_chars'], 0)
 
+
+
+class TestPersistencia(unittest.TestCase):
+    """A atualização do aplicativo reinicia o programa: a Atividade não pode zerar.
+
+    Só o agregado (lista branca) vai para o disco; nada de prompt/resposta/URL.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / 'telemetry.json'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def record(self, telemetry, status='success', **timings):
+        telemetry.begin('check', 'chat')
+        telemetry.usage(12, 34)
+        telemetry.finish({'status': status, 'timings': timings})
+
+    def test_round_trip_keeps_aggregate_and_not_content(self):
+        first = Telemetry(path=self.path)
+        self.record(first, total_ms=100)
+        second = Telemetry(path=self.path)
+        snapshot = second.snapshot()
+        self.assertTrue(snapshot['persisted'])
+        self.assertEqual(snapshot['scope'], 'rolling_window_persisted')
+        self.assertEqual(snapshot['operations'], 1)
+        self.assertEqual(snapshot['usage']['total_chars'], 46)
+        self.assertEqual(snapshot['history'][0]['timings']['total_ms'], 100)
+        raw = self.path.read_text()
+        for forbidden in ('"answer"', '"text"', 'seletor', 'http://', 'https://'):
+            self.assertNotIn(forbidden, raw)
+        # Permissão restrita: é o histórico do usuário, não da rede.
+        self.assertEqual(oct(self.path.stat().st_mode & 0o777), '0o600')
+
+    def test_sequence_continues_after_reload(self):
+        first = Telemetry(path=self.path)
+        self.record(first)
+        self.record(first)
+        second = Telemetry(path=self.path)
+        self.record(second)
+        self.assertEqual(second.snapshot()['history'][-1]['id'], 3)
+
+    def test_corrupt_or_foreign_file_is_ignored(self):
+        self.path.write_text('{"schema_version": 1, "records": "nada"}')
+        self.assertEqual(Telemetry(path=self.path).snapshot()['operations'], 0)
+        self.path.write_text('não é json')
+        self.assertEqual(Telemetry(path=self.path).snapshot()['operations'], 0)
+        self.path.write_text(json.dumps({'schema_version': 99, 'records': []}))
+        self.assertEqual(Telemetry(path=self.path).snapshot()['operations'], 0)
+
+    def test_records_with_content_or_unknown_status_are_rejected(self):
+        payload = {'schema_version': 1, 'records': [
+            {'id': 1, 'operation': 'check', 'name': 'chat', 'phase': 'done', 'status': 'success',
+             'timings': {'total_ms': 10}, 'at': '2026-10-28T10:00:00Z', 'prompt': 'segredo'},
+            {'id': 2, 'operation': 'check', 'name': 'chat', 'phase': 'done', 'status': 'inventado',
+             'timings': {}, 'at': '2026-10-28T10:00:00Z'},
+            {'id': 3, 'operation': 'hackear', 'name': 'chat', 'phase': 'done', 'status': 'success',
+             'timings': {}, 'at': '2026-10-28T10:00:00Z'},
+        ]}
+        self.path.write_text(json.dumps(payload))
+        snapshot = Telemetry(path=self.path).snapshot()
+        self.assertEqual(snapshot['operations'], 1)
+        self.assertNotIn('segredo', json.dumps(snapshot))
+        self.assertEqual(set(snapshot['history'][0]),
+                         {'id', 'operation', 'name', 'phase', 'status', 'timings',
+                          'prompt_chars', 'response_chars', 'at', 'attempts'})
+
+    def test_without_path_nothing_is_written(self):
+        telemetry = Telemetry()
+        self.record(telemetry)
+        self.assertFalse(telemetry.snapshot()['persisted'])
+        self.assertEqual(telemetry.snapshot()['scope'], 'current_process_rolling_window')
+
+    def test_write_failure_does_not_break_the_operation(self):
+        with patch.object(Path, 'write_text', side_effect=OSError('disco cheio')):
+            telemetry = Telemetry(path=self.path)
+            self.record(telemetry)
+        self.assertEqual(telemetry.snapshot()['operations'], 1)
+        self.assertFalse(telemetry.snapshot()['persisted'])

@@ -13,6 +13,28 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
+**Correção na 0.10.1:** o painel do apontamento passou a **não interceptar o
+clique** (o corpo deixa o ponteiro atravessar; só os botões e a faixa de arraste
+respondem; arrasta-se pela alça `⠿`) — antes, de tamanho fixo, ele cobria o
+próprio campo que a pessoa devia apontar. O painel também **volta sozinho** se o site re-renderizar o
+`body`, e a checagem “o painel abriu?” aceita a escolha feita antes dela (o
+reparo do botão Enviar parava com “o painel não abriu”). Ainda: a leitura em
+camadas não confunde uma barra lateral de formulário com conversa.
+
+**Novo na 0.10.0:** a leitura da conversa passou a ter **camadas** — papel
+declarado na página, depois o estado do React (o que o app já sabe), e só por
+último o layout. Quando o mapeamento apontado não lê a conversa de forma
+coerente, quem manda é a camada, com aviso explícito, em vez de “envio não
+confirmado” com a mensagem na tela. O fim da resposta exige **três leituras
+estáveis** (o botão parar some antes do texto terminar). Correções do uso real:
+a autorização do Chrome pessoal ficou **fora do bloco recolhido** e a recusa abre
+com o nome da conexão; a preparação mostra as **últimas linhas de pip/playwright**
+em vez de uma frase genérica; a aba **Atividade** grava só números e sobrevive à
+atualização; a atualização verifica sozinha a cada 30 min (5 min após falha) e
+tem **Verificar agora**; o painel do apontamento ficou de tamanho fixo, sem barra
+de rolagem e arrastável. Pesquisa: [dossiê](pesquisa/2026-10-28-arquitetura-captura-e-ui.md)
+e [pré-registro](pesquisa/2026-10-28-preregistro.md). Decisão: ADR-024.
+
 **Novo na 0.9.1:** o mapeamento passou a **conferir a leitura da conversa** — exige
 três perguntas suas com as três respostas na tela, mostra o texto de cada par, na
 ordem, e recusa seletor que mistura pergunta com resposta ou conta a mesma camada
