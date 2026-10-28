@@ -259,7 +259,7 @@
   });
   const back = button('Voltar', () => { const el = history.pop(); if (el) preview(el, false); });
   const another = button('Escolher outra', reset);
-  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; applyCorner(); });
+  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; locked = true; placeBanner(); });
   const skip = button('Pular este campo', () => finish({ cancelled: true }), 'data-picker-skip');
   const abort = button('Cancelar mapeamento', () => finish({ abort: true }), 'data-picker-abort');
 
@@ -274,47 +274,80 @@
     return b;
   }
 
-  /* O painel não pode cobrir o que a pessoa precisa clicar: fica no canto com
-   * menos sobreposição com as áreas destacadas. "Mover" troca de canto. */
+  /* O painel não pode cobrir o que a pessoa precisa clicar. Ele fica na faixa
+   * (acima/abaixo) com menos sobreposição e, quando essa faixa é curta, a
+   * altura é reduzida para caber nela — sem encolher a ponto de sumir. Em
+   * telas estreitas isso é o que mantém o campo visível e clicável. */
   const CORNERS = ['top-right', 'bottom-right', 'bottom-left', 'top-left'];
+  const MARGIN = 16;
+  const MIN_HEIGHT = 160;
   let corner = 0;
-  function placeBanner() {
-    const size = banner.getBoundingClientRect();
-    const width = size.width || 400;
-    const height = size.height || 240;
-    const boxes = (chosen ? query(selector) : candidates()).slice(0, 40)
-      .map(el => el.getBoundingClientRect());
-    const overlaps = CORNERS.map(name => {
-      const left = name.endsWith('left') ? 16 : innerWidth - width - 16;
-      const top = name.startsWith('top') ? 16 : innerHeight - height - 16;
-      const right = left + width;
-      const bottom = top + height;
-      return boxes.reduce((sum, box) => {
-        const w = Math.max(0, Math.min(right, box.right) - Math.max(left, box.left));
-        const h = Math.max(0, Math.min(bottom, box.bottom) - Math.max(top, box.top));
-        return sum + w * h;
-      }, 0);
-    });
-    // Empate mantém o canto atual: o painel não fica pulando na tela, mas sai
-    // da frente assim que passar a cobrir o alvo (ex.: depois de rolar a página).
-    let best = corner;
-    let bestScore = overlaps[corner];
-    overlaps.forEach((score, index) => {
-      if (score < bestScore - 1) { bestScore = score; best = index; }
-    });
-    corner = best;
-    applyCorner();
-    banner.dataset.placed = '1';
+  let locked = false;
+
+  const area = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
+    * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+
+  function targetBoxes() {
+    return (chosen ? query(selector) : candidates()).slice(0, 40)
+      .map(el => el.getBoundingClientRect())
+      .filter(r => r.width > 2 && r.height > 2 && r.bottom > 0 && r.top < innerHeight
+                   && r.right > 0 && r.left < innerWidth);
   }
 
-  function applyCorner() {
+  function unionOf(boxes) {
+    if (!boxes.length) return null;
+    return boxes.reduce((u, r) => ({ left: Math.min(u.left, r.left), top: Math.min(u.top, r.top),
+      right: Math.max(u.right, r.right), bottom: Math.max(u.bottom, r.bottom) }),
+      { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+  }
+
+  function layout(name, boxes, union, natural) {
+    const width = Math.min(banner.offsetWidth || 400, innerWidth - 2 * MARGIN);
+    // Altura disponível na faixa (acima ou abaixo do que precisa ser clicado).
+    const room = !union ? innerHeight - 2 * MARGIN
+      : name.startsWith('top') ? union.top - 2 * MARGIN : innerHeight - union.bottom - 2 * MARGIN;
+    const height = Math.max(0, Math.min(natural, room));
+    const left = name.endsWith('left') ? MARGIN : innerWidth - width - MARGIN;
+    const top = name.startsWith('top') ? MARGIN : innerHeight - height - MARGIN;
+    const rect = { left, top, right: left + width, bottom: top + height };
+    return { index: CORNERS.indexOf(name), height, room,
+             score: boxes.reduce((sum, box) => sum + area(rect, box), 0),
+             usable: room >= MIN_HEIGHT || !boxes.length };
+  }
+
+  function placeBanner() {
+    // Sem o limite antigo: a altura "natural" é o conteúdo inteiro.
+    banner.style.maxHeight = '';
+    const natural = Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
+    const boxes = targetBoxes();
+    const union = unionOf(boxes);
+    const plans = CORNERS.map(name => layout(name, boxes, union, natural));
+    const current = plans[corner];
+    let best = current;
+    if (!locked) {
+      const usable = plans.filter(plan => plan.usable);
+      const pool = usable.length ? usable : plans;
+      best = pool.reduce((pick, plan) => (plan.score < pick.score - 1 ? plan : pick), pool[0]);
+      // Empate mantém o canto atual: o painel não fica pulando na tela, mas
+      // sai da frente assim que passar a cobrir o alvo (ex.: depois de rolar).
+      if (current && (current.usable || !usable.length) && current.score <= best.score + 1) best = current;
+    }
+    corner = best ? best.index : corner;
+    applyCorner(best, natural);
+  }
+
+  function applyCorner(plan, natural) {
     const name = CORNERS[corner];
     Object.assign(banner.style, {
-      left: name.endsWith('left') ? '16px' : 'auto',
-      right: name.endsWith('right') ? '16px' : 'auto',
-      top: name.startsWith('top') ? '16px' : 'auto',
-      bottom: name.startsWith('bottom') ? '16px' : 'auto',
+      left: name.endsWith('left') ? MARGIN + 'px' : 'auto',
+      right: name.endsWith('right') ? MARGIN + 'px' : 'auto',
+      top: name.startsWith('top') ? MARGIN + 'px' : 'auto',
+      bottom: name.startsWith('bottom') ? MARGIN + 'px' : 'auto',
     });
+    // Faixa curta demais (menos de MIN_HEIGHT) deixaria o painel ilegível:
+    // nesse caso ele mantém a altura natural e a pessoa usa "Mover".
+    const height = plan && plan.height >= MIN_HEIGHT ? plan.height : natural;
+    banner.style.maxHeight = Math.max(0, Math.min(height || 0, innerHeight - 2 * MARGIN)) + 'px';
   }
 
   function describe(el) {
@@ -363,6 +396,7 @@
   }
   function reset() {
     chosen = null;
+    locked = false;
     selector = '';
     history = [];
     previewText.textContent = 'nada ainda — clique em uma área destacada em azul.';
@@ -385,6 +419,7 @@
       return;
     }
     if (push && chosen && chosen !== target) history.push(chosen);
+    if (chosen !== target) locked = false;
     chosen = target;
     selector = identify(target);
     describe(target);
@@ -423,7 +458,7 @@
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
   window.addEventListener('scroll', draw, true);
-  window.addEventListener('resize', draw);
+  window.addEventListener('resize', () => { locked = false; draw(); });
   window.__balPickerCleanup = cleanup;
   window.__balPickerContainer = messageRole ? messageContainer : null;
   if (window.__balTypingCleanup) window.__balTypingCleanup();

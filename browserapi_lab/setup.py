@@ -35,6 +35,14 @@ def browser_options():
     }
 
 
+class StepUnavailable(RuntimeError):
+    """Um passo do apontamento não pôde abrir nesta página.
+
+    Não é cancelamento de quem usa: o campo fica como estava e o mapeamento
+    segue para os outros passos (antes, isso perdia o mapeamento inteiro).
+    """
+
+
 def pick(page, role, cancelled=None, *, step='', hint=''):
     """Abre o apontamento guiado e devolve o seletor.
 
@@ -42,31 +50,44 @@ def pick(page, role, cancelled=None, *, step='', hint=''):
     mapeamento inteiro levanta ``EOFError``; só a escolha explícita do usuário
     faz isso (Esc e "Pular este campo" não abortam mais a configuração toda).
     """
-    page.bring_to_front()
     script = (Path(__file__).parent / 'assets' / 'picker.js').read_text(encoding='utf-8')
     voice_script = (Path(__file__).parent / 'assets' / 'voice_control.js').read_text()
-    page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
-    page.evaluate(script, {'role': role, 'step': step, 'hint': hint})
-    if not page.evaluate("() => !!document.querySelector('#__browserapi_picker')"):
+    try:
+        page.bring_to_front()
+        page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
+        page.evaluate(script, {'role': role, 'step': step, 'hint': hint})
+        opened = page.evaluate("() => !!document.querySelector('#__browserapi_picker')")
+    except Exception as problem:  # página fechada, script recusado pela CSP, aba trocada
+        raise StepUnavailable('Não consegui abrir o apontamento nesta página (%s). '
+                             'Nada foi alterado.' % type(problem).__name__) from problem
+    if not opened:
         # Sem esta checagem, um erro de integração virava espera de 2 minutos
         # sem nenhuma explicação para quem estava usando.
-        raise EOFError('O painel de seleção não abriu nesta página. Nada foi alterado.')
+        raise StepUnavailable('O painel de seleção não abriu nesta página. Nada foi alterado.')
     try:
         if cancelled is None:
             page.wait_for_function('window.__balPick !== null', timeout=120000)
         else:
-            import time
             deadline = time.monotonic() + 120
             while page.evaluate('window.__balPick === null'):
                 if cancelled() or time.monotonic() > deadline:
                     raise EOFError('Seleção cancelada')
                 page.wait_for_timeout(100)
         value = page.evaluate('window.__balPick')
-        if value.get('abort'):
-            raise EOFError('Mapeamento cancelado')
-        return None if value.get('cancelled') else value.get('selector')
+    except EOFError:
+        raise
+    except Exception as problem:
+        raise StepUnavailable('O apontamento parou: a janela do chat fechou ou mudou de página. '
+                             'Nada foi alterado.') from problem
     finally:
-        page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); delete window.__balVoiceControl; }')
+        try:
+            page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); '
+                          'delete window.__balVoiceControl; }')
+        except Exception:
+            pass
+    if value.get('abort'):
+        raise EOFError('Mapeamento cancelado')
+    return None if value.get('cancelled') else value.get('selector')
 
 
 def element_preview(page, selector, prefer_last=False):
@@ -214,7 +235,12 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
                 tell('Seguindo sem microfone. Se o botão Enviar for confundido com o microfone, '
                      'refaça o campo no fim.')
                 return
-            selector = picker(page, 'botão de comando de voz', step=f'{index} de {total}', hint=hint)
+            try:
+                selector = picker(page, 'botão de comando de voz', step=f'{index} de {total}', hint=hint)
+            except StepUnavailable as problem:
+                skipped.append(key)
+                tell('Microfone: ' + str(problem) + ' O campo ficou como estava; os outros passos continuam.')
+                return
             if not selector:
                 skipped.append(key)
                 tell('Microfone não apontado; seguimos para o botão Enviar.')
@@ -254,6 +280,12 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
                             'volte aqui e clique em Continuar; depois clique no botão para selecioná-lo. '))
             else:
                 selector = picker(page, PICK_ROLES.get(key, title), step=f'{index} de {total}', hint=hint)
+        except StepUnavailable as problem:
+            # Falha técnica deste campo não custa o mapeamento dos outros.
+            skipped.append(key)
+            tell(f'{title}: {problem} O campo ficou como estava; siga com os outros passos '
+                 'ou refaça este depois em "Corrigir campos".')
+            return
         finally:
             if temporary:
                 try:

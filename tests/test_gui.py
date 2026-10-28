@@ -258,6 +258,25 @@ class TestPanel(unittest.TestCase):
         until(lambda: self.panel.phase == 'cancelled')
         self.assertIn('não desfaz', '\n'.join(self.panel.snapshot()['messages']))
 
+    def test_interrupted_operation_says_where_it_stopped(self):
+        """"Interrompido" sem motivo não dizia se foi você ou o programa."""
+        self.store.save(ChatConfig('chat','https://example.com'))
+        with patch('browserapi_lab.gui.check', side_effect=EOFError('Mapeamento cancelado')):
+            self.panel.submit({'operation':'check','name':'chat'})
+            until(lambda: self.panel.phase == 'cancelled')
+        self.assertIn('Mapeamento cancelado', '\n'.join(self.panel.snapshot()['messages']))
+
+    def test_step_unavailable_is_an_error_with_the_reason_not_a_cancel(self):
+        from browserapi_lab.setup import StepUnavailable
+        self.store.save(ChatConfig('chat','https://example.com'))
+        with patch('browserapi_lab.gui.check',
+                   side_effect=StepUnavailable('O painel de seleção não abriu nesta página. Nada foi alterado.')):
+            self.panel.submit({'operation':'check','name':'chat'})
+            until(lambda: self.panel.phase == 'error')
+        messages = '\n'.join(self.panel.snapshot()['messages'])
+        self.assertIn('O painel de seleção não abriu', messages)
+        self.assertNotIn('não desfaz', messages)
+
     def test_switch_existing_saved_chat_never_launches_and_requires_consent(self):
         self.store.save(ChatConfig('saved','https://example.com'))
         with patch('browserapi_lab.browser.BrowserSession.start') as launch:

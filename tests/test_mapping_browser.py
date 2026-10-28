@@ -181,6 +181,54 @@ class TestGuidedMappingUnit(unittest.TestCase):
         self.assertTrue(any('você pulou' in line for line in tells), tells)
         self.assertTrue(any('Campos pulados' in line for line in tells), tells)
 
+    def test_a_broken_step_does_not_throw_away_the_whole_mapping(self):
+        """Um campo que não abre é pulado com explicação; os outros continuam."""
+        from browserapi_lab.setup import StepUnavailable
+        asked = []
+        tells = []
+        answers = iter(['s', 's', 'n', 'n'])
+
+        def ask(text):
+            asked.append(text)
+            return next(answers, 'n')
+
+        def picker(_page, role, **_options):
+            if role == 'campo de mensagem':
+                raise StepUnavailable('O painel de seleção não abriu nesta página. Nada foi alterado.')
+            return '#u'
+
+        config = self.config()
+        repair_fields(self.Page(), config, ask=ask, tell=tells.append, picker=picker,
+                      fields=('composer', 'user'))
+        self.assertTrue(any('Passo 2 de 2 · A sua pergunta' in text for text in asked), asked)
+        self.assertTrue(any('O painel de seleção não abriu' in line for line in tells), tells)
+        self.assertTrue(any('Campo de digitação' in line and 'não abriu' in line for line in tells), tells)
+        self.assertEqual(config.user, '#u')
+
+    def test_pick_explains_instead_of_waiting_when_the_panel_does_not_open(self):
+        from unittest.mock import patch
+        from browserapi_lab.setup import StepUnavailable, pick
+
+        class PageWithoutPicker(self.Page):
+            def evaluate(self, *_args, **_kwargs):
+                return False
+
+        with self.assertRaises(StepUnavailable) as caught:
+            pick(PageWithoutPicker(), 'campo de mensagem', step='1 de 5')
+        self.assertIn('Nada foi alterado', str(caught.exception))
+
+    def test_pick_reports_a_page_that_went_away(self):
+        from browserapi_lab.setup import StepUnavailable, pick
+
+        class BrokenPage(self.Page):
+            def evaluate(self, *_args, **_kwargs):
+                raise RuntimeError('Target closed')
+
+        with self.assertRaises(StepUnavailable) as caught:
+            pick(BrokenPage(), 'campo de mensagem', step='1 de 5')
+        self.assertIn('Não consegui abrir o apontamento', str(caught.exception))
+        self.assertIn('Nada foi alterado', str(caught.exception))
+
     def test_captured_field_can_be_redone_without_restarting(self):
         picks = iter(['#c-amplo', '#c-novo'])
         answers = iter(['s', 's', 's', 's'])

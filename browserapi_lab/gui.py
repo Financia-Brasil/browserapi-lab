@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS, safe_name
 from .session import ProfileBusyError, ProfileLock
-from .setup import configure, check, pick, status, point_controls
+from .setup import StepUnavailable, configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
 from .version import APP_VERSION
 from .telemetry import Telemetry
@@ -336,9 +336,18 @@ class Panel:
                     self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None,
                                          record=self.record_answer, show_answer=False, **common)
                 end_phase = 'done'
-            except (EOFError, KeyboardInterrupt):
-                self.tell('Operação interrompida. Isso não desfaz mensagens que já foram enviadas.')
+            except (EOFError, KeyboardInterrupt) as problem:
+                # O motivo vem do mapeamento (ex.: "Mapeamento cancelado"); sem
+                # ele, "Operação interrompida" não dizia onde a execução parou.
+                reason = str(problem).strip()
+                if reason in ('', 'Operação interrompida'):
+                    reason = ''
+                self.tell('Operação interrompida%s. Isso não desfaz mensagens que já foram enviadas.'
+                          % (f' — {reason}' if reason else ''))
                 end_phase = 'cancelled'
+            except StepUnavailable as problem:
+                self.tell(str(problem))
+                end_phase = 'error'
             except ExistingChromeError as error:
                 self.tell(str(error))
                 end_phase = 'error'
