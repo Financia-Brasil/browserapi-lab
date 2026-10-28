@@ -173,8 +173,8 @@ function flowStage() {
 }
 const FLOW = {
   1: ['Conectar o chat',
-      'O perfil do Chrome já vem escolhido. Um clique conecta e já testa, se você autorizar a mensagem.',
-      'Conectar e testar'],
+      'Escolha o perfil e o chat abaixo e clique em Conectar. O teste vem junto, se você autorizar a mensagem.',
+      ''],
   2: ['Testar o chat',
       'O teste envia UMA mensagem sua, com a sua autorização, e confere se a resposta é lida.',
       'Testar a conexão'],
@@ -195,8 +195,10 @@ function renderQuickFlow() {
     const number = Number(item.dataset.step);
     item.dataset.state = number < stage ? 'done' : number === stage ? 'current' : 'todo';
   }
-  const blocked = busy() || incompatible();
-  $('quick-action').disabled = blocked || (stage === 1 && $('session-mode').value === 'existing_chrome' && !$('personal-profile').value);
+  // No passo 1 o botão é o próprio formulário: repetir "Conectar" aqui daria
+  // dois botões iguais na mesma tela.
+  $('quick-action').hidden = stage === 1;
+  $('quick-action').disabled = busy() || incompatible();
   $('quick-flow').dataset.stage = String(stage);
   const chat = flowChat();
   $('quick-note').textContent = state?.phase === 'waiting' ? 'Aguardando você responder abaixo.' :

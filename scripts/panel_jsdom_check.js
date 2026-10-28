@@ -88,10 +88,13 @@ async function main() {
   painted.push(win.document.querySelector('#quick-action').textContent);
 
   const q = id => win.document.getElementById(id);
-  check('painel carrega sem referência quebrada', q('quick-action').textContent.length > 0,
-    q('quick-action').textContent);
-  check('passo 1: conectar', q('quick-action').textContent === 'Conectar e testar',
-    q('quick-action').textContent);
+  check('painel carrega sem referência quebrada',
+    ['quick-title', 'quick-detail', 'quick-note', 'api-endpoint', 'url-check-input']
+      .every(id => q(id)) && q('quick-title').textContent.length > 0,
+    q('quick-title').textContent);
+  check('passo 1: orienta a usar o formulário, sem segundo botão Conectar',
+    q('quick-action').hidden && q('quick-detail').textContent.includes('clique em Conectar'),
+    [q('quick-action').hidden, q('quick-detail').textContent]);
   check('passo 1 marcado na lista',
     q('quick-steps').children[0].dataset.state === 'current');
 
@@ -100,7 +103,8 @@ async function main() {
     session_mode: 'existing_chrome', compatible: false, conversation: {turns: 0, revision: 0}}]});
   win.__harness.refresh();
   await settle();
-  check('passo 2: testar', q('quick-action').textContent === 'Testar a conexão',
+  check('passo 2: testar', !q('quick-action').hidden
+    && q('quick-action').textContent === 'Testar a conexão',
     q('quick-action').textContent);
   check('nota diz qual conexão está em jogo', q('quick-note').textContent.includes('meu-gemini'),
     q('quick-note').textContent);

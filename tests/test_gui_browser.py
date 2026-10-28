@@ -569,7 +569,11 @@ class TestGraphicalJourney(BrowserTestCase):
 
     def test_redesign_profile_opening_navigation_and_responsive_evidence(self):
         import datetime
+        from browserapi_lab.llm_api import APIService
         from playwright.sync_api import expect
+        # API desligada, mas com endereço e exemplo: a evidência visual da aba
+        # API mostra o bloco "copiar e colar" sem ligar nada.
+        self.panel.api_service = APIService(self.panel)
         profile={'id':'chrome:Profile 1','label':'Pessoal','installation':'chrome',
                  'directory':'Profile 1','connectable':True,'account_verified':False,
                  'openable':True,'endpoint_available':False}
@@ -600,6 +604,13 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.locator('[data-view=api]').click()
             expect(self.page.locator('#api-card')).to_be_visible()
             self.assertTrue(self.page.locator('#api-headless').is_hidden())
+            expect(self.page.locator('#api-endpoint')).to_have_value(
+                'http://127.0.0.1:8765/v1/chat/completions')
+            self.page.screenshot(path=str(evidence/'api.png'), full_page=True)
+            self.page.set_viewport_size({'width':375,'height':812})
+            self.page.screenshot(path=str(evidence/'api-mobile.png'), full_page=True)
+            self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+            self.page.set_viewport_size({'width':1440,'height':1040})
             with self.panel.lock:
                 self.panel.tell('Permissão do Chrome necessária. Conecte novamente para configurar.')
                 self.panel.phase='error'
