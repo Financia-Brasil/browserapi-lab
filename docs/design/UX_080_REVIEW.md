@@ -83,3 +83,17 @@ anteriores porque nenhum deles abria a aba Atividade.
 Nenhum desses pontos foi convertido em prazo maior, reenvio automático ou teste
 mais frouxo no produto.
 
+## Corrida encontrada no produto (não só no teste), na 3ª rodada
+
+A execução 40621633923 falhou em `test_persistent_history_requires_opt_in_and_
+conversation_id` com “Aguarde a tarefa antes de apagar/revogar”, **sem tarefa em
+andamento**. Causa: em `llm_api.do_POST`, o contador `service.active` só caía no
+`finally`, depois de escrever a resposta no socket. Quem pedia *apagar histórico*
+ou *revogar chave* imediatamente após receber a resposta era recusado.
+
+Corrigido no produto: a chamada é liberada assim que o worker termina de produzir a
+resposta (antes de `send_json`/SSE), inclusive nos caminhos de erro. Novo teste
+`test_clear_history_right_after_a_response_is_not_rejected_as_busy` cobre o caso
+sem nenhuma espera. O limite de 4 chamadas simultâneas continua igual; o que muda é
+que a escrita do socket deixou de contar como trabalho do navegador.
+

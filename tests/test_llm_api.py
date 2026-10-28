@@ -120,6 +120,22 @@ class TestLocalAPI(unittest.TestCase):
         self.assertEqual(self.service.history.stats()['records'],0)
         self.assertEqual(len(self.service.cache),0)
 
+    def test_clear_history_right_after_a_response_is_not_rejected_as_busy(self):
+        """Regressão: o contador caía só depois de escrever o socket.
+
+        Quem chama "apagar histórico/revogar" imediatamente após uma resposta
+        recebia "Aguarde a tarefa"; o trabalho do navegador já havia terminado.
+        """
+        self.service.configure({'enabled':False})
+        self.service.configure({'enabled':True,'names':['saved'],'retrieval':True,'remember':True})
+        body = self.body(); body['conversation_id'] = 'session-one'
+        self.assertEqual(self.request(body=body)[0], 200)
+        self.assertFalse(self.service.busy())
+        # Sem espera alguma: o estado precisa refletir o fim da chamada.
+        self.service.configure({'enabled':False,'clear_history':True})
+        self.assertEqual(self.service.history.stats()['records'], 0)
+        self.assertIsNone(self.service.server)
+
     def test_large_persisted_corpus_is_searched_after_another_request(self):
         self.service.configure({'enabled':False})
         self.service.configure({'enabled':True,'names':['saved'],'retrieval':True,'remember':True})

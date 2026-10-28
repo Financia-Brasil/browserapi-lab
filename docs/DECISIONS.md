@@ -348,3 +348,18 @@ observação de DOM; não há garantia de exactly-once em site externo.
 
 Também nesta rodada: HTML do painel passou a ser validado por parser nos testes,
 depois de uma aspa faltante quebrar o id da aba Atividade na 0.7.0.
+
+
+## ADR-022 — A chamada da API termina quando o worker termina
+
+`llm_api` contava requisições ativas até o fim do `finally`, depois de escrever a
+resposta HTTP. Um cliente que revogava a chave ou apagava o histórico logo após
+receber a resposta era recusado com 409 “ocupado”, embora o navegador já estivesse
+livre — o teste de histórico do CI mostrou o problema de forma intermitente.
+
+Decisão: liberar o contador assim que a resposta é produzida (antes de escrever o
+socket), em todos os caminhos, com liberação idempotente. O limite de concorrência
+continua valendo para trabalho real; a transmissão da resposta não é trabalho. Não
+houve afrouxamento de autenticação, de limite de corpo ou de recusa por envio
+ambíguo.
+
