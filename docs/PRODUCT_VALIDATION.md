@@ -419,15 +419,15 @@ rotulada como grosseira. Não há custo, quota ou `usage` do provedor inventados
 Evidência em 2026-10-28:
 
 ```text
-lab 40622746240 (branch) e 40622752574 (PR): SUCCESS
-  Integração real com Chromium: Ran 411 tests in 209,026s — OK (skipped=1)
-  Revisão visual (desktop + 375px): Ran 16 tests in 39,061s — OK
+lab 40624683164 (branch) e 40624688687 (PR): SUCCESS
+  Integração real com Chromium: Ran 411 tests in 220,003s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 42,095s — OK
   Núcleo Python (sem navegador): aprovado
 Local, sem Chromium neste ambiente: 303 testes, 17 ignorados, OK
 ```
 
 Capturas em Chromium real da fixture, inspecionadas:
-`results/ci/ui-review-40622746240/ui-redesign/activity-usage-desktop.png`,
+`results/ci/ui-review-40624683164/ui-redesign/activity-usage-desktop.png`,
 `activity-usage-mobile.png` e `activity-desktop.png`. Três rodadas anteriores
 falharam: duas por erros nos testes novos deste marco e uma por corrida real no
 contador da API local (resolvida no produto). A causa exata do falso negativo no

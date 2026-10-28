@@ -28,15 +28,21 @@ anteriores porque nenhum deles abria a aba Atividade.
   (sem autorização), marrom `#7a6f5f` (erro de operação). Todo gráfico tem legenda
   ou rótulo numérico — cor não é o único canal.
 
-## Evidência final (execuções 40622746240 e 40622752574)
+## Evidência final (execuções 40624683164 e 40624688687)
 
 ```text
-lab 40622746240 (push) e 40622752574 (PR): SUCCESS
-  Integração real com Chromium: Ran 411 tests in 209,026s — OK (skipped=1)
-  Revisão visual (desktop + 375px): Ran 16 tests in 39,061s — OK
+lab 40624683164 (push) e 40624688687 (PR): SUCCESS
+  Integração real com Chromium: Ran 411 tests in 220,003s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 42,095s — OK
   Núcleo Python (sem navegador): aprovado
 Núcleo local deste ambiente, sem Chromium: 303 testes, 17 ignorados, OK
 ```
+
+Quatro rodadas falharam antes desta (40620094973, 40620940568, 40621633923 e
+40623716624): duas por erros nos meus testes novos, uma por corrida real no
+contador da API local (corrigida no produto) e uma pelo prazo de 4 s do teste de
+exibição sob contenção do runner. Nenhuma foi resolvida alargando prazo do produto,
+reduzindo a espera de confirmação ou permitindo reenvio.
 
 Capturas em Chromium real da fixture (sem conta): [activity-usage-desktop.png](../../results/ci/ui-review-40622746240/ui-redesign/activity-usage-desktop.png),
 [activity-usage-mobile.png](../../results/ci/ui-review-40622746240/ui-redesign/activity-usage-mobile.png)
