@@ -62,3 +62,4 @@
 .step-dots li[data-state=done]{background:#5d9c7d}
 .step-dots li[data-state=current]{background:var(--accent)}
 @media(max-width:640px){.step-dots li{width:16px}}
+#updates-card .updates-actions{display:flex;align-items:center;gap:8px;margin:8px 0 0;flex-wrap:wrap}#updates-card .updates-actions button{font-size:12px;padding:8px 16px;min-height:40px}.consent-block{margin:24px 0 0;padding:16px;border:1px solid var(--line);border-radius:6px;background:#f6f9f7}.consent-block label{display:flex;align-items:flex-start;gap:8px;font-weight:450;margin:0}.consent-block small{margin-top:8px}.consent-block[data-alert="true"]{border-color:#d6a9a9;background:#fff1f1}.consent-alert{border:1px solid #d6a9a9;background:#fff1f1;color:#8b2929;padding:8px 16px;border-radius:6px;font-size:13px;margin:16px 0 0}

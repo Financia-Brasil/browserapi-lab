@@ -75,6 +75,32 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.request('/inter.ttf',token=False)[0],200)
         self.assertEqual(self.request('/mono.ttf',token=False)[0],200)
 
+    def test_consent_and_update_controls_are_visible_and_actionable(self):
+        """Relatos: consentimento escondido e atualização só pela caixinha."""
+        from browserapi_lab.gui import ASSETS
+        html = (ASSETS/'panel.html').read_text()
+        js = (ASSETS/'panel.js').read_text()
+        picker = (ASSETS/'picker.js').read_text()
+        # A caixa que resolve "Confirme acesso amplo" não pode estar recolhida.
+        self.assertIn('id="api-personal"', html)
+        self.assertLess(html.index('id="api-personal"'), html.index('<details class="api-advanced">'))
+        self.assertIn('id="consent-alert"', html)
+        self.assertIn('id="consent-block"', html)
+        self.assertIn('function highlightConsent', js)
+        self.assertIn("$('consent-alert')", js)
+        self.assertIn("focus({ preventScroll: true })", js)
+        # Verificar agora não depende de mexer na caixinha.
+        self.assertIn('id="updates-check"', html)
+        self.assertIn("api('updates',{check:true})", js)
+        self.assertIn('Última verificação', js)
+        # A aba Atividade não pode prometer memória pura.
+        self.assertIn('sobrevivem a reiniciar e atualizar', html)
+        # Painel do apontamento: fixo, sem rolagem, arrastável, sem polling.
+        self.assertIn("overflow: 'hidden'", picker)
+        self.assertIn('pointerdown', picker)
+        self.assertIn('MutationObserver', picker)
+        self.assertNotIn('setInterval(draw', picker)
+
     def test_ledger_spacing_and_local_font_contract(self):
         import re
         from browserapi_lab.gui import ASSETS
@@ -121,6 +147,67 @@ class TestPanel(unittest.TestCase):
         with self.panel.lock:
             self.panel.phase='updating'
         self.assertEqual(self.request('/api/task',method='POST',body={'operation':'doctor'})[0],400)
+
+    def test_update_check_can_be_forced_without_touching_the_checkbox(self):
+        """O relato: atualização só acontecia ao marcar/desmarcar a caixinha."""
+        from browserapi_lab.updates import UpdateStore, Updater
+        store = UpdateStore(Path(self.tmp.name)/'update-data')
+        self.panel.updater = Updater(store,'0.3.0',lambda:False)
+        self.panel.updater.wake.clear()
+        self.assertEqual(self.request('/api/updates',method='POST',body={'check':True})[0],200)
+        self.assertTrue(self.panel.updater.wake.is_set())
+        # Pedido vazio não é desculpa para acordar o verificador.
+        self.panel.updater.wake.clear()
+        self.assertEqual(self.request('/api/updates',method='POST',body={})[0],400)
+        self.assertFalse(self.panel.updater.wake.is_set())
+        self.assertEqual(self.request('/api/updates',method='POST',body={'check':'agora'})[0],400)
+
+    def test_update_check_without_manager_explains_instead_of_failing_silently(self):
+        self.panel.updater = None
+        code, _, body = self.request('/api/updates',method='POST',body={'check':True})
+        self.assertEqual(code,400)
+        self.assertIn('aplicativo instalado', json.loads(body)['error'])
+
+    def test_telemetry_is_written_next_to_the_panel_data_and_reloaded(self):
+        """Atividade zerada na atualização: o agregado agora fica em disco."""
+        from browserapi_lab.telemetry import Telemetry
+        path = Path(self.tmp.name)/'data'/'telemetry.json'
+        telemetry = self.panel.telemetry
+        self.assertEqual(telemetry.path, path)
+        telemetry.begin('check','chat')
+        telemetry.usage(10,20)
+        telemetry.finish({'status':'success','timings':{'total_ms':12.5}})
+        self.assertTrue(path.is_file())
+        reloaded = Telemetry(path=path)
+        snapshot = reloaded.snapshot()
+        self.assertTrue(snapshot['persisted'])
+        self.assertEqual(snapshot['scope'],'rolling_window_persisted')
+        self.assertEqual(snapshot['history'][0]['status'],'success')
+        self.assertNotIn('text', json.dumps(snapshot['history'][0]))
+        self.assertEqual(set(snapshot['history'][0]),
+                         {'id', 'operation', 'name', 'phase', 'status', 'timings',
+                          'prompt_chars', 'response_chars', 'at', 'attempts'})
+
+    def test_preparation_failure_shows_the_real_cause_and_next_action(self):
+        from browserapi_lab.gui import clean_preparation_line, preparation_failure
+        tail = ['WARNING: retrying', '\x1b[31mERROR: Could not find a version that satisfies '
+                'the requirement playwright==1.64.1\x1b[0m']
+        message = preparation_failure('componente de automação', 1, tail)
+        self.assertIn('componente de automação', message)
+        self.assertIn('Could not find a version', message)
+        self.assertIn('não está disponível para esta versão do Python', message)
+        self.assertIn('Preparar de novo', message)
+        self.assertNotIn('\x1b', message)
+        # Credencial embutida em URL de proxy nunca vai para a tela.
+        self.assertIn('//***@', clean_preparation_line('https://user:senha@proxy:8080/x'))
+        self.assertNotIn('senha', clean_preparation_line('https://user:senha@proxy:8080/x'))
+        self.assertLessEqual(len(clean_preparation_line('x' * 500)), 200)
+
+    def test_preparation_without_output_says_so_instead_of_pretending(self):
+        from browserapi_lab.gui import preparation_failure
+        message = preparation_failure('Chromium', 2, [])
+        self.assertIn('código 2', message)
+        self.assertIn('não deixou mensagem', message)
 
     def test_static_is_allowlisted_and_has_security_headers(self):
         code, headers, body = self.request('/', token=False)

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import secrets
 import signal
 import shutil
@@ -33,6 +34,53 @@ DATA_DIR = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) /
 
 class PanelInputError(ValueError):
     """Mensagem controlada, segura para exibição; nunca exceção bruta do navegador/SO."""
+
+
+class PreparationError(RuntimeError):
+    """Falha da preparação com a causa na mensagem.
+
+    Antes, qualquer erro de ``pip``/``playwright`` virava a frase genérica
+    "Não foi possível concluir. Confira a conexão e o navegador.": a saída dos
+    comandos ia para ``DEVNULL`` e não havia como dizer o que falhou.
+    """
+
+
+# Dicas por conteúdo da saída: a mensagem precisa terminar numa ação.
+PREPARATION_HINTS = (
+    ('could not find a version', 'o componente não está disponível para esta versão do Python'),
+    ('no matching distribution', 'o componente não está disponível para esta versão do Python'),
+    ('name resolution', 'o computador não conseguiu resolver o endereço (DNS/rede)'),
+    ('connection refused', 'a conexão foi recusada (proxy ou firewall)'),
+    ('connection reset', 'a conexão caiu no meio do download'),
+    ('timed out', 'o download demorou além do tempo limite'),
+    ('permission denied', 'sem permissão de escrita na pasta do programa'),
+    ('no space left', 'o disco ficou sem espaço'),
+    ('certificate', 'o certificado do servidor não foi aceito'),
+)
+ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+
+
+def clean_preparation_line(line):
+    """Linha de log curta e sem credencial embutida em URL."""
+    text = ANSI.sub('', str(line)).strip()
+    text = re.sub(r'//[^/@\s]+:[^/@\s]+@', '//***@', text)
+    return text[:200]
+
+
+def preparation_failure(step, code, tail):
+    lines = [clean_preparation_line(line) for line in list(tail)[-6:] if clean_preparation_line(line)]
+    cause = ''
+    joined = ' '.join(lines).lower()
+    for token, hint in PREPARATION_HINTS:
+        if token in joined:
+            cause = hint
+            break
+    detail = ' | '.join(lines[-3:]) if lines else 'o comando não deixou mensagem'
+    advice = f' Causa provável: {cause}.' if cause else ''
+    return (f'Não foi possível concluir a preparação ({step}, código {code}).{advice} '
+            f'Últimas linhas do comando: {detail} '
+            'Clique em Preparar de novo depois de resolver isso; nada foi alterado fora da '
+            'pasta do programa e a versão atual continua funcionando.')
 
 
 def activate_private_runtime(data_dir):
@@ -62,12 +110,19 @@ def prepare_runtime(data_dir, tell, cancelled):
     with ProfileLock(data_dir / 'installation'):
         runtime = data_dir / 'runtime'
         tell('Preparando ambiente privado. Nenhum pacote do Python do sistema será alterado.')
-        venv.EnvBuilder(with_pip=True).create(runtime)
+        try:
+            venv.EnvBuilder(with_pip=True).create(runtime)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            # Sem esta tradução, faltar python3-venv virava "confira a conexão".
+            raise PreparationError(
+                'Não foi possível criar o ambiente privado (%s). Instale o suporte a venv do '
+                'Ubuntu (pacote python3-venv) e clique em Preparar de novo. Nada foi alterado '
+                'fora da pasta do programa.' % type(error).__name__) from error
         python = runtime / 'bin/python'
-        for label, command in (
-            ('Baixando o componente de automação. Isso pode levar alguns minutos.',
+        for step, label, command in (
+            ('componente de automação', 'Baixando o componente de automação. Isso pode levar alguns minutos.',
              [str(python), '-m', 'pip', 'install', '--no-input', '--disable-pip-version-check', 'playwright==1.64.1']),
-            ('Baixando Chromium. Mantenha a conexão com a internet.',
+            ('Chromium', 'Baixando Chromium. Mantenha a conexão com a internet.',
              [str(python), '-m', 'playwright', 'install', 'chromium']),
         ):
             if cancelled():
@@ -76,20 +131,40 @@ def prepare_runtime(data_dir, tell, cancelled):
             env = dict(os.environ)
             env.pop('PYTHONHOME', None)
             env.pop('PYTHONPATH', None)
-            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+            # stdout+stderr guardados (só as últimas linhas): a causa real do
+            # erro é o que a interface precisa mostrar, não uma frase genérica.
+            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True, bufsize=1,
+                                       start_new_session=True, env=env)
+            tail = deque(maxlen=40)
+
+            def read_output(pipe=process.stdout, lines=tail):
+                try:
+                    for line in pipe:
+                        if line.strip():
+                            lines.append(line)
+                except (OSError, ValueError):
+                    pass
+
+            reader = threading.Thread(target=read_output, name='BrowserAPI prepare log', daemon=True)
+            reader.start()
             deadline = time.monotonic() + 900
             try:
                 while True:
-                    if cancelled() or time.monotonic() > deadline:
+                    if cancelled():
                         raise EOFError()
                     try:
                         code = process.wait(timeout=.2)
                         break
                     except subprocess.TimeoutExpired:
                         pass
+                    if time.monotonic() > deadline:
+                        raise PreparationError(
+                            f'A preparação ({step}) passou de 15 minutos e foi interrompida. '
+                            'Verifique a velocidade da conexão e clique em Preparar de novo.')
                 if code:
-                    raise RuntimeError('Não foi possível baixar os componentes.')
+                    reader.join(timeout=2)
+                    raise PreparationError(preparation_failure(step, code, tail))
             finally:
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGTERM)
@@ -119,7 +194,7 @@ class Panel:
         self.answer = None
         self.receipt = None
         self.messages = deque(maxlen=60)
-        self.telemetry = Telemetry()
+        self.telemetry = Telemetry(path=self.data_dir / 'telemetry.json')
         self.transcript = Transcript()
         self.updater = None
         self.closed = False
@@ -348,6 +423,11 @@ class Panel:
             except StepUnavailable as problem:
                 self.tell(str(problem))
                 end_phase = 'error'
+            except PreparationError as error:
+                # A mensagem já vem com a causa e a próxima ação; engolir isso
+                # em "confira a conexão" foi o defeito relatado.
+                self.tell(str(error))
+                end_phase = 'error'
             except ExistingChromeError as error:
                 self.tell(str(error))
                 end_phase = 'error'
@@ -535,9 +615,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, self.server.panel.api_service.probe())
             elif self.path == '/api/updates':
                 updater = self.server.panel.updater
-                if updater is None or type(payload.get('enabled')) is not bool:
+                if updater is None:
+                    raise PanelInputError('Este modo não gerencia atualizações: abra pelo aplicativo instalado.')
+                changed = False
+                if 'enabled' in payload:
+                    if type(payload['enabled']) is not bool:
+                        raise ValueError()
+                    updater.store.write(enabled=payload['enabled'])
+                    changed = True
+                # Verificar agora: antes, o único atalho era marcar/desmarcar a
+                # caixinha — o relato "tenho que mexer na caixinha pra atualizar".
+                if 'check' in payload and type(payload['check']) is not bool:
                     raise ValueError()
-                updater.store.write(enabled=payload['enabled'])
+                if not changed and not payload.get('check'):
+                    raise ValueError()
                 updater.wake.set()
             elif self.path == '/api/cancel':
                 self.server.panel.cancel()

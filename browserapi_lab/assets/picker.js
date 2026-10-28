@@ -38,13 +38,20 @@
   banner.id = '__browserapi_picker';
   banner.setAttribute('role', 'region');
   banner.setAttribute('aria-label', (step ? 'Passo ' + step + ': ' : '') + 'Selecionar ' + role);
-  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '400px',
+  /* Tamanho fixo e sem barra de rolagem (pedido do uso real: com rolagem o
+   * conteúdo saía da vista e o painel cobria o balão). O conteúdo é compacto
+   * por construção — três linhas de conferência — e o painel é arrastável.
+   * Tudo por propriedade CSSOM: CSP com style-src restrito não bloqueia isto,
+   * enquanto style="…"/cssText seria bloqueado. */
+  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '392px',
     maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', zIndex: '2147483647', background: '#fff',
     color: '#1b3029', border: '2px solid #146c50', borderRadius: '8px', padding: '12px',
-    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', maxHeight: 'calc(100vh - 32px)', overflow: 'auto' });
+    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', overflow: 'hidden' });
 
   const top = document.createElement('div');
-  Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' });
+  Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap',
+    cursor: 'move', userSelect: 'none', paddingBottom: '4px' });
+  top.title = 'Arraste para mover o painel';
   const title = document.createElement('strong');
   title.textContent = 'Selecionar: ' + role;
   title.style.fontSize = '16px';
@@ -71,7 +78,7 @@
   const previewText = document.createElement('span');
   previewText.textContent = 'nada ainda — clique em uma área destacada.';
   Object.assign(previewText.style, { wordBreak: 'break-word', display: '-webkit-box',
-    WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' });
+    WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', overflow: 'hidden' });
   previewBox.append(previewLabel, previewText);
 
   const status = document.createElement('p');
@@ -284,7 +291,7 @@
   });
   const back = button('Voltar', () => { const el = history.pop(); if (el) preview(el, false); });
   const another = button('Escolher outra', reset);
-  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; locked = true; placeBanner(); });
+  const move = button('Mover', () => { manualPos = null; corner = (corner + 1) % CORNERS.length; locked = true; placeBanner(); });
   const skip = button('Pular este campo', () => finish({ cancelled: true }), 'data-picker-skip');
   const abort = button('Cancelar mapeamento', () => finish({ abort: true }), 'data-picker-abort');
 
@@ -341,8 +348,8 @@
   }
 
   function placeBanner() {
-    // Sem o limite antigo: a altura "natural" é o conteúdo inteiro.
     banner.style.maxHeight = '';
+    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
     const natural = Math.min(banner.offsetHeight || 240, innerHeight - 2 * MARGIN);
     const boxes = targetBoxes();
     const union = unionOf(boxes);
@@ -361,7 +368,25 @@
     applyCorner(best, natural);
   }
 
+  let manualPos = null;  // posição escolhida arrastando: manda sobre os cantos
+
+  function clampPosition(left, top) {
+    const width = banner.offsetWidth || 392;
+    const height = banner.offsetHeight || 240;
+    return {
+      left: Math.max(8, Math.min(left, innerWidth - width - 8)),
+      top: Math.max(8, Math.min(top, innerHeight - Math.min(height, innerHeight - 16) - 8)),
+    };
+  }
+
+  function placeAt(left, top) {
+    const spot = clampPosition(left, top);
+    manualPos = spot;
+    Object.assign(banner.style, { left: spot.left + 'px', top: spot.top + 'px', right: 'auto', bottom: 'auto' });
+  }
+
   function applyCorner(plan, natural) {
+    if (manualPos) { placeAt(manualPos.left, manualPos.top); return; }
     const name = CORNERS[corner];
     Object.assign(banner.style, {
       left: name.endsWith('left') ? MARGIN + 'px' : 'auto',
@@ -369,10 +394,8 @@
       top: name.startsWith('top') ? MARGIN + 'px' : 'auto',
       bottom: name.startsWith('bottom') ? MARGIN + 'px' : 'auto',
     });
-    // Faixa curta demais (menos de MIN_HEIGHT) deixaria o painel ilegível:
-    // nesse caso ele mantém a altura natural e a pessoa usa "Mover".
-    const height = plan && plan.height >= MIN_HEIGHT ? plan.height : natural;
-    banner.style.maxHeight = Math.max(0, Math.min(height || 0, innerHeight - 2 * MARGIN)) + 'px';
+    // Sem maxHeight: o painel nunca ganha barra de rolagem. Se o conteúdo não
+    // couber na tela, a pessoa arrasta o painel (o conteúdo é fixo e curto).
   }
 
   function describe(el) {
@@ -386,23 +409,30 @@
     if (messageRole) parts.push('camada ' + layerOf(el) + ' (balão inteiro é o menor número)');
     if (fragile) parts.push('seleção por posição: pode precisar de ajuste quando o chat mudar');
     if (messageRole) {
-      const mixed = matched.filter(item => {
+      // Comparar com o papel normalizado: 'assistant' nunca é igual ao rótulo
+      // 'resposta do assistente', e a mensagem de camada trocada aparecia
+      // sempre, mesmo com a seleção certa.
+      const wanted = role === 'mensagem do usuário' ? 'user'
+        : role === 'resposta do assistente' ? 'assistant' : '';
+      const mixed = wanted ? matched.filter(item => {
         const found = roleOf(item);
-        return found && found !== role;
-      }).length;
+        return found && found !== wanted;
+      }).length : 0;
       if (mixed) parts.push(mixed + ' do outro papel também casariam: use “Camada menor”/“Camada maior”');
     }
     // Lista numerada: a pessoa confere se são as mensagens certas e na ordem
     // certa antes de confirmar (três ou mais é o mínimo exigido no mapeamento).
-    const lines = matched.slice(0, 5).map((item, index) =>
-      (index + 1) + '. ' + ((captureTextOf(item) || '(sem texto legível)').slice(0, 60)));
-    status.textContent = [parts.join(' · '), lines.join('\n'),
-      count > 5 ? '… e mais ' + (count - 5) + '.' : ''].filter(Boolean).join('\n');
+    // Três linhas bastam para conferir a ordem; o resto é contagem, não texto.
+    const lines = matched.slice(0, 3).map((item, index) =>
+      (index + 1) + '. ' + ((captureTextOf(item) || '(sem texto legível)').slice(0, 48)));
+    if (count > 3) parts.push('+' + (count - 3) + ' fora da lista');
+    status.textContent = [parts.join(' · '), lines.join('\n')].filter(Boolean).join('\n');
     status.style.whiteSpace = 'pre-line';
     confirm.disabled = !count;
   }
 
   function draw() {
+    drawing = true;
     confirm.hidden = !chosen;
     outer.hidden = inner.hidden = back.hidden = !chosen;
     another.hidden = false;
@@ -429,6 +459,7 @@
       box.append(badge);
       marks.append(box);
     });
+    drawing = false;
   }
   function confirmationState() {
     for (const b of banner.querySelectorAll('button')) b.style.opacity = b.disabled ? '0.45' : '1';
@@ -479,13 +510,60 @@
       if (!confirm.disabled && chosen) finish({ selector });
     }
   };
-  const timer = setInterval(draw, 350);
+  /* Redesenho por mutação (ADR-010): antes era um intervalo de 350 ms, que
+   * redesenhava sem necessidade e ainda podia perder o instante em que o balão
+   * aparece. O observer só agenda quando algo fora do painel muda. */
+  let scheduled = false;
+  let drawing = false;
+  const schedule = () => {
+    if (scheduled || drawing) return;
+    scheduled = true;
+    const run = () => { scheduled = false; if (!drawing) draw(); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run); else setTimeout(run, 16);
+  };
+  const observer = new MutationObserver(records => {
+    if (drawing) return;
+    for (const record of records) {
+      const target = record.target;
+      if (banner.contains(target) || marks.contains(target)) continue;
+      schedule();
+      return;
+    }
+  });
+  try { observer.observe(document.body, { childList: true, subtree: true, characterData: true }); }
+  catch (error) { /* ambiente sem MutationObserver: os eventos de scroll/resize seguem */ }
+
+  // Arrastar pela faixa do título. Clique em botão continua sendo clique.
+  let dragging = null;
+  const startDrag = event => {
+    if (!event.composedPath().includes(top)) return;
+    event.preventDefault();
+    const rect = banner.getBoundingClientRect();
+    dragging = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    locked = true;
+    try { top.setPointerCapture(event.pointerId); } catch (error) { /* ok */ }
+  };
+  const drag = event => {
+    if (!dragging) return;
+    event.preventDefault();
+    placeAt(event.clientX - dragging.dx, event.clientY - dragging.dy);
+  };
+  const endDrag = () => { dragging = null; };
+  banner.addEventListener('pointerdown', startDrag);
+  window.addEventListener('pointermove', drag, true);
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
+
   function finish(value) {
     window.__balPick = value;
     cleanup();
   }
   function cleanup() {
-    clearInterval(timer);
+    try { observer.disconnect(); } catch (error) { /* já desconectado */ }
+    banner.removeEventListener('pointerdown', startDrag);
+    window.removeEventListener('pointermove', drag, true);
+    window.removeEventListener('pointerup', endDrag, true);
+    window.removeEventListener('pointercancel', endDrag, true);
     document.removeEventListener('click', click, true);
     document.removeEventListener('keydown', key, true);
     window.removeEventListener('scroll', draw, true);

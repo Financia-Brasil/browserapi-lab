@@ -212,3 +212,38 @@ class TestStreamState(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestAmostrasEstaveis(unittest.TestCase):
+    """Uma pausa do modelo não pode ser lida como fim da resposta.
+
+    Dossiê 2026-10-28 (H3): o botão parar desaparece antes do texto terminar em
+    vários chats, então o fim precisa de N leituras estáveis seguidas.
+    """
+
+    def test_tres_amostras_estaveis_antes_de_terminar(self):
+        config = WatchConfig(policy='hybrid', stability_window_ms=JANELA, min_stable_samples=3)
+        estaveis = estado(instavel_há=JANELA + 100)
+        estaveis.stable_samples = 2
+        self.assertFalse(decide(estaveis, ui(stop=False, busy='false'), config).done)
+        estaveis.stable_samples = 3
+        decisao = decide(estaveis, ui(stop=False, busy='false'), config)
+        self.assertTrue(decisao.done)
+        self.assertEqual(decisao.status, 'success')
+
+    def test_mutacao_zera_as_amostras(self):
+        config = WatchConfig(policy='stability_only', stability_window_ms=JANELA, min_stable_samples=3)
+        instavel = estado(instavel_há=100)
+        instavel.stable_samples = 0
+        self.assertFalse(decide(instavel, ui(), config).done)
+        # Voltar a silenciar depois de uma mutação recomeça a contagem do zero.
+        instavel.since_last_mutation_ms = JANELA + 50
+        instavel.stable_samples = 1
+        decisao = decide(instavel, ui(), config)
+        self.assertFalse(decisao.done)
+        self.assertIn('aguardando', decisao.reason)
+
+    def test_padrao_de_uma_amostra_preserva_o_comportamento_antigo(self):
+        decisao = decide(estado(instavel_há=JANELA + 50), ui(stop=False),
+                         WatchConfig(policy='stability_only', stability_window_ms=JANELA))
+        self.assertTrue(decisao.done)

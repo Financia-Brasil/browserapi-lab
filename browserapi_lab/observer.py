@@ -37,6 +37,10 @@ class WatchConfig:
     poll_interval_ms: float = 100.0
     early_accept_factor: float = 0.35   # fração da janela aceita com sinal de UI forte
     max_consecutive_errors: int = 3
+    # Uma única leitura estável pode ser uma pausa do modelo, não o fim. Exigir
+    # N amostras estáveis seguidas ("três leituras iguais") reduz o falso
+    # término sem alongar a espera além de N × poll_interval.
+    min_stable_samples: int = 1
 
 
 @dataclass
@@ -50,6 +54,7 @@ class StreamState:
     since_installed_ms: float = 0.0
     text_len: int = 0
     text_tail: str = ""
+    stable_samples: int = 0   # contado pelo laço; a página não sabe disso
     events: List[Dict[str, Any]] = field(default_factory=list)
 
     @classmethod
@@ -143,9 +148,16 @@ def decide(state: StreamState, ui: Optional[UiSignals], config: WatchConfig) -> 
         and state.since_last_mutation_ms >= config.stability_window_ms
     )
 
+    pendencias = max(1, int(config.min_stable_samples))
+    # ``stable_samples == 0`` com o padrão de 1 amostra = chamada direta de
+    # teste/uso antigo, sem contagem: não inventa exigência nova.
+    amostras_ok = pendencias <= 1 or int(state.stable_samples) >= pendencias
+
     if config.policy == "stability_only":
-        if estavel:
+        if estavel and amostras_ok:
             return Decision(True, f"estável há {state.since_last_mutation_ms:.0f} ms", "success")
+        if estavel:
+            return Decision(False, f"estável, aguardando {pendencias} leitura(s)", "running")
         return Decision(False, "ainda instável", "running")
 
     if config.policy == "ui_signals":
@@ -170,8 +182,10 @@ def decide(state: StreamState, ui: Optional[UiSignals], config: WatchConfig) -> 
             not ui.stop_visible
             and (ui.aria_busy == "false" or ui.copy_visible or ui.pending_indicators == 0)
         )
-        if estavel and not ui.stop_visible:
+        if estavel and not ui.stop_visible and amostras_ok:
             return Decision(True, f"estável + sem Stop ({state.since_last_mutation_ms:.0f} ms)", "success")
+        if estavel and not ui.stop_visible:
+            return Decision(False, f"estável, aguardando {pendencias} leitura(s)", "running")
         if estavel_curto and confirmacao_ui and ui.aria_busy == "false" and ui.copy_visible:
             return Decision(
                 True,
@@ -271,6 +285,8 @@ def wait_for_completion(
     started = time.perf_counter()
     observacao = Observation(policy=config.policy)
     erros = 0
+    stable_samples = 0
+    previous_text_len = None
 
     while True:
         try:
@@ -289,6 +305,17 @@ def wait_for_completion(
         observacao.polls += 1
         observacao.mutation_count = state.mutation_count
         observacao.text_len = state.text_len
+
+        # Amostras estáveis: janela de silêncio cumprida e texto do mesmo
+        # tamanho da leitura anterior. Qualquer mutação zera a contagem.
+        silencioso = (state.since_last_mutation_ms is not None
+                      and state.since_last_mutation_ms >= config.stability_window_ms)
+        if silencioso and state.text_len == previous_text_len:
+            stable_samples += 1
+        else:
+            stable_samples = 0
+        previous_text_len = state.text_len
+        state.stable_samples = stable_samples
 
         decisao = decide(state, ui, config)
         if len(observacao.timeline) >= 400:

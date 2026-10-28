@@ -92,59 +92,25 @@ def pick(page, role, cancelled=None, *, step='', hint=''):
 
 TRANSCRIPT_MINIMUM = 3
 
-# Lê as mensagens na ordem do documento, sem contar camada aninhada duas vezes.
-# Não altera nada na página: só leitura para conferência.
-TRANSCRIPT_SCRIPT = r"""([userSelector, assistantSelector]) => {
-  const visible = el => {
-    const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
-    return r.width > 2 && r.height > 2 && s.display !== 'none' && s.visibility !== 'hidden';
-  };
-  const pick = selector => {
-    let nodes = [];
-    try { nodes = [...document.querySelectorAll(selector)]; } catch (error) { return []; }
-    nodes = nodes.filter(visible);
-    // Camada interna do mesmo balão não é outra mensagem.
-    return nodes.filter(el => !nodes.some(other => other !== el && other.contains(el)));
-  };
-  const textOf = el => {
-    const clone = el.cloneNode(true);
-    clone.querySelectorAll('button,[role=button],script,style,[aria-hidden="true"]').forEach(item => item.remove());
-    return ((clone.textContent) || '').replace(/\s+/g, ' ').trim();
-  };
-  const users = pick(userSelector);
-  const answers = pick(assistantSelector);
-  const items = [];
-  for (const el of users) items.push({role: 'user', el: el, text: textOf(el)});
-  for (const el of answers) items.push({role: 'assistant', el: el, text: textOf(el)});
-  items.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
-  return {
-    overlap: users.filter(el => answers.indexOf(el) !== -1).length,
-    items: items.map(item => ({role: item.role, text: item.text.slice(0, 400)})),
-  };
-}"""
+# A leitura da conversa é feita pelo módulo ``capture`` (camadas: papel
+# declarado → estado do React → layout). Aqui ficam só as regras de conferência:
+# o que a pessoa apontou precisa ler as mensagens certas, na ordem certa.
+# Antes deste módulo, um seletor apontado num pedaço ou pegando a pergunta junto
+# com a resposta virava falso "envio não confirmado" (dossiê 2026-10-28).
 
 
 def transcript_report(page, config):
     """Lê a conversa na página: papéis, ordem, textos e sobreposição de seletores.
 
-    Devolve ``{'items': [...], 'overlap': n}``. Nada é alterado na página.
+    Devolve ``{'items': [...], 'overlap': n, 'layer': ..., 'fallback': bool,
+    'warnings': [...]}``. Nada é alterado na página.
     """
+    from . import capture
     if not getattr(config, 'user', '') or not getattr(config, 'assistant', ''):
-        return {'items': [], 'overlap': 0}
+        return {'items': [], 'overlap': 0, 'layer': 'none', 'fallback': False, 'warnings': []}
     if not hasattr(page, 'evaluate'):
-        return {'items': [], 'overlap': 0}
-    try:
-        value = page.evaluate(TRANSCRIPT_SCRIPT, [config.user, config.assistant])
-    except Exception:
-        return {'items': [], 'overlap': 0}
-    if not isinstance(value, dict):
-        return {'items': [], 'overlap': 0}
-    items = [item for item in value.get('items') or []
-             if isinstance(item, dict) and item.get('role') in ('user', 'assistant')
-             and isinstance(item.get('text'), str)]
-    overlap = value.get('overlap')
-    return {'items': items, 'overlap': overlap if isinstance(overlap, int) else 0}
+        return {'items': [], 'overlap': 0, 'layer': 'none', 'fallback': False, 'warnings': []}
+    return capture.report(page, config.user, config.assistant)
 
 
 def transcript_messages(page, config):
@@ -163,6 +129,8 @@ def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
     Devolve ``(ok, problemas, pares)``.
     """
     report = transcript_report(page, config)
+    for warning in report.get('warnings') or []:
+        tell(warning)
     pairs = [item for item in report['items'] if item['text']]
     users = [item for item in pairs if item['role'] == 'user']
     answers = [item for item in pairs if item['role'] == 'assistant']
@@ -175,7 +143,7 @@ def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
              f'vi {len(users)} pergunta(s) e {len(answers)} resposta(s). Seguindo sem conferir — '
              'envie mais mensagens no chat e use “Corrigir campos” para conferir depois.')
         return True, [], pairs
-    if report['overlap']:
+    if report['overlap'] and not report.get('fallback'):
         problems.append('o mesmo elemento casa com o seletor da pergunta e com o da resposta: '
                         'aponte a camada menor de cada balão')
     if len(users) != len(answers):

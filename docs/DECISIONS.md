@@ -388,3 +388,50 @@ Decisão:
 Alternativas rejeitadas: pedir CSS ao usuário (contraria o produto), capturar
 `innerText` do ancestral de maior texto (pegaria a conversa inteira), e confiar em
 classes específicas do Gemini (quebrariam em qualquer mudança do site).
+
+## ADR-024 — Leitura da conversa em camadas; o mapeamento é conferência, não descoberta
+
+Contexto: o mapeamento apontado à mão era a **única** fonte de verdade para ler a
+conversa. Um seletor apontado num pedaço ou que casava com a pergunta junto com a
+resposta passou a produzir dois efeitos ruins: resposta lida errada e **falso
+“envio não confirmado”** com a mensagem na tela. Pesquisa registrada em
+`pesquisa/2026-10-28-arquitetura-captura-e-ui.md` (pré-registro congelado em
+`pesquisa/2026-10-28-preregistro.md`) mostrou que exportadores maduros leem o
+**estado do app** quando existe, e que a comparação por texto/estrutura sozinha
+quebra a cada mudança de layout.
+
+Decisão — `browserapi_lab/capture.py`, na ordem da força da evidência:
+
+1. **papel declarado** (`user-query`, `model-response`, `data-message-author-role`,
+   `data-role`, `data-author`, rótulo acessível);
+2. **estado do React** (`__reactProps$…`/`__reactFiber$…` → `memoizedProps`): leitura
+   do que já está na página, sem integrar API interna nem injetar script do site;
+3. **estrutura** (container do transcript + ordem do DOM; alinhamento só como
+   desempate) — último recurso, marcado como frágil.
+
+Regras de escolha:
+
+* se a leitura **apontada** está limpa (sem sobreposição, lados iguais, papéis
+  alternados), ela manda — foi conferida por uma pessoa;
+* se está suja e existe camada forte equilibrada, a camada assume com **aviso
+  explícito** na conferência e no recibo (`fallback: true`);
+* a camada **estrutura** sozinha nunca substitui o mapeamento (alternância inventa
+  papel quando o site foge do padrão);
+* toda leitura sobe ao **balão inteiro** (ADR-023) antes de medir texto.
+
+Confirmação de envio: a mesma fonte de verdade (`capture.user_state`) e, quando há
+nonce (`request_id`), o nonce no balão novo é a evidência mais forte. O caminho
+antigo por consulta ao seletor apontado ficou como último recurso.
+
+Fim de resposta: além de “sem Stop” e janela de estabilidade, o laço exige
+**três leituras estáveis seguidas** (`min_stable_samples`). O botão parar
+desaparece antes do texto terminar em vários SDKs.
+
+Alternativas rejeitadas: lista de seletores por site (quebra a cada redesign);
+geometria como filtro duro (falha quando o layout discorda da ordem); esperar
+`networkidle` (SSE/heartbeat nunca ficam idle); tempo fixo (resposta longa estoura,
+curta espera demais); API interna do site (contraria ADR-008).
+
+Indicadores para revisitar: proporção de leituras resolvidas por camada (exposta
+no recibo); se a camada 2 ficar em zero por 30 dias em site React, a rota morreu;
+se a confirmação passar a citar “contagem” em 20 envios seguidos, a camada 1 caiu.

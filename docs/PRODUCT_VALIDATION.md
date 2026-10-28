@@ -483,3 +483,27 @@ normais e a checagem por texto gerava falso positivo.
 Verificação local deste ambiente (sem Chromium): **322 testes, 18 ignorados, OK** e
 **9 checagens em jsdom** com a fixture do relato. O CI é quem roda os testes de
 navegador; até o log verde, nada aqui é homologado.
+
+## 0.10.0 — reescrita guiada por pesquisa (2026-10-28)
+
+Método: pré-registro congelado (`pesquisa/2026-10-28-preregistro.md`) → coleta
+por sub-pergunta → matriz ACH → premortem → dossiê
+(`pesquisa/2026-10-28-arquitetura-captura-e-ui.md`) → implementação. Nada foi
+implementado antes do dossiê; o que a pesquisa matou está no §7 dele.
+
+| Relato | Causa encontrada | O que mudou | Prova |
+|---|---|---|---|
+| “Confirme acesso amplo ao Chrome pessoal” e mais nada | a caixa que resolve o consentimento vivia dentro de `<details>` recolhido | caixa **fora** do bloco recolhido, com aviso que nomeia a conexão e leva o foco até ela | jsdom do painel (elemento visível) + teste de API |
+| “Não foi possível concluir. Confira a conexão e o navegador” no Preparar | saída de `pip`/`playwright` ia para `DEVNULL`; `RuntimeError` genérico engolido pelo handler amplo | `PreparationError` com as últimas linhas, causa provável por palavra-chave e próxima ação; exceção tratada antes do genérico | teste de `preparation_failure` |
+| Atividade zerada a cada atualização | `deque` em memória; reinício apaga | persistência **agregada** (lista branca já existente) com escrita atômica e `scope: rolling_window_persisted` | teste de ida-e-volta + JSON sem texto |
+| “Tenho que mexer na caixinha para atualizar” | intervalo de 6 h e `wake` só no clique | 30 min normal, 5 min após falha, botão **Verificar agora**, aplicação pendente quando ocioso | testes de `Updater` |
+| resposta lida errada / “envio não confirmado” | seletor apontado era a única fonte de verdade | `capture.py` em camadas (papel → React → estrutura) + nonce; mapeamento limpo continua mandando | 20 testes unitários + 16 checagens jsdom |
+| fim de resposta cedo demais | “sem Stop” sozinho é insuficiente | 3 leituras estáveis seguidas | 3 testes de `decide` |
+| painel do apontamento com rolagem/cobrindo o alvo | `maxHeight` + `overflow:auto` | tamanho fixo, sem rolagem, arrastável pela faixa do título, redesenho por `MutationObserver` em vez de intervalo de 350 ms | 8 checagens jsdom |
+
+Verificação deste ambiente (sem Chromium): suíte de núcleo verde e checagens em
+jsdom (captura e apontamento), reproduzíveis com
+`node scripts/ui_jsdom_check.js <repo>` (24 checagens: 16 da leitura em camadas,
+8 do painel). **Implementado ≠ testado local ≠ homologado**: os
+testes de navegador e o uso em site autenticado são o CI e a sua sessão; até lá,
+nada aqui é homologado.

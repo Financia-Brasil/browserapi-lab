@@ -96,7 +96,7 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         self.assertTrue(any('Você:' in line for line in tells), tells)
         self.assertTrue(any('Chat:' in line for line in tells), tells)
 
-    def test_transcript_check_refuses_a_selector_that_mixes_the_two_layers(self):
+    def test_transcript_check_does_not_count_a_nested_layer_twice(self):
         config = self.open_fixture()
         self.fill_conversation(3)
         # O relato: "identificou 2 saídas quando selecionei uma".
@@ -104,12 +104,23 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         ok, problems, pairs = verify_transcript(self.page, config, lambda *_: None)
         self.assertTrue(ok, problems)  # camada interna não conta duas vezes
         self.assertEqual(len([item for item in pairs if item['role'] == 'assistant']), 4)
-        # Seletor que pega as duas conversas: a conferência recusa.
+
+    def test_transcript_check_uses_the_page_layer_when_the_mapping_is_broken(self):
+        """Seletor que pega as duas conversas: a leitura em camadas assume.
+
+        Antes, o mapeamento quebrado bloqueava a configuração inteira (ou pior,
+        passava e produzia falso "envio não confirmado"). Agora a conferência
+        avisa qual camada foi usada e segue — a pessoa pode refazer os balões.
+        """
+        config = self.open_fixture()
+        self.fill_conversation(3)
         config.assistant = 'user-query, model-response'
-        ok, problems, _ = verify_transcript(self.page, config, lambda *_: None)
-        self.assertFalse(ok)
-        self.assertTrue(any('mesmo elemento casa' in problem or 'mesmo número' in problem
-                            for problem in problems), problems)
+        tells = []
+        ok, problems, pairs = verify_transcript(self.page, config, tells.append)
+        self.assertTrue(ok, problems)
+        self.assertEqual(len([item for item in pairs if item['role'] == 'assistant']), 4)
+        self.assertTrue(any('papel declarado' in line for line in tells), tells)
+        self.assertTrue(any('Refaça os balões' in line for line in tells), tells)
 
     def test_transcript_check_does_not_confuse_repeated_text_with_duplicates(self):
         config = self.open_fixture()
