@@ -468,12 +468,17 @@ na porta 8765 recusava a conexão mesmo depois de autorizar a API.
 | Relato | Causa encontrada | Correção | Prova |
 |---|---|---|---|
 | “duas saídas quando selecionei uma” | o mesmo nó entrava como balão e como camada interna | a contagem ignora camada aninhada no apontamento e na conferência | jsdom + teste de navegador |
-| “capturou mais do que as respostas” | nada conferia ordem nem papel das mensagens | conferência obrigatória: ≥3 pares, ordem alternada, textos listados | 4 testes de navegador + 3 unitários |
+| “capturou mais do que as respostas” | nada conferia ordem nem papel das mensagens | conferência com ≥3 pares: ordem alternada, textos listados, sobreposição recusada | 4 testes de navegador + 3 unitários |
 | “não captura a resposta” | seletor da resposta podia casar com a pergunta | recusa explícita + guarda no runtime (`el.matches(user)`) | teste da conferência |
 | “api não funcionou” | porta ocupada/erro de bind virava mensagem genérica; nada conferia se a porta respondia | `port_busy`/`port_unreachable` com texto próprio, autoteste no loopback e botão **Testar conexão** | 3 testes de API |
 
 Também nesta rodada: `/` e falta de chave explicam o caminho certo (404/401 com
 mensagem), e o painel mostra “Escutando em 127.0.0.1:8765” quando está ativo.
+
+Chats novos (menos de três mensagens de cada lado) não são bloqueados: a
+conferência avisa que não há o que conferir. Texto repetido entre mensagens não é
+tratado como duplicata — o CI mostrou que respostas sintéticas repetidas são
+normais e a checagem por texto gerava falso positivo.
 
 Verificação local deste ambiente (sem Chromium): **322 testes, 18 ignorados, OK** e
 **9 checagens em jsdom** com a fixture do relato. O CI é quem roda os testes de

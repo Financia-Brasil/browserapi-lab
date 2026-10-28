@@ -132,10 +132,14 @@ Ele mostra o texto de cada par, na ordem, e recusa quando:
 | números diferentes | “N pergunta(s) contra M resposta(s)” |
 | duas do mesmo papel seguidas | “mensagens fora de ordem” |
 | resposta inclui a pergunta | “aponte a camada menor (só o balão da resposta)” |
-| texto repetido | “mensagens com o mesmo texto contadas duas vezes” |
+| mesmo elemento nos dois papéis | “o mesmo elemento casa com o seletor da pergunta e com o da resposta” |
 
-Se não conferir, você pode refazer os dois balões na hora. Continuar sem conferir
-é possível, mas o aviso é explícito: o teste pode responder “envio não confirmado”.
+Texto repetido (“Ok”, “Sim”) **não** é erro: a conferência compara elementos, não
+palavras. Se a conversa ainda não tem três de cada lado, nada é bloqueado — o
+painel avisa que não há o que conferir e você pode refazer quando tiver mensagens
+suficientes. Com três de cada lado e algo errado, você pode refazer os dois balões
+na hora; continuar sem conferir é possível, mas o aviso é explícito: o teste pode
+responder “envio não confirmado”.
 
 Não exige código. Cliques de seleção são interceptados; o teste automatizado
 verifica que apontar Enviar com rascunho preenchido não envia a mensagem na fixture.

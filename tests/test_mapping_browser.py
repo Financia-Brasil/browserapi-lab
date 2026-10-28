@@ -90,8 +90,9 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         tells = []
         ok, problems, pairs = verify_transcript(self.page, config, tells.append)
         self.assertTrue(ok, problems)
-        self.assertEqual([item['role'] for item in pairs], ['user', 'assistant'] * 3)
-        self.assertIn('pergunta 1', pairs[0]['text'])
+        # A fixture já abre com um par (pergunta + resposta) e ganhou mais três.
+        self.assertEqual([item['role'] for item in pairs], ['user', 'assistant'] * 4)
+        self.assertIn('pergunta 1', pairs[2]['text'])
         self.assertTrue(any('Você:' in line and 'Chat:' in line for line in tells), tells)
 
     def test_transcript_check_refuses_a_selector_that_mixes_the_two_layers(self):
@@ -101,21 +102,21 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         config.assistant = 'model-response, model-response message-content'
         ok, problems, pairs = verify_transcript(self.page, config, lambda *_: None)
         self.assertTrue(ok, problems)  # camada interna não conta duas vezes
-        self.assertEqual(len([item for item in pairs if item['role'] == 'assistant']), 3)
+        self.assertEqual(len([item for item in pairs if item['role'] == 'assistant']), 4)
         # Seletor que pega as duas conversas: a conferência recusa.
         config.assistant = 'user-query, model-response'
         ok, problems, _ = verify_transcript(self.page, config, lambda *_: None)
         self.assertFalse(ok)
-        self.assertTrue(any('mesmo número' in problem or 'mesma pergunta' in problem
-                            or 'mesmo texto' in problem for problem in problems), problems)
+        self.assertTrue(any('mesmo elemento casa' in problem or 'mesmo número' in problem
+                            for problem in problems), problems)
 
-    def test_transcript_check_rejects_the_same_text_counted_twice(self):
+    def test_transcript_check_does_not_confuse_repeated_text_with_duplicates(self):
         config = self.open_fixture()
         self.page.evaluate("() => { GeminiLike.send('igual'); GeminiLike.send('igual'); GeminiLike.send('igual'); }")
         self.page.wait_for_timeout(500)
-        ok, problems, _ = verify_transcript(self.page, config, lambda *_: None)
-        self.assertFalse(ok)
-        self.assertTrue(any('mesmo texto' in problem for problem in problems), problems)
+        ok, problems, pairs = verify_transcript(self.page, config, lambda *_: None)
+        self.assertTrue(ok, problems)
+        self.assertEqual(len(pairs), 8)  # a mensagem inicial do fixture + 3 pares
 
     def test_preview_shows_the_layer_and_lists_what_will_be_captured(self):
         self.open_fixture()
@@ -289,7 +290,7 @@ class TestGuidedMappingUnit(unittest.TestCase):
                 self.items = items
 
             def evaluate(self, *_args, **_kwargs):
-                return self.items
+                return {'overlap': 0, 'items': self.items}
 
         pairs = []
         for index in (1, 2, 3):
@@ -301,10 +302,12 @@ class TestGuidedMappingUnit(unittest.TestCase):
         self.assertEqual(len(found), 6)
         self.assertTrue(any('Você: “pergunta 1”' in line for line in tells), tells)
 
+        # Com menos de três de cada lado não há o que conferir: avisa e segue.
         tells = []
         ok, problems, _ = verify_transcript(Page(pairs[:2]), self.config(), tells.append)
-        self.assertFalse(ok)
-        self.assertTrue(any('mínimo é 3' in problem for problem in problems), problems)
+        self.assertTrue(ok)
+        self.assertEqual(problems, [])
+        self.assertTrue(any('precisa de 3 perguntas' in line for line in tells), tells)
 
     def test_mapping_stops_when_three_messages_do_not_confirm(self):
         from browserapi_lab.setup import verify_transcript  # noqa: F401 (contrato do módulo)
@@ -315,8 +318,11 @@ class TestGuidedMappingUnit(unittest.TestCase):
             locator = object()  # marcador de página real; a conferência só roda nele
 
             def evaluate(self, *_args, **_kwargs):
-                # Um único par de mensagens: abaixo do mínimo exigido.
-                return [{'role': 'user', 'text': 'oi'}, {'role': 'assistant', 'text': 'olá'}]
+                # Três de cada lado, mas fora de ordem: a conferência recusa.
+                return {'overlap': 0, 'items': [
+                    {'role': 'user', 'text': 'p1'}, {'role': 'user', 'text': 'p2'},
+                    {'role': 'assistant', 'text': 'r1'}, {'role': 'assistant', 'text': 'r2'},
+                    {'role': 'user', 'text': 'p3'}, {'role': 'assistant', 'text': 'r3'}]}
 
             def bring_to_front(self):
                 pass
@@ -343,7 +349,7 @@ class TestGuidedMappingUnit(unittest.TestCase):
                 for index in (1, 2, 3):
                     items.append({'role': 'user', 'text': f'p{index}'})
                     items.append({'role': 'assistant', 'text': f'r{index}'})
-                return items
+                return {'overlap': 0, 'items': items}
 
             def bring_to_front(self):
                 pass

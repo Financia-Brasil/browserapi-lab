@@ -104,6 +104,7 @@ TRANSCRIPT_SCRIPT = r"""([userSelector, assistantSelector]) => {
     let nodes = [];
     try { nodes = [...document.querySelectorAll(selector)]; } catch (error) { return []; }
     nodes = nodes.filter(visible);
+    // Camada interna do mesmo balão não é outra mensagem.
     return nodes.filter(el => !nodes.some(other => other !== el && other.contains(el)));
   };
   const textOf = el => {
@@ -111,28 +112,44 @@ TRANSCRIPT_SCRIPT = r"""([userSelector, assistantSelector]) => {
     clone.querySelectorAll('button,[role=button],script,style,[aria-hidden="true"]').forEach(item => item.remove());
     return ((clone.textContent) || '').replace(/\s+/g, ' ').trim();
   };
+  const users = pick(userSelector);
+  const answers = pick(assistantSelector);
   const items = [];
-  for (const el of pick(userSelector)) items.push({role: 'user', el: el, text: textOf(el)});
-  for (const el of pick(assistantSelector)) items.push({role: 'assistant', el: el, text: textOf(el)});
+  for (const el of users) items.push({role: 'user', el: el, text: textOf(el)});
+  for (const el of answers) items.push({role: 'assistant', el: el, text: textOf(el)});
   items.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
-  return items.map(item => ({role: item.role, text: item.text.slice(0, 400)}));
+  return {
+    overlap: users.filter(el => answers.indexOf(el) !== -1).length,
+    items: items.map(item => ({role: item.role, text: item.text.slice(0, 400)})),
+  };
 }"""
+
+
+def transcript_report(page, config):
+    """Lê a conversa na página: papéis, ordem, textos e sobreposição de seletores.
+
+    Devolve ``{'items': [...], 'overlap': n}``. Nada é alterado na página.
+    """
+    if not getattr(config, 'user', '') or not getattr(config, 'assistant', ''):
+        return {'items': [], 'overlap': 0}
+    if not hasattr(page, 'evaluate'):
+        return {'items': [], 'overlap': 0}
+    try:
+        value = page.evaluate(TRANSCRIPT_SCRIPT, [config.user, config.assistant])
+    except Exception:
+        return {'items': [], 'overlap': 0}
+    if not isinstance(value, dict):
+        return {'items': [], 'overlap': 0}
+    items = [item for item in value.get('items') or []
+             if isinstance(item, dict) and item.get('role') in ('user', 'assistant')
+             and isinstance(item.get('text'), str)]
+    overlap = value.get('overlap')
+    return {'items': items, 'overlap': overlap if isinstance(overlap, int) else 0}
 
 
 def transcript_messages(page, config):
     """Mensagens já na página, na ordem em que aparecem, com o papel de cada uma."""
-    if not getattr(config, 'user', '') or not getattr(config, 'assistant', ''):
-        return []
-    if not hasattr(page, 'evaluate'):
-        return []
-    try:
-        value = page.evaluate(TRANSCRIPT_SCRIPT, [config.user, config.assistant])
-    except Exception:
-        return []
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)
-            and item.get('role') in ('user', 'assistant') and isinstance(item.get('text'), str)]
+    return transcript_report(page, config)['items']
 
 
 def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
@@ -145,15 +162,23 @@ def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
 
     Devolve ``(ok, problemas, pares)``.
     """
-    pairs = [item for item in transcript_messages(page, config) if item['text']]
+    report = transcript_report(page, config)
+    pairs = [item for item in report['items'] if item['text']]
     users = [item for item in pairs if item['role'] == 'user']
     answers = [item for item in pairs if item['role'] == 'assistant']
     problems = []
-    if len(users) < minimum:
-        problems.append(f'encontrei {len(users)} pergunta(s) sua(s) na página; o mínimo é {minimum}')
-    if len(answers) < minimum:
-        problems.append(f'encontrei {len(answers)} resposta(s) do chat; o mínimo é {minimum}')
-    if users and answers and len(users) != len(answers):
+    if len(users) < minimum or len(answers) < minimum:
+        # Chat novo (ou conversa curta) não tem o que conferir: pedir três
+        # mensagens aqui só travaria a configuração. Avisa e segue; a
+        # conferência volta quando houver três de cada lado.
+        tell(f'A conferência precisa de {minimum} perguntas suas e {minimum} respostas na tela; '
+             f'vi {len(users)} pergunta(s) e {len(answers)} resposta(s). Seguindo sem conferir — '
+             'envie mais mensagens no chat e use “Corrigir campos” para conferir depois.')
+        return True, [], pairs
+    if report['overlap']:
+        problems.append('o mesmo elemento casa com o seletor da pergunta e com o da resposta: '
+                        'aponte a camada menor de cada balão')
+    if len(users) != len(answers):
         problems.append(f'{len(users)} pergunta(s) contra {len(answers)} resposta(s): '
                         f'os dois seletores precisam casar com o mesmo número de mensagens')
     sequence = [item['role'] for item in pairs]
@@ -166,10 +191,6 @@ def verify_transcript(page, config, tell, minimum=TRANSCRIPT_MINIMUM):
             problems.append(f'a área da resposta {index + 1} também inclui a sua pergunta: '
                             f'aponte a camada menor (só o balão da resposta)')
             break
-    texts = [item['text'] for item in pairs]
-    if len(set(texts)) != len(texts):
-        problems.append('há mensagens com o mesmo texto contadas duas vezes: '
-                        'aponte a camada menor para não duplicar')
     if pairs:
         tell('Conferência do que já está na tela:')
         for index in range(min(len(users), len(answers))):
@@ -408,7 +429,8 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
         while True:
             ok, problems, pairs = verify_transcript(page, config, tell)
             if ok:
-                tell(f'Conferência concluída: {len(pairs) // 2} par(es) de pergunta e resposta, na ordem certa.')
+                if len(pairs) >= 2 * TRANSCRIPT_MINIMUM:
+                    tell(f'Conferência concluída: {len(pairs) // 2} par(es) de pergunta e resposta, na ordem certa.')
                 break
             for problem in problems:
                 tell('Conferência falhou: ' + problem + '.')
