@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "abi": 1,
-  "version": "0.3.1",
+  "version": "0.10.1",
   "python_min": [
     3,
     11
   ],
   "playwright": "1.64.1",
-  "size": 97090,
-  "sha256": "9df5c65bfb6c99e80126089b418d153b803bb01ee7fedd5cf3ad89ce1adb6c5f"
+  "size": 847619,
+  "sha256": "8605d576d5342a34b04eb9f399e30d28fc44b2688e4dba2d4d6b99cd92b55328"
 }
