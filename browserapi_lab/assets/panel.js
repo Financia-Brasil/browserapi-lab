@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.10.1';
+const PANEL_VERSION = '0.11.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -10,6 +10,23 @@ let selected = null;
 let chatSignature = '';
 let pending = false;
 let conversation = {name: null, revision: -1, data: null};
+/* Nome automático: conectar não deve exigir digitar nem resolver colisão.
+ * Só sobrescreve enquanto o campo ainda tem o valor que geramos (se a pessoa
+ * digitou um nome, ele manda). */
+let autoName = $('name').value;
+function uniqueName(base) {
+  const taken = new Set((state?.chats || []).map(chat => chat.name));
+  if (!taken.has(base)) return base;
+  let index = 2;
+  while (taken.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+function refreshAutoName() {
+  const current = $('name').value;
+  if (current && current !== autoName) return;
+  autoName = uniqueName('meu-' + ($('provider').value === 'custom' ? 'chat' : $('provider').value));
+  $('name').value = autoName;
+}
 function error(text) { $('error').textContent = text; $('error').hidden = !text; highlightConsent(text); }
 
 /* Falta de autorização do Chrome pessoal precisa ser visível e acionável.
@@ -139,6 +156,61 @@ $('configuration').addEventListener('submit', event => {
   task('configure', {name: $('name').value, browser: $('browser').value,
                      provider: $('provider').value, personal_profile:$('personal-profile').value, session_mode: $('session-mode').value, url: $('url').value});
 });
+/* Caminho mais curto, visível o tempo todo: qual é o próximo passo e o único
+ * botão que o resolve. Sem isso, quem chega não sabe se falta conectar, testar
+ * ou ligar a API — e cada etapa virava descoberta. */
+function usableChats() { return (state?.chats || []).filter(chat => !chat.invalid); }
+function flowChat() {
+  const chats = usableChats();
+  return chats.find(chat => !chat.compatible) || chats[0] || null;
+}
+function flowStage() {
+  const chats = usableChats();
+  if (!chats.length) return 1;
+  if (!chats.some(chat => chat.compatible)) return 2;
+  if (!state?.api_service?.enabled) return 3;
+  return 4;
+}
+const FLOW = {
+  1: ['Conectar o chat',
+      'O perfil do Chrome já vem escolhido. Um clique conecta e já testa, se você autorizar a mensagem.',
+      'Conectar e testar'],
+  2: ['Testar o chat',
+      'O teste envia UMA mensagem sua, com a sua autorização, e confere se a resposta é lida.',
+      'Testar agora'],
+  3: ['Ligar a API para os agentes',
+      'A API fica em 127.0.0.1:8765 e só existe enquanto esta janela estiver aberta.',
+      'Ligar API'],
+  4: ['Tudo pronto',
+      'Copie o endereço completo e a chave na aba API local. Mantenha esta janela aberta.',
+      'Copiar endereço'],
+};
+function renderQuickFlow() {
+  const stage = flowStage();
+  const [title, detail, action] = FLOW[stage];
+  $('quick-title').textContent = title;
+  $('quick-detail').textContent = detail;
+  $('quick-action').textContent = action;
+  for (const item of $('quick-steps').children) {
+    const number = Number(item.dataset.step);
+    item.dataset.state = number < stage ? 'done' : number === stage ? 'current' : 'todo';
+  }
+  const blocked = busy() || incompatible();
+  $('quick-action').disabled = blocked || (stage === 1 && $('session-mode').value === 'existing_chrome' && !$('personal-profile').value);
+  $('quick-flow').dataset.stage = String(stage);
+  const chat = flowChat();
+  $('quick-note').textContent = state?.phase === 'waiting' ? 'Aguardando você responder abaixo.' :
+    state?.phase === 'running' ? 'Trabalhando… o botão volta quando terminar.' :
+    chat ? `Conexão atual: ${chat.name}${chat.compatible ? ' (teste passou nesta execução)' : ' (ainda sem teste nesta execução)'}.` : '';
+}
+$('quick-action').onclick = () => {
+  const stage = flowStage();
+  if (stage === 1) { $('configuration').requestSubmit(); return; }
+  if (stage === 2) { const chat = flowChat(); if (chat) task('check', {name: chat.name}); return; }
+  navigate('api');
+  if (stage === 3) $('api-toggle').focus({preventScroll: true});
+  else copyValue('api-endpoint').then(() => navigate('api'));
+};
 let currentView='connections';
 function navigate(view){
   currentView=view;
@@ -170,7 +242,7 @@ $('browser').addEventListener('change',()=>{
 });
 $('provider').addEventListener('change', () => {
   $('url-box').hidden = $('provider').value !== 'custom';
-  $('name').value = 'meu-' + ($('provider').value === 'custom' ? 'chat' : $('provider').value);
+  refreshAutoName();
 });
 $('prepare').onclick = () => {
   if (confirm('Baixar componentes e Chromium para seu usuário? Requer internet e espaço em disco. Não instalará o Chrome ou Edge.')) task('prepare');
@@ -535,6 +607,9 @@ function render(value) {
   }
   renderMetrics(value);
   renderService(value);
+  renderQuickFlow();
+  refreshAutoName();
+  $('result-retry').hidden = !state.receipt || !usableChats().length;
   controls();
 }
 async function refresh() { render(await api('state')); }
@@ -612,7 +687,11 @@ function renderService(value){
   $('api-test').disabled=!a.available;
   $('api-toggle').textContent=a.enabled ? 'Desativar API' : 'Autorizar e iniciar API';
   $('api-toggle').disabled=!a.available || incompatible() || (!a.enabled && busy());
-  $('api-url').value=a.url || ''; $('api-key').value=a.key || '';
+  $('api-url').value=a.url || '';
+  $('api-endpoint').value=a.chat_url || '';
+  $('api-snippet').textContent=a.example || '';
+  $('copy-endpoint').disabled=!a.chat_url; $('copy-snippet').disabled=!a.example;
+  $('api-key').value=a.key || '';
   $('copy-api-url').disabled=!a.url; $('copy-api-key').disabled=!a.key; $('api-show').disabled=!a.key;
   const signature=JSON.stringify([a.enabled,a.names,a.headless,a.lightweight,a.retrieval,a.fallback,a.remember,a.personal_consent,value.chats]);
   if(signature!==serviceSignature){
@@ -629,7 +708,24 @@ function renderService(value){
   }
   for(const id of ['api-models','api-headless','api-lightweight','api-retrieval','api-fallback','api-personal','api-remember']) $(id).disabled=!!a.enabled || busy() || incompatible();
 }
-$('api-show').onclick=()=>{$('api-key').type=$('api-key').type==='password' ? 'text':'password';};
+$('api-show').onclick=()=>{
+  const shown=$('api-key').type==='text';
+  $('api-key').type=shown ? 'password':'text';
+  $('api-show').textContent=shown ? 'Mostrar':'Ocultar';
+  $('api-show').setAttribute('aria-pressed',String(!shown));
+};
+/* Conferir o endereço que a pessoa colou: três erros diferentes com a mesma
+ * cara (IP incompleto, porta errada, rota faltando). A resposta diz qual é. */
+$('url-check').onclick=async()=>{
+  const out=$('url-check-result');
+  out.dataset.error='false'; out.textContent='Conferindo…';
+  try{
+    const result=await api('url-check',{url:$('url-check-input').value});
+    out.dataset.error=String(!result.ok);
+    out.textContent=result.message;
+  }catch(err){out.dataset.error='true';out.textContent=err.message;}
+};
+$('url-check-input').addEventListener('keydown',event=>{if(event.key==='Enter')$('url-check').click();});
 $('api-personal').addEventListener('change',()=>{
   if(!$('api-personal').checked) return;
   $('consent-alert').hidden=true; $('consent-block').dataset.alert='false';
@@ -662,11 +758,20 @@ $('api-rotate').onclick=async()=>{
 };
 
 async function copyValue(id){
-  try{await navigator.clipboard.writeText($(id).value);$('copy-feedback').textContent=id==='api-key'?'Chave copiada. Não compartilhe.':'Endereço copiado.';}
-  catch(err){$(id).focus();$(id).select();$('copy-feedback').textContent='Selecione e copie o campo com Ctrl+C.';}
+  if(!$(id).value) return;
+  try{await navigator.clipboard.writeText($(id).value);
+      $('snippet-feedback').textContent=id==='api-key'?'Chave copiada. Não compartilhe.':'Endereço copiado.';}
+  catch(err){$(id).focus();$(id).select();$('snippet-feedback').textContent='Selecione e copie o campo com Ctrl+C.';}
 }
 $('copy-api-url').onclick=()=>copyValue('api-url');
 $('copy-api-key').onclick=()=>copyValue('api-key');
+$('copy-endpoint').onclick=()=>copyValue('api-endpoint');
+$('copy-snippet').onclick=async()=>{
+  try{await navigator.clipboard.writeText($('api-snippet').textContent);
+      $('snippet-feedback').textContent='Exemplo copiado. Troque a chave pela sua.';}
+  catch(err){$('snippet-feedback').textContent='Selecione o exemplo e copie com Ctrl+C.';}
+};
+$('result-retry').onclick=()=>{const chat=flowChat();if(chat)task('check',{name:chat.name});};
 
 $('conversation-copy').onclick=async()=>{
   const last=[...((conversationData()?.messages)||[])].reverse().find(message=>message.role==='assistant');

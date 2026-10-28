@@ -248,6 +248,41 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(code,400)
         self.assertIn('operação já está em andamento',json.loads(body)['error'])
 
+    def test_url_check_explains_the_three_field_errors(self):
+        """Quem cola o endereço errado recebe o que corrigir, não um 404 seco."""
+        for text, expected in [('http://127.0.0', 'incompleto'),
+                               ('http://127.0.0.1:8765', 'Not found'),
+                               ('http://127.0.0.1:8765/v1/chat/completions', 'correto')]:
+            code, _, body = self.request('/api/url-check', method='POST', body={'url': text})
+            self.assertEqual(code, 200, body)
+            self.assertIn(expected, json.loads(body)['message'])
+        # Sem URL ou com payload gigante é entrada inválida, não análise.
+        self.assertEqual(self.request('/api/url-check', method='POST', body={})[0], 400)
+        self.assertEqual(self.request('/api/url-check', method='POST',
+                                      body={'url': 'x' * 400})[0], 400)
+        # Conferir endereço não pode exigir API ligada nem tocar na chave.
+        self.assertFalse(self.panel.api_service is not None and
+                         self.panel.api_service.snapshot()['enabled'])
+
+    def test_quick_flow_and_copy_block_are_in_the_panel(self):
+        """O caminho curto precisa existir no HTML: passo atual e um botão só."""
+        from browserapi_lab.gui import ASSETS
+        html = (ASSETS / 'panel.html').read_text()
+        for marker in ('id="quick-flow"', 'id="quick-action"', 'id="api-endpoint"',
+                       'id="copy-endpoint"', 'id="api-snippet"', 'id="copy-snippet"',
+                       'id="url-check"', 'id="result-retry"'):
+            self.assertIn(marker, html)
+        js = (ASSETS / 'panel.js').read_text()
+        self.assertIn('flowStage', js)
+        # O caminho curto só conecta ou repete o teste; nunca envia mensagem
+        # por conta própria nem reenvia um envio ambíguo.
+        start = js.index("$('quick-action').onclick")
+        handler = js[start:js.index('};', start)]
+        self.assertIn("requestSubmit", handler)
+        self.assertIn("task('check'", handler)
+        self.assertNotIn("task('ask'", handler)
+        self.assertNotIn('configure', handler.replace('requestSubmit', ''))
+
     def test_auth_host_and_origin_rejected(self):
         self.assertEqual(self.request(token=False)[0], 403)
         self.assertEqual(self.request(token='wrong')[0], 403)

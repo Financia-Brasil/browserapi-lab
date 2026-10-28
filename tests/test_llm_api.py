@@ -10,7 +10,8 @@ from unittest.mock import patch
 from browserapi_lab.config import ChatConfig, ConfigStore
 from browserapi_lab.chat import ChatResult
 from browserapi_lab.gui import Panel
-from browserapi_lab.llm_api import APIService, APIError, WarmBrowser, Job
+from browserapi_lab.llm_api import (APIService, APIError, WarmBrowser, Job,
+                                    diagnose_endpoint, endpoint_example)
 from browserapi_lab.setup import HYPOTHESES
 
 
@@ -309,3 +310,47 @@ class TestWarmRouting(unittest.TestCase):
             self.assertIs(send.call_args.args[0],created[0].chosen_profile)
             self.assertIsNot(send.call_args.args[0],created[0].other_profile)
             browser.close()
+
+
+class TestEndpointDiagnosis(unittest.TestCase):
+    """Três erros de uso com a mesma cara: IP incompleto, rota ausente, porta errada.
+
+    Cada frase precisa dizer o que corrigir — foi o que faltou no relato
+    ("Failed to connect to 127.0.0", "Not found", `composer_missing`).
+    """
+
+    def test_truncated_ip(self):
+        for text in ('http://127.0.0', '127.0.0:8765', '127.0.0'):
+            result = diagnose_endpoint(text)
+            self.assertFalse(result['ok'], text)
+            self.assertIn('127.0.0.1', result['message'])
+            self.assertIn('incompleto', result['message'])
+
+    def test_missing_route(self):
+        result = diagnose_endpoint('http://127.0.0.1:8765')
+        self.assertFalse(result['ok'])
+        self.assertIn('/v1/chat/completions', result['message'])
+        self.assertIn('Not found', result['message'])
+        self.assertFalse(diagnose_endpoint('http://127.0.0.1:8765/v1')['ok'])
+
+    def test_complete_route_passes(self):
+        result = diagnose_endpoint('http://127.0.0.1:8765/v1/chat/completions')
+        self.assertTrue(result['ok'])
+        self.assertIn('POST', result['message'])
+
+    def test_wrong_port_and_host_are_named(self):
+        self.assertIn('9999', diagnose_endpoint('http://127.0.0.1:9999/v1/chat/completions')['message'])
+        self.assertIn('este computador', diagnose_endpoint('http://example.com/v1/chat/completions')['message'])
+        self.assertIn('porta', diagnose_endpoint('http://127.0.0.1')['message'])
+
+    def test_empty_or_garbage_does_not_raise(self):
+        self.assertFalse(diagnose_endpoint('')['ok'])
+        self.assertFalse(diagnose_endpoint('não é um endereço')['ok'])
+        self.assertFalse(diagnose_endpoint(None)['ok'])
+
+    def test_example_keeps_the_key_out_of_the_text(self):
+        example = endpoint_example(8765, 'meu-gemini')
+        self.assertIn('/v1/chat/completions', example)
+        self.assertIn('BROWSERAPI_KEY', example)
+        self.assertIn('meu-gemini', example)
+        self.assertNotIn('Bearer sk-', example)

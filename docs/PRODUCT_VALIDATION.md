@@ -532,3 +532,32 @@ interceptava o clique — daí a alça de arraste. Evidência visual:
 `results/ci/ui-review-40754469066/ui-redesign/picker-desktop.png`.
 Ainda assim: **implementado ≠ testado local/CI ≠ homologado** — o uso em site
 autenticado com a sua conta é o próximo passo, e é seu.
+
+## 0.11.0 — caminho mais curto e endereço explicado (2026-10-28)
+
+Relato: *“só falta melhorar a UI/UX e garantir que funciona com poucos passos,
+com o mínimo de passos, e rápido”*, junto de três erros de uso do endereço da API
+(`127.0.0` incompleto → cURL 7; sem rota → `Not found`; `composer_missing`).
+
+**Menos passos, sem afrouxar consentimento**
+
+| Antes | Agora |
+|---|---|
+| descobrir sozinho que faltava testar e depois autorizar a API | lista **Conectar → Testar → Ligar API** no topo, com o passo atual marcado e **um** botão que resolve o próximo |
+| digitar nome e resolver “esse nome já está salvo” | nome automático único (`meu-gemini`, `meu-gemini-2`…), campo continua em *Opções* e um nome digitado nunca é sobrescrito |
+| procurar o endereço na aba API | `…/v1/chat/completions`, chave e exemplo de `curl` no bloco **Copiar e colar**, com “Copiar” por campo |
+| erro 404/`cURL 7` sem explicação | campo **Conferir endereço**: IP incompleto, porta errada, rota faltando e endereço correto recebem frases diferentes |
+| recibo só com texto | “Testar de novo” no próprio recibo |
+
+O que **não** mudou por decisão: nada é enviado sem autorização explícita, o
+mapeamento continua exigindo apontar os campos, e nenhum envio ambíguo é
+repetido. O botão do caminho curto só dispara *configure* ou *check* — nunca
+`ask`.
+
+**Provas deste ambiente (sem Chromium):** `discover -s tests` **375 testes, 18
+ignorados, OK**; `node scripts/panel_jsdom_check.js <repo>` **15 checagens** do
+painel (passo atual, endereço completo, exemplo, conferência de endereço, nome
+automático) e `node scripts/ui_jsdom_check.js <repo>` **29 checagens** de leitura
+e apontamento. Os testes de navegador (incluindo o novo
+`test_quick_flow_points_to_the_next_step_and_the_address_checker`) rodam no CI.
+**Implementado ≠ testado local/CI ≠ homologado.**
