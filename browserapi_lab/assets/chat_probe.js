@@ -580,6 +580,109 @@
     return true;
   }
 
+  /* ------------------------- limite do balão de mensagem ------------------- */
+
+  /* Marcadores de PAPEL (quem falou). Um wrapper de turno pode conter os dois
+   * papéis; nesse caso ele não serve como seletor de uma mensagem. */
+  var ROLE_MARK = 'user-query,model-response,[data-message-author-role],[data-role="user"],[data-role="assistant"],[data-role=user],[data-role=assistant],[data-author]';
+  var GENERIC_SIGNAL = /(^|[-_ ])(message|mensagem|response|resposta|answer|markdown|bubble|article)([-_ ]|$)/i;
+  var INLINE_TAGS = { SPAN:1, A:1, STRONG:1, EM:1, B:1, I:1, CODE:1, MARK:1, SMALL:1, S:1, U:1, TIME:1 };
+
+  function roleOf(el) {
+    if (!el || !el.matches) return "";
+    if (el.matches('user-query,[data-role="user"],[data-role=user],[data-message-author-role="user"]')) return "user";
+    if (el.matches('model-response,[data-role="assistant"],[data-role=assistant],[data-message-author-role="assistant"]')) return "assistant";
+    return "";
+  }
+
+  function looksLikeMessageContainer(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = el.tagName.toLowerCase();
+    if (tag === "body" || tag === "html" || tag === "main" || tag === "section" || tag === "article") return false;
+    if (GENERIC_SIGNAL.test(tag)) return true;
+    var attrs = ["class", "id", "data-testid", "data-test-id", "aria-label"];
+    for (var i = 0; i < attrs.length; i++) {
+      var value = el.getAttribute(attrs[i]);
+      if (value && GENERIC_SIGNAL.test(value)) return true;
+    }
+    return false;
+  }
+
+  /* Sobe do nó apontado até o começo do BALÃO de uma mensagem.
+   *
+   * Motivo (uso real, Gemini): a resposta vinha em vários <span> dentro de um
+   * <p class="first-token"> e o apontamento parava no primeiro pedaço. Aqui o
+   * apontamento nunca fica num pedaço: sobe para o marcador de papel mais
+   * externo (ex.: model-response) e só então considera sinais genéricos.
+   * Nunca atravessa para um wrapper que contenha os dois papéis, o compositor
+   * ou a barra de ações da mensagem. */
+  function messageContainerOf(el) {
+    if (!el || el.nodeType !== 1 || !document.body.contains(el)) return null;
+    var node = el;
+    while (node && INLINE_TAGS[node.tagName]) node = node.parentElement;
+    if (!node || node === document.body) return null;
+
+    var markers = [];
+    for (var up = node; up && up !== document.body; up = up.parentElement) {
+      if (up.matches && up.matches(ROLE_MARK) && !up.matches("message-content")) markers.push(up);
+    }
+    if (markers.length) {
+      // markers está do interno para o externo: fica com o mais externo que
+      // ainda pertença a um só papel (o balão inteiro daquela mensagem).
+      var base = markers[0];
+      for (var i = markers.length - 1; i >= 0; i--) {
+        var candidate = markers[i];
+        var roles = {};
+        candidate.querySelectorAll(ROLE_MARK).forEach(function (item) {
+          var found = roleOf(item);
+          if (found) roles[found] = true;
+        });
+        var own = roleOf(candidate);
+        if (own) roles[own] = true;
+        if (roles.user && roles.assistant) continue;  // wrapper de turno: não serve
+        base = candidate;
+        break;
+      }
+      return base;
+    }
+
+    var best = node;
+    var parent = node.parentElement;
+    var depth = 0;
+    while (parent && parent !== document.body && depth < 8) {
+      if (!parent.matches || parent.querySelector("textarea,input,[contenteditable='true'],[contenteditable='']")) break;
+      if (parent.querySelectorAll("button,[role=button]").length > 2) break;
+      var siblings = Array.prototype.some.call(parent.children, function (child) {
+        return child !== best && looksLikeMessageContainer(child);
+      });
+      if (siblings) break;
+      if (looksLikeMessageContainer(parent)) best = parent;
+      parent = parent.parentElement;
+      depth++;
+    }
+    return best;
+  }
+
+  /* Remove do clone o que é moldura da mensagem: barra de ações, "copiar",
+   * rótulo de autor/avatar. O texto do balão é a resposta, não a etiqueta. */
+  var CHROME_SIGNAL = /(^|[-_])(role|author|avatar|actions?|toolbar|feedback|copy|copiar|menu|label|caption)([-_]|$)/i;
+  function stripChrome(clone) {
+    clone.querySelectorAll("button,[role=button],script,style,[aria-hidden='true']").forEach(function (item) { item.remove(); });
+    clone.querySelectorAll("[class]").forEach(function (item) {
+      var value = item.getAttribute("class") || "";
+      if (!CHROME_SIGNAL.test(value)) return;
+      var text = (item.textContent || "").replace(/\s+/g, " ").trim();
+      if (text.length <= 40) item.remove();
+    });
+    return clone;
+  }
+
+  function wholeMessageHtmlOf(el) {
+    var container = messageContainerOf(el);
+    if (!container) return null;
+    return stripChrome(container.cloneNode(true)).innerHTML;
+  }
+
   /* --------------------------------- extras -------------------------------- */
   function snapshotHtml(selector) {
     var el = selector ? document.querySelector(selector) : document.body;
@@ -615,6 +718,8 @@
     streamSummary: streamSummary,
     markSent: markSent,
     resetWatcher: resetWatcher,
+    messageContainerOf: messageContainerOf,
+    wholeMessageHtmlOf: wholeMessageHtmlOf,
     snapshotHtml: snapshotHtml,
     innerTextOf: innerTextOf,
     domFingerprint: domFingerprint,

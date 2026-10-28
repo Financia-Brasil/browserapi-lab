@@ -363,3 +363,28 @@ continua valendo para trabalho real; a transmissão da resposta não é trabalho
 houve afrouxamento de autenticação, de limite de corpo ou de recusa por envio
 ambíguo.
 
+
+
+## ADR-023 — O apontamento de mensagem é do BALÃO, não do pedaço clicado
+
+O usuário apontou a resposta no Gemini e recebeu só “Olá!”: a resposta estava em
+dois `<span>` dentro de um `<p class="first-token">`, e o apontamento guardava o
+elemento clicado. O seletor resultante (`p.first-token`) recortava a primeira
+linha de **todas** as respostas, sem erro visível.
+
+Decisão:
+
+1. no apontamento, o alvo de mensagem sobe ao **marcador de papel** mais externo
+   (`user-query`, `model-response`, `[data-message-author-role]`, `[data-role=…]`);
+   sem marcador, sobe por sinais de classe/tag sem atravessar compositor, barra de
+   ações (`> 2` botões) ou wrapper que misture pergunta e resposta;
+2. a faixa do apontamento mostra **o texto que será capturado** antes de confirmar;
+3. na leitura, o runtime pede ao probe o **balão inteiro** daquele nó, removendo do
+   clone botões, `aria-hidden` e rótulos curtos de papel/avatar/cópia; se o probe
+   não existir no frame, usa o elemento casado (limite declarado);
+4. casamento aninhado (balão + pedaço) passa a contar como **um** resultado;
+5. `Esc`/“Pular este campo” pula só o passo; “Cancelar mapeamento” é explícito.
+
+Alternativas rejeitadas: pedir CSS ao usuário (contraria o produto), capturar
+`innerText` do ancestral de maior texto (pegaria a conversa inteira), e confiar em
+classes específicas do Gemini (quebrariam em qualquer mudança do site).

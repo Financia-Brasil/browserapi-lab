@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Chat com DOM no estilo Gemini — fixture do mapeamento</title>
+<style>
+  :root { --bg:#ffffff; --fg:#1f1f1f; --mut:#5f6368; --line:#dadce0; --acc:#0b57d0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; gap:8px; padding:12px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header button { padding:6px 10px; border:1px solid var(--line); border-radius:16px; background:#fff; }
+  main { display:flex; gap:16px; padding:16px; max-width:1080px; margin:0 auto; }
+  #conversation { flex:1; min-height:320px; border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .conversation-container { display:flex; flex-direction:column; gap:16px; }
+  user-query, model-response { display:block; }
+  user-query { align-self:flex-end; max-width:80%; background:#e8f0fe; border-radius:12px; padding:8px 12px; }
+  .query-text { margin:0; }
+  model-response { display:block; }
+  .response-container { padding:8px 0; }
+  .markdown p { margin:6px 0; }
+  .response-footer { display:flex; gap:6px; margin-top:6px; }
+  .response-footer button { border:0; background:transparent; color:var(--mut); font-size:13px; }
+  aside { width:220px; border:1px solid var(--line); border-radius:12px; padding:12px; height:max-content; }
+  .input-area { display:flex; align-items:flex-end; gap:8px; border:1px solid var(--line); border-radius:24px; padding:8px 12px; margin-top:16px; }
+  .ql-editor { flex:1; min-height:44px; padding:8px; outline:none; }
+  .ql-editor:empty::before { content:"Digite uma mensagem"; color:var(--mut); }
+  .input-area button { border:0; background:transparent; font-size:18px; min-width:44px; min-height:44px; }
+</style>
+</head>
+<body>
+<header>
+  <button aria-label="Novo chat">+ Novo chat</button>
+  <button aria-label="Histórico">Histórico</button>
+  <button aria-label="Configurações">Configurações</button>
+  <button aria-label="Ajuda">Ajuda</button>
+  <button aria-label="Compartilhar">Compartilhar</button>
+  <button aria-label="Fazer upgrade">Upgrade</button>
+</header>
+<main>
+  <section id="conversation">
+    <div class="conversation-container">
+      <div class="conversation-turn">
+        <user-query>
+          <div class="user-query-container"><p class="query-text">Qual é a capital do Pará?</p></div>
+        </user-query>
+      </div>
+      <div class="conversation-turn">
+        <model-response>
+          <div class="response-container">
+            <message-content>
+              <div class="markdown markdown-main-panel">
+                <p data-path-to-node="0" class="first-token" style="--animation-duration: 616ms;"><span class="">Belém</span><span> é a capital do Pará.</span></p>
+                <p data-path-to-node="1">Fica na região Norte do Brasil.</p>
+              </div>
+            </message-content>
+            <div class="response-footer">
+              <button aria-label="Copiar resposta">Copiar</button>
+              <button aria-label="Boa resposta">👍</button>
+              <button aria-label="Resposta ruim">👎</button>
+              <button aria-label="Mais opções">⋯</button>
+            </div>
+          </div>
+        </model-response>
+      </div>
+    </div>
+  </section>
+  <aside>
+    <p><strong>Fixture</strong></p>
+    <p>Reproduz o DOM relatado no uso real: a resposta começa em um <code>&lt;p class="first-token"&gt;</code> com dois <code>&lt;span&gt;</code>, há botões de barra de ações e vários botões na página.</p>
+    <p id="state">perguntas: 0</p>
+  </aside>
+</main>
+<div class="input-area">
+  <div class="ql-editor" contenteditable="true" role="textbox" aria-label="Digite uma mensagem"></div>
+  <button aria-label="Microfone" class="mic">🎤</button>
+  <button aria-label="Enviar mensagem" class="send">➤</button>
+</div>
+<script>
+(function () {
+  "use strict";
+  var replies = ["Olá! Como posso ajudar você hoje?", "Aqui está a resposta completa, em duas partes."];
+  var sent = 0;
+  var container = document.querySelector('.conversation-container');
+  var editor = document.querySelector('.ql-editor');
+  var state = document.getElementById('state');
+
+  function turn(html) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'conversation-turn';
+    wrapper.innerHTML = html;
+    return wrapper;
+  }
+
+  function answer(text) {
+    // Mesmo formato do relato: primeiro parágrafo com dois <span>, e o resto
+    // em parágrafos separados dentro do mesmo .markdown.
+    var pieces = text.split(' — ');
+    var first = document.createElement('p');
+    first.className = 'first-token';
+    first.setAttribute('data-path-to-node', '0');
+    first.style.setProperty('--animation-duration', '616ms');
+    var head = document.createElement('span');
+    head.textContent = pieces[0];
+    var tail = document.createElement('span');
+    tail.textContent = pieces[1] ? ' ' + pieces[1] : '';
+    first.append(head, tail);
+    return first;
+  }
+
+  function send(text) {
+    var user = turn('<user-query><div class="user-query-container"><p class="query-text"></p></div></user-query>');
+    user.querySelector('.query-text').textContent = text;
+    container.append(user);
+
+    var response = turn('<model-response><div class="response-container"><message-content>'
+      + '<div class="markdown markdown-main-panel"></div></message-content>'
+      + '<div class="response-footer"><button aria-label="Copiar resposta">Copiar</button>'
+      + '<button aria-label="Boa resposta">👍</button><button aria-label="Resposta ruim">👎</button>'
+      + '<button aria-label="Mais opções">⋯</button></div></div></model-response>');
+    container.append(response);
+    var markdown = response.querySelector('.markdown');
+    var body = replies[sent % replies.length];
+    sent += 1;
+    state.textContent = 'perguntas: ' + sent;
+    // Atualização em duas etapas, como o streaming do site.
+    setTimeout(function () {
+      markdown.append(answer(body));
+      setTimeout(function () {
+        var extra = document.createElement('p');
+        extra.setAttribute('data-path-to-node', '1');
+        extra.textContent = 'Resposta sintética da fixture; nada sai deste computador.';
+        markdown.append(extra);
+      }, 120);
+    }, 120);
+  }
+
+  document.querySelector('.send').addEventListener('click', function () {
+    var text = (editor.innerText || '').trim();
+    if (!text) return;
+    editor.textContent = '';
+    send(text);
+  });
+
+  window.GeminiLike = {
+    send: send,
+    state: function () {
+      return { sent: sent, user_messages: document.querySelectorAll('user-query').length,
+               responses: document.querySelectorAll('model-response').length };
+    }
+  };
+})();
+</script>
+</body>
+</html>

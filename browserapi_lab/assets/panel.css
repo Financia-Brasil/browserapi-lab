@@ -55,3 +55,10 @@
 #version-status{font-size:13px;margin:0}
 .progress h2{font-size:16px}
 @media(max-width:640px){.chart.wide{grid-column:auto}.chart{padding:8px}}
+.step-line{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.step-line #step-title{color:#3d5b4c;letter-spacing:0;text-transform:none;font-weight:550;font-size:13px}
+.step-dots{display:flex;gap:8px;list-style:none;padding:0;margin:0 0 16px}
+.step-dots li{width:24px;height:4px;border-radius:2px;background:#cbded3}
+.step-dots li[data-state=done]{background:#5d9c7d}
+.step-dots li[data-state=current]{background:var(--accent)}
+@media(max-width:640px){.step-dots li{width:16px}}

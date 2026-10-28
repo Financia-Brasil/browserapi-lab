@@ -472,7 +472,7 @@ class TestPanel(unittest.TestCase):
         def ask(text):
             asked.append(text)
             return 'n'
-        repair_fields(Page(), config, ask=ask, tell=tells.append, picker=lambda *_: None,
+        repair_fields(Page(), config, ask=ask, tell=tells.append, picker=lambda *_a, **_k: None,
                       fields=('user','assistant'))
         self.assertTrue(any('A SUA PERGUNTA JÁ ENVIADA' in text for text in asked))
         self.assertTrue(any('não o campo de digitar' in text for text in asked))

@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.8.0';
+const PANEL_VERSION = '0.9.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -448,15 +448,42 @@ function render(value) {
   document.querySelector('.progress').hidden=!state.prompt && !state.receipt && !state.messages.length && !['running','waiting'].includes(state.phase);
   $('prompt').hidden = !state.prompt;
   if (state.prompt) {
-    $('question').textContent = state.prompt.text;
+    // "Passo 2 de 5 · Botão Enviar — pergunta": o passo vira progresso visível.
+    const stepMatch = /^Passo (\d+) de (\d+) · ([^—]+) — /.exec(state.prompt.text);
+    $('question').textContent = stepMatch ? state.prompt.text.slice(stepMatch[0].length) : state.prompt.text;
+    $('prompt-step').hidden = !stepMatch;
+    $('step-dots').hidden = !stepMatch;
+    if (stepMatch) {
+      const current = Number(stepMatch[1]);
+      const total = Number(stepMatch[2]);
+      $('step-count').textContent = `Passo ${current} de ${total}`;
+      $('step-title').textContent = stepMatch[3].trim();
+      const dots = $('step-dots');
+      if (dots.children.length !== total) {
+        const items = [];
+        for (let index = 1; index <= total; index += 1) {
+          const item = document.createElement('li');
+          item.setAttribute('role', 'listitem');
+          items.push(item);
+        }
+        dots.replaceChildren(...items);
+      }
+      [...dots.children].forEach((item, index) => {
+        const number = index + 1;
+        item.dataset.state = number < current ? 'done' : number === current ? 'current' : 'todo';
+        item.setAttribute('aria-label', `Passo ${number} de ${total}`);
+      });
+    }
     const help = [
       [/A SUA PERGUNTA JÁ ENVIADA/i, 'Clique no balão com a pergunta que você enviou. Não é o campo de digitar.'],
-      [/A RESPOSTA DO CHAT/i, 'Clique no balão com a resposta do chat.'],
-      [/campo onde você digita/i, 'Clique dentro da caixa de texto vazia do chat.'],
+      [/A RESPOSTA DO CHAT/i, 'Clique no balão com a resposta do chat. O programa pega o balão inteiro.'],
+      [/CAIXA DE TEXTO/i, 'Clique na caixa de texto vazia, onde você escreve. Não é a conversa.'],
+      [/microfone/i, 'Se este chat não tiver microfone, responda Não. Você segue sem esse campo.'],
       [/digite algo SEM enviar/i, 'Escreva uma frase no chat, sem enviar, e volte para clicar em Continuar.'],
+      [/refazer/i, 'Sim recomeça só esse campo; Não conclui o mapeamento.'],
       [/Autoriza/i, 'Nada é enviado sem este Sim.'],
     ].find(([pattern]) => pattern.test(state.prompt.text));
-    $('prompt-help').textContent = help ? help[1] : 'Clique no elemento dentro da janela do chat. Esc cancela.';
+    $('prompt-help').textContent = help ? help[1] : 'Clique no elemento dentro da janela do chat. Esc pula o campo atual.';
     const yesno = state.prompt.kind === 'yesno';
     $('yes').hidden = $('no').hidden = !yesno;
     $('continue').hidden = yesno;
