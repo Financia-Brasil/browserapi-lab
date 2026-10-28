@@ -80,8 +80,8 @@ def element_preview(page, selector, prefer_last=False):
         if not count:
             return None, 0
         text = (locator.last if prefer_last else locator.first).evaluate(
-            "el => (((el.innerText !== undefined ? el.innerText : el.textContent) || el.value"
-            " || el.getAttribute('aria-label') || '') + '').replace(/\s+/g, ' ').trim()")
+            r"el => (((el.innerText !== undefined ? el.innerText : el.textContent) || el.value"
+            r" || el.getAttribute('aria-label') || '') + '').replace(/\s+/g, ' ').trim()")
         text = ' '.join(str(text or '').split())
         return (text[:90] + ('…' if len(text) > 90 else '')), count
     except Exception:
@@ -221,7 +221,10 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
             tell('Microfone registrado: esse botão deixa de contar como Enviar.')
             captured[key] = selector
             return
-        if not confirmed(ask, prefix + question):
+        # No Enviar manual a instrução de digitar JÁ é a pergunta: pedir um
+        # Sim antes só fazia a pessoa clicar duas vezes para o mesmo passo.
+        manual = key == 'send' and manual_send
+        if not manual and not confirmed(ask, prefix + question):
             return
         selector = None
         temporary = False

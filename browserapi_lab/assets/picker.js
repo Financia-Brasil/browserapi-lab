@@ -324,7 +324,8 @@
 
   function draw() {
     confirm.hidden = !chosen;
-    outer.hidden = inner.hidden = back.hidden = another.hidden = !chosen;
+    outer.hidden = inner.hidden = back.hidden = !chosen;
+    another.hidden = false;
     confirmationState();
     placeBanner(false);
     marks.replaceChildren();
