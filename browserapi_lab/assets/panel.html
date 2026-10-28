@@ -5,7 +5,7 @@
 <a class="brand" href="#connections" aria-label="BrowserAPI, conexões"><span class="brand-mark" aria-hidden="true">b<span>↗</span></span>BrowserAPI</a>
 <div class="workspace-label"><span class="status-dot"></span> Seu espaço local <span class="shortcut">B</span></div>
 <nav><button class="nav-item active" data-view="connections" aria-current="page"><span aria-hidden="true">▣</span> Conexões</button><button class="nav-item" data-view="activity"><span aria-hidden="true">◴</span> Atividade</button><button class="nav-item" data-view="api"><span aria-hidden="true">⌘</span> API local <span class="nav-tag">Beta</span></button><button class="nav-item" data-view="settings"><span aria-hidden="true">⚙</span> Configurações</button></nav>
-<div class="sidebar-bottom"><div class="privacy-symbol" aria-hidden="true">⌂</div><strong>No seu computador.</strong><p>Você escolhe a conta, o modelo e quando enviar.</p><span class="sidebar-version">BrowserAPI · 0.11.0</span></div></aside>
+<div class="sidebar-bottom"><div class="privacy-symbol" aria-hidden="true">⌂</div><strong>No seu computador.</strong><p>Você escolhe a conta, o modelo e quando enviar.</p><span class="sidebar-version">BrowserAPI · 0.12.0</span></div></aside>
 <div class="app-shell"><header class="topbar"><div class="breadcrumb">Seu espaço <span>/</span> <strong id="current-view">Conexões</strong></div><span class="local-label"><span class="status-dot"></span> Somente local</span></header>
 <main id="workspace" tabindex="-1"><div id="error" role="alert" hidden></div>
 <section class="view" id="view-connections" aria-labelledby="connections-title">
@@ -66,6 +66,12 @@
 <label for="api-snippet">Exemplo que já funciona (chave pela variável BROWSERAPI_KEY)</label>
 <pre id="api-snippet" class="snippet"></pre>
 <div class="inline-actions"><button type="button" id="copy-snippet" class="secondary">Copiar exemplo</button><span id="snippet-feedback" class="hint" role="status"></span></div>
+<label for="agent-snippet">Usando uma CLI de agente (Claude Code, por exemplo)</label>
+<pre id="agent-snippet" class="snippet"></pre>
+<div class="inline-actions"><button type="button" id="copy-agent" class="secondary">Copiar variáveis</button><span id="agent-feedback" class="hint"></span></div>
+<p class="hint">O Claude Code fala a API Anthropic: aponte <code>ANTHROPIC_BASE_URL</code> para a base sem <code>/v1</code> e ele chama <code id="messages-url-display">/v1/messages</code> sozinho.
+Rotas disponíveis: <code>/v1/messages</code>, <code>/v1/chat/completions</code>, <code>/v1/responses</code>, <code>/v1/completions</code> e <code>/v1/models</code>.
+Ferramentas (tools) são emuladas por texto; <code>temperature</code> e <code>max_tokens</code> são aceitos e registrados como ignorados.</p>
 <div class="url-check">
 <label for="url-check-input">Deu erro? Cole aqui o endereço que você usou — eu digo o que corrigir</label>
 <div class="inline-actions"><input id="url-check-input" placeholder="http://127.0.0.1:8765/v1/chat/completions" autocomplete="off" spellcheck="false"><button type="button" id="url-check" class="secondary">Conferir endereço</button></div>

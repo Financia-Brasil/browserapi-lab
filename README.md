@@ -1,9 +1,11 @@
 # browserapi-lab
 
 Laboratório Python/Linux para validar automação de chats por navegador real.
-**Não é um serviço homologado 24/7.** A versão 0.4.0 acrescenta uma API local
-experimental e opt-in, com subconjunto textual de Chat Completions, não paridade
-completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
+**Não é um serviço homologado 24/7.** A versão 0.12.0 acrescenta uma API local
+experimental e opt-in que fala **Anthropic Messages** (`/v1/messages`) e **OpenAI
+Chat/Responses**, com tool calling emulado — o suficiente para rodar o **Claude
+Code** e outras CLIs de agente. Não é paridade com as APIs oficiais. Veja
+[contrato, ativação e limites](docs/LOCAL_API.md).
 
 
 ## Baixar (sem terminal)
@@ -12,6 +14,28 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 — abra pelo gerenciador de arquivos e escolha instalar. O programa instalado se atualiza sozinho quando está ocioso.
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
+
+**Novo na 0.12.0:** a API local passou a aceitar as CLIs de agente. **`POST
+/v1/messages`** (Anthropic) funciona com `x-api-key`, respostas no formato
+`message`/`content`/`stop_reason`/`usage`, streaming com `message_start …
+message_stop` e `count_tokens`. Para o **Claude Code**:
+
+```bash
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8765"   # sem /v1
+export ANTHROPIC_AUTH_TOKEN="<chave do painel>"
+export ANTHROPIC_MODEL="<alias do painel>"
+claude
+```
+
+O painel mostra essas três linhas com o botão **Copiar variáveis**. As **tools são
+emuladas por protocolo de texto** (`browserapi.tools: "emulated"`): o modelo é
+instruído a responder `{"tool_calls":[…]}` e o programa interpreta; nome fora da
+lista nunca vira chamada. Parâmetros sem equivalente (`temperature`,
+`max_tokens`, `top_p`, `seed`…) são **aceitos e declarados** em
+`browserapi.ignored` e no cabeçalho `X-BrowserAPI-Ignored` — recusá-los era o que
+quebrava a CLI com “Parâmetro não suportado”. `usage` vem **zerado com nota**
+(o site não informa tokens); nenhuma contagem é inventada. Campo desconhecido de
+verdade ainda é 400 com o nome do campo.
 
 **Novo na 0.11.0:** o painel passou a mostrar **um caminho só, com o próximo
 passo e um botão**: *conectar → testar → ligar a API*. O nome da conexão é gerado

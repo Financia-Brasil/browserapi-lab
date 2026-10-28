@@ -1,4 +1,4 @@
-# API local experimental — 0.4.0
+# API local experimental — 0.12.0
 
 Esta é uma interface textual **parcialmente compatível** com Chat Completions,
 não uma substituição transparente da API OpenAI. Reutiliza a automação validada
@@ -53,30 +53,72 @@ curl -i http://127.0.0.1:8765/v1/models -H "Authorization: Bearer SUA_CHAVE"
 
 - `GET /v1/models`: aliases locais aprovados e `auto`. O alias não comprova o modelo
   remoto: a escolha continua sendo feita na interface do provedor.
-- `POST /v1/chat/completions`: somente `model`, `messages`, `stream`, `documents`
-  e `conversation_id`. Autenticação `Authorization: Bearer …` e JSON obrigatório.
-- `messages`: 1–2000 itens `{role, content}` textuais. Papéis aceitos: system,
-  developer, user, assistant; o último deve ser user não vazio. São serializados
-  em texto no chat: **não há hierarquia nativa de papéis nem garantia contra prompt injection**.
-- `documents`: extensão opcional, até 100 textos. `conversation_id`: extensão de
-  1–64 letras ASCII, números, `_` ou `-`, obrigatória se a retenção estiver habilitada.
-- Tools, imagens, Responses API, temperature, max_tokens, stop, response_format e
-  demais opções não são implementados e são rejeitados. Clientes que as enviam
-  automaticamente precisam permitir desativá-las.
-- Resposta JSON Chat Completions com `usage: null`, sem estimar tokens/custo.
-  `browserapi.context` informa redução/recuperação; `browserapi.attempts` informa
-  fonte, estado de envio e reutilização. SSE (`stream:true`) é **bufferizado**:
-  entrega a resposta completa ao terminar, não tokens ao vivo.
-- Até 16 MB por corpo HTTP, resposta até 1 milhão de caracteres, orçamento de
-  saída do planejador de 24 mil caracteres (não tokens). Entrada combinada do
-  planejador até 16 milhões de caracteres. Um worker, uma aba quente, sem fila
-  paralela de mensagens. Clientes concorrentes podem receber 409/429.
+- `GET /v1`: índice das rotas (exige a chave). A raiz `/` responde 404 explicando
+  qual rota usar — não é “API fora do ar”.
 
-Exemplo de corpo (a chave é configurada separadamente no cliente):
+### Rotas
 
-```json
-{"model":"meu-chat","messages":[{"role":"user","content":"Explique este documento"}],"documents":["Texto do documento…"],"stream":false}
+| Rota | Dialeto | Para quê |
+|---|---|---|
+| `POST /v1/messages` | Anthropic Messages | **Claude Code** e SDKs Anthropic |
+| `POST /v1/messages/count_tokens` | Anthropic | contagem de contexto (devolve 0 + explicação) |
+| `POST /v1/chat/completions` | OpenAI Chat Completions | SDKs OpenAI e a maioria dos clientes |
+| `POST /v1/responses` | OpenAI Responses | CLIs que usam a API nova da OpenAI |
+| `POST /v1/completions` | OpenAI legado | clientes antigos, só texto |
+| `GET /v1/models` | OpenAI | lista os aliases autorizados |
+| `POST /v1/embeddings`, áudio, imagens | — | **501**: a API local só faz conversa em texto |
+
+Autenticação: `Authorization: Bearer <chave>` **ou** `x-api-key: <chave>` (o que o
+SDK Anthropic manda). `anthropic-version` e `anthropic-beta` são aceitos e
+ignorados. Corpo `gzip` é aceito. Sem CORS para sites externos.
+
+### Usar com o Claude Code
+
+```bash
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8765"   # base SEM /v1
+export ANTHROPIC_AUTH_TOKEN="<chave do painel>"
+export ANTHROPIC_MODEL="meu-gemini"                  # alias do painel
+claude
 ```
+
+O SDK chama `/v1/messages` sozinho. O painel mostra essas três linhas com botão
+**Copiar variáveis** (a chave fica na variável de ambiente, não no texto copiado).
+
+### Parâmetros: aceitos e ignorados, nunca fingidos
+
+O chat do navegador não tem `temperature`, `max_tokens`, `seed`, `top_p`… Aceitar e
+**dizer que ignorou** é o que permite uma CLI funcionar; recusar quebrava a chamada
+com *“Parâmetro não suportado”*. Cada resposta traz `browserapi.ignored` com a lista
+e o cabeçalho `X-BrowserAPI-Ignored`. Campo desconhecido de verdade continua sendo
+erro 400, com o nome do campo.
+
+- `messages`/`system`: 1–2000 itens; `content` pode ser texto ou lista de blocos.
+  Blocos `tool_use` e `tool_result` viram texto no histórico, para o modelo não
+  perder o fio; imagens/áudio/PDF são **omitidos** com marcação.
+- `tools`: **emuladas por protocolo de texto** (ver abaixo). `browserapi.tools`
+  diz `emulated`.
+- `usage`: **zeros** e `usage.browserapi.note` explicando que o site não informa
+  tokens. Nenhuma contagem é inventada; `browserapi.context` traz caracteres.
+- Streaming (`stream: true`): SSE com a **sequência de eventos** do dialeto
+  (`message_start` … `message_stop` no Anthropic; `chat.completion.chunk` +
+  `[DONE]` no OpenAI). O texto chega de uma vez, porque a página entrega a resposta
+  inteira — é *bufferizado*, não token a token.
+
+### Ferramentas (tools): emuladas, com limites claros
+
+Sem função nativa, o programa instrui o modelo a responder
+`{"tool_calls":[{"name":"…","arguments":{…}}]}` e interpreta o que ele escreveu
+(`browserapi_lab/tool_calls.py`). Regras:
+
+1. o nome precisa estar na lista enviada pelo cliente — nome desconhecido **não**
+   vira chamada;
+2. os argumentos precisam ser objeto JSON (string com JSON é aceita);
+3. se o modelo responder texto comum, o cliente recebe texto comum e decide.
+
+Consequências honestas: a qualidade depende de o modelo seguir o protocolo; o
+`stop_reason` é `tool_use`/`tool_calls` **porque o formato foi reconhecido**, não
+porque houve chamada nativa. O agente executa a ferramenta — o programa nunca
+executa comando nenhum.
 
 ## Contexto grande e histórico: limites explícitos
 

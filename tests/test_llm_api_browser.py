@@ -58,7 +58,9 @@ class TestLLMAPIChromium(BrowserTestCase):
                     self.assertEqual(code,200,raw)
                     value=json.loads(raw)
                     self.assertTrue(value['choices'][0]['message']['content'])
-                    self.assertIsNone(value['usage'])
+                    # usage é zero + explicação: tokens não são inventados.
+                    self.assertEqual(value['usage']['total_tokens'],0)
+                    self.assertIn('não informa tokens',value['usage']['browserapi']['note'])
                     self.assertEqual(request('primeira pergunta','first')[1],raw)
                     code,sse=request('segunda pergunta','second',stream=True)
                     self.assertEqual(code,200,sse);self.assertIn('data: [DONE]',sse)
@@ -70,7 +72,8 @@ class TestLLMAPIChromium(BrowserTestCase):
                     destination=REPO_ROOT/'results/ci/llm-api-flow.json'
                     destination.parent.mkdir(parents=True,exist_ok=True)
                     destination.write_text(json.dumps({'scope':'synthetic_http_api_real_chromium','audit':audit,
-                        'idempotency_verified':True,'buffered_sse':True,'image_block_opt_in':True,'usage':None},indent=2)+'\n')
+                        'idempotency_verified':True,'buffered_sse':True,'image_block_opt_in':True,
+                        'usage':'zero_plus_note'},indent=2)+'\n')
             finally:
                 api.close();panel.close();server.stop()
 
@@ -115,3 +118,62 @@ class TestLLMAPIChromium(BrowserTestCase):
         destination.write_text(json.dumps({'scope':'synthetic_chromium_only','samples_per_mode':3,
             'limitations':'No real site, memory/CPU measurement, statistical speedup or 4GB/24x7 claim',
             'measurements':measurements},indent=2)+'\n')
+
+    def test_anthropic_messages_route_end_to_end_with_real_browser(self):
+        """Claude Code fala /v1/messages: cabeçalho x-api-key, stream e tools.
+
+        O modelo aqui é a fixture local; o que se prova é o caminho inteiro
+        (HTTP → worker → Chromium → resposta no dialeto Anthropic), sem conta real.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);fixture=root/'fixture';fixture.mkdir()
+            source=(REPO_ROOT/'fixtures/fake_chat.html').read_text()
+            before,after=source.rsplit('</body>',1)
+            (fixture/'fake_chat.html').write_text(before+'<script>FakeChat.config({mode:"normal",delay:1});</script></body>'+after)
+            server=FixtureServer(fixture).start()
+            store=ConfigStore(root/'config')
+            config=ChatConfig('saved',server.url(),provider='fixture',timeout_ms=8000,stability_ms=400,**HYPOTHESES['fixture'])
+            store.save(config);store.save_status('saved',ChatResult('success',True).receipt(config))
+            panel=Panel(store,root/'data');api=APIService(panel,port=0);panel.api_service=api
+            def call(path,body,headers):
+                connection=http.client.HTTPConnection('127.0.0.1',api.server.server_port,timeout=30)
+                values={'x-api-key':api.state['key'],'Content-Type':'application/json',
+                        'anthropic-version':'2023-06-01'}
+                values.update(headers)
+                connection.request('POST',path,json.dumps(body),values)
+                response=connection.getresponse();raw=response.read().decode()
+                code,mime=response.status,response.getheader('Content-Type');connection.close()
+                return code,raw,mime
+            tools=[{'name':'Bash','description':'executa um comando no terminal',
+                    'input_schema':{'type':'object','properties':{'command':{'type':'string'}}}}]
+            try:
+                api.configure({'enabled':True,'names':['saved'],'headless':True})
+                body={'model':'saved','max_tokens':512,'temperature':0.3,
+                      'system':'Você é um agente de terminal.',
+                      'messages':[{'role':'user','content':[{'type':'text','text':'diga olá'}]}],
+                      'tools':tools}
+                code,raw,mime=call('/v1/messages',body,{})
+                self.assertEqual(code,200,raw)
+                value=json.loads(raw)
+                self.assertEqual(value['type'],'message')
+                self.assertEqual(value['role'],'assistant')
+                self.assertEqual(value['stop_reason'],'end_turn')
+                self.assertTrue(value['content'][0]['text'])
+                self.assertIn('temperature',value['browserapi']['ignored'])
+                self.assertEqual(value['browserapi']['tools'],'emulated')
+                # Streaming: a sequência de eventos que o SDK Anthropic exige.
+                body['stream']=True;body['messages'][0]['content']='outra pergunta'
+                code,sse,mime=call('/v1/messages',body,{})
+                self.assertEqual(code,200,sse[:200])
+                self.assertEqual(mime,'text/event-stream')
+                for event in ('message_start','content_block_delta','message_stop'):
+                    self.assertIn(event,sse)
+                # O worker é único: nada foi enviado em paralelo.
+                self.assertEqual(panel.snapshot()['telemetry']['requests'],2)
+                destination=REPO_ROOT/'results/ci/anthropic-flow.json'
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                destination.write_text(json.dumps({'scope':'synthetic_http_api_real_chromium',
+                    'route':'/v1/messages','x_api_key':True,'stream_events':True,
+                    'tools':'emulated_prompt_only','ignored_params':value['browserapi']['ignored']},indent=2)+'\n')
+            finally:
+                api.close();panel.close();server.stop()

@@ -17,7 +17,9 @@ def words(text):
 
 
 def plan(messages, documents=None, *, retrieve=False, budget=24000):
-    if type(budget) is not int or not 2000<=budget<=32000:
+    # Teto elevado para CLI de agente: instruções + esquemas de ferramentas
+    # passam fácil de 32k caracteres. O limite continua sendo de CARACTERES.
+    if type(budget) is not int or not 2000<=budget<=200_000:
         raise ContextError('Orçamento inválido')
     if not isinstance(messages,list) or not 1<=len(messages)<=2000:
         raise ContextError('Informe de 1 a 2000 mensagens de texto')
