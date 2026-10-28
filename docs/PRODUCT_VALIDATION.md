@@ -369,13 +369,24 @@ O que está comprovado por teste local:
 - Texto renderizado como texto (HTML da página não executa); cartão responsivo e
   bloqueado quando o painel e o programa têm versões diferentes.
 
-Estado da evidência, sem inflar o que existe: **289 testes locais, 17 ignorados,
-OK** (`BROWSERAPI_SKIP_BROWSER=1`, sem Chromium neste ambiente) e 21 checagens de
-renderização em DOM emulado, com script ad-hoc fora do produto. Os dois testes de
-navegador novos cobrem a jornada completa (pergunta → resposta → copiar → limpar) e
-a injeção de HTML, mas **precisam ser executados pelo workflow `lab`** para gerar
-`results/ci/ui-redesign/conversation-*.png`; neste marco não houve captura em
-Chromium real nem leitura humana de usabilidade.
+Evidência (2026-10-28), sem inflar o que existe:
+
+```text
+lab 40609553859 (branch) e 40609557720 (PR): SUCCESS
+  Integração real com Chromium: Ran 394 tests in 213,268s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 35,958s — OK
+  Núcleo Python (sem navegador): aprovado
+Núcleo local deste ambiente, sem Chromium: 289 testes, 17 ignorados, OK
+```
+
+Capturas reais em `results/ci/ui-review-40609553859/ui-redesign/conversation-desktop.png`
+e `conversation-mobile.png`, inspecionadas junto com os turnos, botões e o rodapé de
+escopo; em 375px não há rolagem horizontal. A primeira execução
+([40608925770](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40608925770))
+falhou em um assert **do teste** (o fixture de contrato responde JSON, não Markdown);
+o produto já exibia o texto íntegro e o teste foi corrigido, sem alterar prazo,
+reenvio ou código de envio. Leitura humana de usabilidade e o desktop Linux Lite do
+usuário continuam pendentes.
 
 Limites que permanecem abertos: turno só aparece ao fim da resposta validada (sem
 eco parcial de streaming); chamadas da API local/agentes não entram nesta conversa;

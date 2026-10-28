@@ -68,8 +68,10 @@ reenviado.
 - [x] excluir conexão apaga o texto daquela conexão;
 - [x] orçamento, descarte em pares e corte com aviso testados sem navegador;
 - [x] troca de conexão, copiar e limpar verificados no DOM emulado;
-- [ ] captura em Chromium real da jornada nova (workflow de navegador);
-- [ ] uso assistido em Gemini/Arena reais.
+- [x] captura em Chromium real da jornada nova e do 375px — execução
+      [40609553859](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40609553859),
+      394 testes de navegador e 16 de revisão visual aprovados;
+- [ ] uso assistido em Gemini/Arena reais (depende de conta e permissão do usuário).
 
 ## Limites desta etapa
 
