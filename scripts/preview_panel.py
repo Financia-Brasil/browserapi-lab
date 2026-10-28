@@ -9,6 +9,10 @@ from browserapi_lab.config import ConfigStore
 import tempfile
 _temp=tempfile.TemporaryDirectory()
 panel=Panel(ConfigStore(Path(_temp.name)/'config'),Path(_temp.name)/'data')
+# API desligada, mas com endereço e exemplo visíveis: a prévia mostra o bloco
+# "copiar e colar" sem ligar nada nem abrir navegador.
+from browserapi_lab.llm_api import APIService,diagnose_endpoint
+panel.api_service=APIService(panel)
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def send(self,data,mime='application/json',status=200):
@@ -28,7 +32,13 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/panel.css':raw+=b'.preview-banner{position:sticky;top:0;z-index:10;margin:0;padding:8px 16px;background:#1b3029;color:#fff;text-align:center;font-size:12px}.sidebar{top:32px}'
             return self.send(raw,'text/html; charset=utf-8' if path=='/' else 'text/javascript' if path.endswith('.js') else 'text/css')
         return self.send({'error':'Não encontrado'},status=404)
-    def do_POST(self):return self.send({'error':'Esta é uma prévia visual. Abrir perfis e conectar só funciona no aplicativo instalado no seu computador.'},status=400)
+    def do_POST(self):
+        if self.path=='/api/url-check':
+            length=int(self.headers.get('Content-Length','0'))
+            try:payload=json.loads(self.rfile.read(length))
+            except Exception:return self.send({'error':'Formato inválido.'},status=400)
+            return self.send(diagnose_endpoint(str(payload.get('url') or ''),8765))
+        return self.send({'error':'Esta é uma prévia visual. Abrir perfis e conectar só funciona no aplicativo instalado no seu computador.'},status=400)
 if __name__=='__main__':
     try:ThreadingHTTPServer(('0.0.0.0',3000),Handler).serve_forever()
     finally:panel.close();_temp.cleanup()

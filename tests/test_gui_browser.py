@@ -221,6 +221,46 @@ class TestGraphicalJourney(BrowserTestCase):
         self.assertEqual(self.page.locator('#composer').input_value(),'')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
+    def test_quick_flow_points_to_the_next_step_and_the_address_checker(self):
+        """Caminho curto: o painel diz o próximo passo e o endereço errado é explicado.
+
+        Relato do uso real: o endereço foi colado como `127.0.0` (cURL 7), sem
+        rota (`Not found`) e só com a porta. Cada caso tem uma frase própria.
+        """
+        from browserapi_lab.chat import ChatResult
+        from browserapi_lab.llm_api import APIService
+        from playwright.sync_api import expect
+        config = self.seed()
+        # API presente mas desligada: o endereço completo pode ser mostrado.
+        self.panel.api_service = APIService(self.panel)
+        self.open_panel()
+        expect(self.page.locator('#quick-action')).to_have_text('Testar a conexão')
+        expect(self.page.locator('#quick-steps li[data-step="2"]')).to_have_attribute('data-state', 'current')
+        self.assertIn('saved', self.page.locator('#quick-note').inner_text())
+
+        # Teste observado → o próximo passo passa a ser ligar a API.
+        self.store.save_status('saved', ChatResult('success', True).receipt(config))
+        expect(self.page.locator('#quick-action')).to_have_text('Ligar API', timeout=10000)
+        expect(self.page.locator('#quick-steps li[data-step="3"]')).to_have_attribute('data-state', 'current')
+
+        # O botão do fluxo leva à aba certa e não envia mensagem nenhuma.
+        self.page.locator('#quick-action').click()
+        expect(self.page.locator('#view-api')).to_be_visible()
+        expect(self.page.locator('#api-endpoint')).to_have_value(
+            'http://127.0.0.1:8765/v1/chat/completions')
+        self.assertIn('BROWSERAPI_KEY', self.page.locator('#api-snippet').inner_text())
+        self.assertIn('/v1/chat/completions', self.page.locator('#api-snippet').inner_text())
+
+        # Três erros com a mesma cara, três frases diferentes.
+        for text, expected in [('http://127.0.0', 'incompleto'),
+                               ('http://127.0.0.1:8765', 'Not found'),
+                               ('http://127.0.0.1:8765/v1/chat/completions', 'correto')]:
+            self.page.fill('#url-check-input', text)
+            self.page.locator('#url-check').click()
+            expect(self.page.locator('#url-check-result')).to_contain_text(expected)
+        self.assertEqual(self.store.status('saved')['status'], 'success')
+        self.assertFalse(self.panel.api_service.snapshot()['enabled'])
+
     def test_managed_update_reloads_interface_without_reinstall_or_new_token(self):
         class Managed:
             def snapshot(self):
@@ -529,7 +569,11 @@ class TestGraphicalJourney(BrowserTestCase):
 
     def test_redesign_profile_opening_navigation_and_responsive_evidence(self):
         import datetime
+        from browserapi_lab.llm_api import APIService
         from playwright.sync_api import expect
+        # API desligada, mas com endereço e exemplo: a evidência visual da aba
+        # API mostra o bloco "copiar e colar" sem ligar nada.
+        self.panel.api_service = APIService(self.panel)
         profile={'id':'chrome:Profile 1','label':'Pessoal','installation':'chrome',
                  'directory':'Profile 1','connectable':True,'account_verified':False,
                  'openable':True,'endpoint_available':False}
@@ -560,6 +604,13 @@ class TestGraphicalJourney(BrowserTestCase):
             self.page.locator('[data-view=api]').click()
             expect(self.page.locator('#api-card')).to_be_visible()
             self.assertTrue(self.page.locator('#api-headless').is_hidden())
+            expect(self.page.locator('#api-endpoint')).to_have_value(
+                'http://127.0.0.1:8765/v1/chat/completions')
+            self.page.screenshot(path=str(evidence/'api.png'), full_page=True)
+            self.page.set_viewport_size({'width':375,'height':812})
+            self.page.screenshot(path=str(evidence/'api-mobile.png'), full_page=True)
+            self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+            self.page.set_viewport_size({'width':1440,'height':1040})
             with self.panel.lock:
                 self.panel.tell('Permissão do Chrome necessária. Conecte novamente para configurar.')
                 self.panel.phase='error'

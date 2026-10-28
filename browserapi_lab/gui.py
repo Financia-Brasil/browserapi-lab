@@ -613,6 +613,16 @@ class Handler(BaseHTTPRequestHandler):
                                            'message': 'A API só existe dentro do aplicativo instalado. '
                                                       'Abra-o pelo menu e autorize a API.'})
                 return self.send(200, self.server.panel.api_service.probe())
+            elif self.path == '/api/url-check':
+                # Conferir um endereço colado é só análise de texto: não abre
+                # porta, não usa a chave e não envia mensagem.
+                from .llm_api import diagnose_endpoint
+                text = payload.get('url')
+                if not isinstance(text, str) or len(text) > 300:
+                    raise ValueError()
+                service = self.server.panel.api_service
+                port = (service.snapshot().get('port') if service else None) or 8765
+                return self.send(200, diagnose_endpoint(text, port))
             elif self.path == '/api/updates':
                 updater = self.server.panel.updater
                 if updater is None:

@@ -13,6 +13,15 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
+**Novo na 0.11.0:** o painel passou a mostrar **um caminho só, com o próximo
+passo e um botão**: *conectar → testar → ligar a API*. O nome da conexão é gerado
+sozinho (sem digitar nem resolver “nome já salvo”). Na aba **API local** há o
+**endereço completo** (`…/v1/chat/completions`) e um **exemplo de curl** prontos
+para copiar, e um campo que **explica o erro** de endereço: IP incompleto
+(`127.0.0`), porta errada e rota faltando (`Not found`) têm frases diferentes.
+O recibo ganhou “Testar de novo”. Nada disso envia mensagem sem a sua
+autorização.
+
 **Correção na 0.10.1:** o painel do apontamento passou a **não interceptar o
 clique** (o corpo deixa o ponteiro atravessar; só os botões e a faixa de arraste
 respondem; arrasta-se pela alça `⠿`) — antes, de tamanho fixo, ele cobria o

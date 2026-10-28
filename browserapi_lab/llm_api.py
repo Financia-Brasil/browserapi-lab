@@ -25,6 +25,80 @@ from .setup import status
 from .history import History
 
 
+def diagnose_endpoint(text, port=8765):
+    """Explica o erro de quem colou um endereço errado, em uma frase acionável.
+
+    Motivo (relato do uso real): três erros diferentes com a mesma cara — cURL 7
+    por ``127.0.0`` incompleto, ``Not found`` por faltar ``/v1/chat/completions``
+    e o endereço base ``/v1`` usado como se fosse o de chat. A pessoa não tem
+    como adivinhar qual é qual; a frase diz o que fazer.
+
+    Só analisa o texto: não abre porta, não usa a chave e não envia nada.
+    """
+    raw = str(text or '').strip().strip('"').strip("'")
+    if not raw:
+        return {'ok': False, 'message': 'Cole o endereço que o seu agente está usando para eu conferir.',
+                'normalized': ''}
+    if '://' not in raw:
+        raw = 'http://' + raw
+    from urllib.parse import urlsplit
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return {'ok': False, 'message': 'Isso não parece um endereço. Exemplo: '
+                f'http://127.0.0.1:{port}/v1/chat/completions', 'normalized': raw}
+    host = (parts.hostname or '').lower()
+    path = parts.path or ''
+    # Host truncado: o caso "Failed to connect to 127.0.0" do relato.
+    if re.fullmatch(r'127(:|\.0){1,3}', host) or host in ('127', '127.0', '127.0.0'):
+        return {'ok': False, 'normalized': raw, 'message':
+                'O IP está incompleto. Use 127.0.0.1 (com o 1 no final) — '
+                '"Failed to connect to 127.0.0" é exatamente isso.'}
+    if host not in ('127.0.0.1', 'localhost', '::1'):
+        return {'ok': False, 'normalized': raw, 'message':
+                f'A API só atende este computador. Use 127.0.0.1, não {host or "um nome externo"}.'}
+    try:
+        given_port = parts.port
+    except ValueError:
+        return {'ok': False, 'normalized': raw, 'message':
+                f'A porta em {raw} não é um número válido. Use :{port}.'}
+    if given_port is None:
+        return {'ok': False, 'normalized': raw, 'message':
+                f'Falta a porta. Use http://127.0.0.1:{port}/v1/chat/completions.'}
+    if given_port != int(port):
+        return {'ok': False, 'normalized': raw, 'message':
+                f'O serviço escuta na porta {port}, não em {given_port}. '
+                f'Use http://127.0.0.1:{port}/v1/chat/completions.'}
+    route = path.rstrip('/') or ''
+    if route in ('', '/v1'):
+        return {'ok': False, 'normalized': raw, 'message':
+                'Falta a rota de conversa. Sem ela a resposta é "Not found" (404): '
+                f'use http://127.0.0.1:{port}/v1/chat/completions'}
+    if route == '/v1/models':
+        return {'ok': True, 'normalized': raw, 'message':
+                'Este endereço lista os modelos. Para conversar, troque /v1/models por /v1/chat/completions.'}
+    if route == '/v1/chat/completions':
+        return {'ok': True, 'normalized': raw, 'message':
+                'Endereço completo e correto. Use POST com Authorization: Bearer <chave local>.'}
+    return {'ok': False, 'normalized': raw, 'message':
+            f'A rota {route} não existe nesta API; por isso vem "Not found". '
+            f'Use http://127.0.0.1:{port}/v1/chat/completions.'}
+
+
+def endpoint_example(port=8765, model='meu-gemini'):
+    """Exemplo copiável sem a chave em texto claro (print/tela compartilhada).
+
+    A chave fica numa variável de ambiente: quem copia o exemplo não cola a
+    chave em histórico de shell nem em captura de tela.
+    """
+    base = f'http://127.0.0.1:{port}'
+    return ('export BROWSERAPI_KEY="<cole aqui a chave local>"\n'
+            f'curl {base}/v1/chat/completions \\\n'
+            '  -H "Authorization: Bearer $BROWSERAPI_KEY" \\\n'
+            '  -H "Content-Type: application/json" \\\n'
+            f'  -d \'{{"model":"{model}","messages":[{{"role":"user","content":"Ola"}}]}}\'')
+
+
 class APIError(ValueError):
     def __init__(self,message,code='invalid_request',http=400):
         super().__init__(message)
@@ -181,6 +255,10 @@ class APIService:
             return {'available':True,'enabled':self.server is not None,'running':self.server is not None,
                     'port':self.server.server_port if self.server else self.port,'key':self.state['key'],
                     'url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1',
+                    'chat_url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1/chat/completions',
+                    'models_url':f'http://127.0.0.1:{self.server.server_port if self.server else self.port}/v1/models',
+                    'example':endpoint_example(self.server.server_port if self.server else self.port,
+                                               (self.state.get('names') or ['meu-gemini'])[0]),
                     'names':self.state.get('names',[]),'headless':self.state.get('headless',False),
                     'lightweight':self.state.get('lightweight',False),'retrieval':self.state.get('retrieval',False),
                     'fallback':self.state.get('fallback',False),'remember':self.state.get('remember',False),'personal_consent':self.state.get('personal_consent',False),'message':self.notice}

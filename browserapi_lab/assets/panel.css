@@ -63,3 +63,47 @@
 .step-dots li[data-state=current]{background:var(--accent)}
 @media(max-width:640px){.step-dots li{width:16px}}
 #updates-card .updates-actions{display:flex;align-items:center;gap:8px;margin:8px 0 0;flex-wrap:wrap}#updates-card .updates-actions button{font-size:12px;padding:8px 16px;min-height:40px}.consent-block{margin:24px 0 0;padding:16px;border:1px solid var(--line);border-radius:6px;background:#f6f9f7}.consent-block label{display:flex;align-items:flex-start;gap:8px;font-weight:450;margin:0}.consent-block small{margin-top:8px}.consent-block[data-alert="true"]{border-color:#d6a9a9;background:#fff1f1}.consent-alert{border:1px solid #d6a9a9;background:#fff1f1;color:#8b2929;padding:8px 16px;border-radius:6px;font-size:13px;margin:16px 0 0}
+
+/* 0.11 — caminho mais curto: um passo visível por vez, um botão por passo.
+   Antes, quem chegava precisava descobrir sozinho que faltava testar e depois
+   autorizar a API; agora o próximo passo e o botão estão no topo. */
+.quick-flow{border:1px solid var(--line);border-left:3px solid var(--accent);background:#fff;
+  border-radius:8px;padding:16px 24px;margin:0 0 24px}
+.quick-steps{display:flex;flex-wrap:wrap;gap:8px 24px;list-style:none;margin:0 0 16px;padding:0;
+  font-size:12px;color:var(--muted)}
+.quick-steps li{display:flex;align-items:center;gap:8px}
+.quick-steps span{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:50%;border:1px solid #cdd9d2;background:#fff;font-size:11px;font-weight:650;
+  font-variant-numeric:tabular-nums;color:var(--muted)}
+.quick-steps b{font-weight:550}
+.quick-steps li[data-state=done] span{background:var(--tint);border-color:#b7d3c4;color:var(--accent)}
+.quick-steps li[data-state=current] span{background:var(--accent);border-color:var(--accent);color:#fff}
+.quick-steps li[data-state=current] b{color:var(--ink);font-weight:650}
+.quick-body{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.quick-body h2{font-size:17px;margin:0}
+.quick-body p{font-size:13px;margin:8px 0 0;max-width:60ch}
+.quick-body button{white-space:nowrap}
+#quick-note{margin:16px 0 0;font-size:12px}
+#quick-note:empty{margin:0}
+.api-toggle-row{margin:16px 0 24px}
+.api-toggle-row p{margin:0}
+.agent-quickstart{border:1px solid var(--line);border-radius:8px;padding:16px 24px 24px;background:#fbfcfb;
+  margin:0 0 24px;min-width:0}
+.agent-quickstart h3{margin:0 0 8px}
+.agent-quickstart label{margin-top:16px}
+.inline-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.inline-actions input{flex:1 1 260px;font-family:'JetBrains Mono',monospace;font-size:12px}
+.inline-actions button{white-space:nowrap}
+#api-endpoint,#api-url{font-family:'JetBrains Mono',monospace;font-size:12px}
+.snippet{background:#f2f6f4;border:1px solid var(--line);border-radius:6px;padding:16px;margin:8px 0;
+  font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;
+  overflow-wrap:anywhere;color:var(--ink);max-height:220px;overflow:auto}
+.url-check{border-top:1px solid var(--line);margin-top:16px;padding-top:8px}
+.url-check p[data-error=true]{color:#8b2929;background:#fff1f1;padding:8px;border-radius:6px}
+.url-check p[data-error=false]:not(:empty){color:#345e47;background:var(--tint);padding:8px;border-radius:6px}
+.api-base{margin-top:24px;border-top:1px solid var(--line);padding-top:16px}
+.api-base summary{font-size:12px;color:var(--muted)}
+.api-base input{font-family:'JetBrains Mono',monospace;font-size:12px;margin:8px 0}
+.receipt-actions{margin-top:16px}
+@media(max-width:640px){.quick-flow{padding:16px}.quick-body{gap:16px}.quick-body button{width:100%}
+  .agent-quickstart{padding:16px}.inline-actions input{flex-basis:100%}}
