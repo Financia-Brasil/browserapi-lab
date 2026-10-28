@@ -85,6 +85,12 @@ Cada invocação abre/fecha o navegador, reutilizando o perfil em disco. **Não 
 serviço de agentes com navegador permanentemente quente ou uma API 24/7.** O
 benchmark de aba quente mede outro cenário, sem esse custo de abrir/fechar.
 
+No painel gráfico (0.7.0), a mesma mensagem aparece no cartão **Conversa** com
+**Copiar última resposta** e **Limpar painel**. Esse texto vive só na memória do
+processo: não é gravado, não entra em recibo/telemetria e não é histórico do site.
+Limpar o painel não apaga a conversa no provedor. Ver
+[UX_070_SPEC.md](design/UX_070_SPEC.md).
+
 ## Corrigir uma configuração
 
 ```bash

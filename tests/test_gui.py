@@ -88,6 +88,26 @@ class TestPanel(unittest.TestCase):
         self.assertIn('font-weight:450',css)
         self.assertIn('prefers-reduced-motion',css)
 
+    def test_conversation_ui_contract_renders_text_only(self):
+        from browserapi_lab.gui import ASSETS
+        html = (ASSETS/'panel.html').read_text()
+        js = (ASSETS/'panel.js').read_text()
+        css = (ASSETS/'panel.css').read_text()
+        for identifier in ('conversation-card','conversation','conversation-empty','conversation-copy',
+                           'conversation-clear','conversation-scope','conversation-feedback'):
+            self.assertIn(f'id="{identifier}"', html)
+        self.assertIn('Limpar aqui não apaga a conversa do site', html)
+        self.assertIn('somente esta sessão', html.lower())
+        # Conteúdo da página entra como texto: sem innerHTML em nenhum lugar.
+        for unsafe in ('innerHTML','insertAdjacentHTML','outerHTML','document.write'):
+            self.assertNotIn(unsafe, js)
+        self.assertIn('body.textContent = message.text', js)
+        self.assertIn("api('conversation?name=' + encodeURIComponent(requested))", js)
+        self.assertIn("api('conversation/clear',{name:selected})", js)
+        self.assertIn('incompatible()', js.split('function conversationControls()')[1].split('}')[0])
+        self.assertIn('.conversation-card{grid-column:2}', css)
+        self.assertIn('@media(max-width:640px){.conversation-card{grid-column:auto}}', css)
+
     def test_auto_update_setting_is_authenticated_and_updating_blocks_tasks(self):
         from browserapi_lab.updates import UpdateStore, Updater
         store = UpdateStore(Path(self.tmp.name)/'update-data')
@@ -299,6 +319,77 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.store.names(),['keep-me'])
         self.assertIsNone(self.store.status('remove-me'))
 
+
+    def test_conversation_endpoint_is_authenticated_scoped_and_private(self):
+        self.store.save(ChatConfig('um','https://example.com'))
+        self.store.save(ChatConfig('dois','https://example.com'))
+        self.panel.transcript.add_exchange('um','pergunta reservada','resposta reservada',total_ms=99)
+        self.panel.transcript.add_exchange('dois','outra pergunta','outra resposta')
+        for path in ('/api/conversation?name=um','/api/conversation?name=../um'):
+            self.assertEqual(self.request(path,token=False)[0],403)
+            self.assertEqual(self.request(path,origin='https://evil.example')[0],403)
+        self.assertEqual(self.request('/api/conversation')[0],400)
+        self.assertEqual(self.request('/api/conversation?name=../um')[0],400)
+        self.assertEqual(self.request('/api/conversation?name=nao-existe')[0],404)
+        self.assertEqual(self.request('/api/conversation?name=um&name=dois')[0],400)
+        code, headers, body = self.request('/api/conversation?name=um')
+        self.assertEqual(code,200)
+        self.assertEqual(headers['Cache-Control'],'no-store')
+        view = json.loads(body)
+        self.assertEqual([item['text'] for item in view['messages']],['pergunta reservada','resposta reservada'])
+        self.assertEqual(view['revision'],1)
+        # A rota de estado informa apenas o resumo, nunca o texto da conversa.
+        state = json.loads(self.request()[2])
+        summary = {chat['name']:chat.get('conversation') for chat in state['chats']}
+        self.assertEqual(summary['um']['turns'],1)
+        self.assertEqual(summary['um']['revision'],1)
+        self.assertNotIn('pergunta reservada',json.dumps(state))
+        self.assertNotIn('resposta reservada',json.dumps(state))
+
+    def test_conversation_clear_needs_auth_idle_and_keeps_other_chats(self):
+        self.store.save(ChatConfig('um','https://example.com'))
+        self.store.save(ChatConfig('dois','https://example.com'))
+        self.panel.transcript.add_exchange('um','q1','a1')
+        self.panel.transcript.add_exchange('dois','q2','a2')
+        body={'name':'um'}
+        self.assertEqual(self.request('/api/conversation/clear',method='POST',token=False,body=body)[0],403)
+        with self.panel.lock:
+            self.panel.phase='waiting'
+        self.assertEqual(self.request('/api/conversation/clear',method='POST',body=body)[0],400)
+        with self.panel.lock:
+            self.panel.phase='idle'
+        self.assertEqual(self.request('/api/conversation/clear',method='POST',body={'name':'../um'})[0],400)
+        self.assertEqual(self.request('/api/conversation/clear',method='POST',body=body)[0],200)
+        self.assertEqual(json.loads(self.request('/api/conversation?name=um')[2])['messages'],[])
+        self.assertEqual(len(json.loads(self.request('/api/conversation?name=dois')[2])['messages']),2)
+
+    def test_deleting_a_connection_forgets_the_text_shown_only_for_it(self):
+        self.store.save(ChatConfig('remover','https://example.com'))
+        self.store.save(ChatConfig('manter','https://example.com'))
+        self.panel.transcript.add_exchange('remover','pergunta privada','resposta privada')
+        self.panel.transcript.add_exchange('manter','pergunta mantida','resposta mantida')
+        self.assertEqual(self.request('/api/chat/delete',method='POST',body={'name':'remover'})[0],200)
+        self.assertNotIn('remover',self.panel.transcript.entries)
+        self.assertIn('manter',self.panel.transcript.entries)
+        self.assertEqual(self.request('/api/conversation?name=remover')[0],404)
+        self.assertEqual(self.request('/api/conversation?name=manter')[0],200)
+
+    def test_ask_records_validated_answer_in_the_panel_and_not_in_the_log(self):
+        self.store.save(ChatConfig('chat','https://example.com'))
+        def fake_check(store, name, **kwargs):
+            self.assertIs(kwargs['show_answer'], False)
+            kwargs['record'](name,'minha pergunta','resposta mostrada na conversa',{'timings':{'total_ms':321.4}})
+            return {'status':'success','compatible_in_this_run':True,'timings':{'total_ms':321.4}}
+        with patch('browserapi_lab.gui.check',side_effect=fake_check):
+            self.panel.submit({'operation':'ask','name':'chat','message':'minha pergunta'})
+            until(lambda:self.panel.snapshot()['phase']=='done')
+        view = json.loads(self.request('/api/conversation?name=chat')[2])
+        self.assertEqual([item['text'] for item in view['messages']],
+                         ['minha pergunta','resposta mostrada na conversa'])
+        self.assertEqual(view['messages'][1]['total_ms'],321.4)
+        self.assertNotIn('resposta mostrada na conversa','\n'.join(self.panel.snapshot()['messages']))
+        self.assertNotIn('resposta mostrada na conversa',json.dumps(self.panel.snapshot()['telemetry']))
+        self.assertNotIn('resposta mostrada na conversa',json.dumps(self.store.status('chat') or {}))
 
 @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb não disponível')
 class TestUbuntuPackage(unittest.TestCase):

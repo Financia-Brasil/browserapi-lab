@@ -19,12 +19,13 @@ import venv
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS
+from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS, safe_name
 from .session import ProfileBusyError, ProfileLock
 from .setup import configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
 from .version import APP_VERSION
 from .telemetry import Telemetry
+from .transcript import Transcript
 
 ASSETS = Path(__file__).parent / 'assets'
 DATA_DIR = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'browserapi-lab'
@@ -119,6 +120,7 @@ class Panel:
         self.receipt = None
         self.messages = deque(maxlen=60)
         self.telemetry = Telemetry()
+        self.transcript = Transcript()
         self.updater = None
         self.closed = False
         self.api_service = None
@@ -129,6 +131,16 @@ class Panel:
     def tell(self, text):
         with self.lock:
             self.messages.append(str(text))
+
+    def record_answer(self, name, question, answer, receipt):
+        """Guarda o turno validado na memória do painel; nunca no recibo.
+
+        Só é chamado depois de uma resposta nova confirmada. Falhar aqui não
+        pode transformar um envio bem-sucedido em erro da tarefa.
+        """
+        timings = receipt.get('timings') if isinstance(receipt, dict) else None
+        total = timings.get('total_ms') if isinstance(timings, dict) else None
+        self.transcript.add_exchange(name, question, answer, total_ms=total)
 
     def ask(self, text):
         with self.condition:
@@ -240,9 +252,11 @@ class Panel:
                     previous = status(self.store, name)
                     chats.append({'name': name, 'provider': config.provider, 'browser': config.browser, 'session_mode': config.session_mode,
                                   'compatible': previous.get('compatible_in_this_run', False),
-                                  'checked_at': previous.get('checked_at'), 'personal_installation':config.personal_installation,'personal_profile':config.personal_profile})
+                                  'checked_at': previous.get('checked_at'), 'personal_installation':config.personal_installation,'personal_profile':config.personal_profile,
+                                  'conversation': self.transcript.summary(name)})
                 except (OSError, ValueError, TypeError):
-                    chats.append({'name': name, 'compatible': False, 'invalid': True})
+                    chats.append({'name': name, 'compatible': False, 'invalid': True,
+                                  'conversation': {'turns': 0, 'revision': 0, 'characters': 0, 'dropped': 0}})
             return {'version': APP_VERSION, 'phase': self.phase, 'prompt': self.prompt, 'messages': list(self.messages),
                     'receipt': self.receipt, 'chats': chats, 'prepared': playwright_ready(), 'telemetry': self.telemetry.snapshot(),
                     'api_service': self.api_service.snapshot() if self.api_service else {'enabled':False,'available':False},
@@ -308,7 +322,9 @@ class Panel:
                     self.receipt = configure(self.store, value[0], repairing=True,
                                              picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
                 else:
-                    self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None, **common)
+                    # O texto fica na conversa do painel, não duplicado no log.
+                    self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None,
+                                         record=self.record_answer, show_answer=False, **common)
                 end_phase = 'done'
             except (EOFError, KeyboardInterrupt):
                 self.tell('Operação interrompida. Isso não desfaz mensagens que já foram enviadas.')
@@ -412,6 +428,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200,{'profiles':connection_inventory()})
         if self.path == '/api/state':
             return self.send(200, self.server.panel.snapshot())
+        if self.path == '/api/conversation' or self.path.startswith('/api/conversation?'):
+            from urllib.parse import parse_qs, urlsplit
+            names = parse_qs(urlsplit(self.path).query).get('name', [])
+            if len(names) != 1:
+                return self.send(400, {'error': 'Informe uma conexão para ver a conversa.'})
+            panel = self.server.panel
+            try:
+                safe_name(names[0])
+            except (ValueError, TypeError):
+                return self.send(400, {'error': 'Nome de conexão inválido.'})
+            if names[0] not in panel.store.names():
+                return self.send(404, {'error': 'Conexão não encontrada. Atualize o painel.'})
+            return self.send(200, panel.transcript.snapshot(names[0]))
         return self.send(404, {'error': 'Página não encontrada.'})
 
     def do_POST(self):
@@ -435,6 +464,20 @@ class Handler(BaseHTTPRequestHandler):
                         raise PanelInputError('Termine a operação e desative a API antes de excluir a conexão.')
                     try:
                         panel.store.delete(payload.get('name'))
+                    except (ValueError, TypeError) as error:
+                        raise PanelInputError(str(error)) from None
+                    # A conversa exibida pertence ao cadastro removido.
+                    try:
+                        panel.transcript.clear(payload.get('name'))
+                    except (ValueError, TypeError):
+                        pass
+            elif self.path == '/api/conversation/clear':
+                panel = self.server.panel
+                with panel.lock:
+                    if panel.closed or panel.phase in ('running','waiting','updating') or (panel.api_service and panel.api_service.busy()):
+                        raise PanelInputError('Termine a operação antes de limpar a conversa do painel.')
+                    try:
+                        panel.transcript.clear(payload.get('name'))
                     except (ValueError, TypeError) as error:
                         raise PanelInputError(str(error)) from None
             elif self.path == '/api/profile':

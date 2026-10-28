@@ -346,3 +346,38 @@ sem navegador. Corpus sintético persistido >6M caracteres coberto por teste de
 recuperação; não equivale a medir 1M tokens. Nenhuma conta real/laptop do usuário
 foi usada. Permanecem sem prova: Chrome pessoal nativo nesse desktop, sites
 autenticados, vantagem das otimizações, 4 GB/24x7 e Fetch/XHR direto.
+
+
+## Marco 0.7.0 — a resposta na conversa do painel (2026-10-28)
+
+Até a 0.6.1, a resposta de **Conversar** só aparecia em “Ver detalhes da operação”.
+A 0.7.0 acrescenta o cartão **Conversa** com turnos, data/hora, tempo da troca,
+**Copiar última resposta** e **Limpar painel**. Contrato e limites:
+[design/UX_070_SPEC.md](design/UX_070_SPEC.md); revisão do que foi inspecionado:
+[design/UX_070_REVIEW.md](design/UX_070_REVIEW.md).
+
+O que está comprovado por teste local:
+
+- Turno só é exibido após mensagem enviada e resposta **nova validada**; recusa,
+  timeout, envio ambíguo, resposta antiga e verificação automática não entram.
+- Falha ao exibir não altera o recibo nem provoca reenvio; recibo, telemetria e
+  `/api/state` continuam sem pergunta e sem resposta.
+- Orçamento de 40 mensagens/120 mil caracteres por conexão, descarte em pares,
+  preservação do turno mais novo e corte com aviso.
+- Rotas de leitura/limpeza exigem token, Host/Origin locais e ociosidade; excluir
+  a conexão apaga o texto exibido daquele cadastro.
+- Texto renderizado como texto (HTML da página não executa); cartão responsivo e
+  bloqueado quando o painel e o programa têm versões diferentes.
+
+Estado da evidência, sem inflar o que existe: **289 testes locais, 17 ignorados,
+OK** (`BROWSERAPI_SKIP_BROWSER=1`, sem Chromium neste ambiente) e 21 checagens de
+renderização em DOM emulado, com script ad-hoc fora do produto. Os dois testes de
+navegador novos cobrem a jornada completa (pergunta → resposta → copiar → limpar) e
+a injeção de HTML, mas **precisam ser executados pelo workflow `lab`** para gerar
+`results/ci/ui-redesign/conversation-*.png`; neste marco não houve captura em
+Chromium real nem leitura humana de usabilidade.
+
+Limites que permanecem abertos: turno só aparece ao fim da resposta validada (sem
+eco parcial de streaming); chamadas da API local/agentes não entram nesta conversa;
+nada é persistido; Gemini/Arena autenticados e Chrome pessoal continuam **não
+homologados**. O Marco 0.6.1 e as pendências externas anteriores não são afetados.

@@ -304,3 +304,25 @@ sem novo teste invalida Online anterior. Plano separado em NEXT_ARCHITECTURE.md;
 RAG pesquisável de 1M não implica contexto nativo de 1M. API e fallback exigem
 contratos e confirmação de envio antes de automatizar decisões potencialmente
 duplicantes. Validação deste marco em PRODUCT_VALIDATION.md.
+
+
+## ADR-020 — Resposta validada é exibida na memória do painel, nunca no recibo
+
+O cartão **Conversa** da 0.7.0 existe porque a resposta só aparecia no log técnico
+recolhido. A exibição não pode reabrir os caminhos que os marcos anteriores
+fecharam: conteúdo em recibo, telemetria de texto, histórico não solicitado ou
+aceitação de resposta antiga.
+
+Decisão: `transcript.Transcript` guarda pares pergunta/resposta por conexão **em
+memória do processo**, com orçamento e descarte em pares. `setup.check` recebe um
+`record` opcional chamado apenas quando houve mensagem enviada com resposta nova
+validada; verificação automática sem mensagem da pessoa nunca entra. Falha ao
+exibir não converte envio bem-sucedido em erro nem dispara reenvio. O estado do
+painel carrega só contagem/revisão; o texto é buscado por rota autenticada e
+limitada à conexão pedida. Renderização usa `textContent`, então HTML da página
+não é interpretado.
+
+Não é histórico do site, não é o RAG da API local e não é persistente: reiniciar
+apaga; excluir a conexão apaga aquele texto. A API de agentes continua com seu
+próprio registro e histórico opt-in, fora desta conversa. Sem autenticação real de
+Gemini/Arena, isto é exibição validada em fixture e DOM emulado, não homologação.

@@ -13,3 +13,16 @@
 
 /* Recovery is secondary to Connect, with breathing room on narrow screens. */
 .connection-options{margin-top:16px}
+
+/* 0.7 — conversa desta execução: pergunta e resposta capturada, só em memória. */
+.conversation-card{grid-column:2}
+.conversation{list-style:none;padding:0;margin:0;display:grid;gap:16px;max-height:360px;overflow-y:auto}
+.conversation .turn{border:1px solid var(--line);border-radius:6px;padding:16px;background:#fff;min-width:0}
+.conversation .turn.user{background:#f4f8f5}
+.conversation .turn-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.conversation .turn-head strong{font-size:13px;font-weight:600}
+.conversation .turn-head small{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.conversation .turn-body{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);font-size:14px;line-height:1.5}
+.empty-conversation{font-size:13px;margin:8px 0 0}
+.conversation-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}
+@media(max-width:640px){.conversation-card{grid-column:auto}}

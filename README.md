@@ -13,7 +13,10 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
-**Novo na 0.6.1:** o perfil escolhido é o perfil usado. Veja [o que mudou e os limites](docs/PROFILE_BINDING_061.md).
+**Novo na 0.7.0:** a resposta capturada agora aparece na **conversa do painel**, com
+“Copiar última resposta” e “Limpar painel”. Veja [o que mudou e os limites](docs/design/UX_070_SPEC.md).
+O perfil escolhido continua sendo o perfil usado (0.6.1, em
+[PROFILE_BINDING_061.md](docs/PROFILE_BINDING_061.md)).
 
 ## Janela para Ubuntu (experimental)
 
@@ -43,6 +46,17 @@ browserapi-lab status meu-gemini
 browserapi-lab repair meu-gemini
 browserapi-lab ask meu-gemini
 ```
+
+## A resposta na tela (0.7.0)
+
+Depois de **Conversar**, o turno aparece no cartão **Conversa**: “Você enviou” e
+“Resposta capturada da página”, com data/hora e o tempo da troca. **Copiar última
+resposta** copia o texto completo; **Limpar painel** apaga só a exibição local —
+a conversa do site não é apagada e continua com o contexto. O texto fica apenas na
+memória do programa (reiniciar apaga), nunca no recibo ou na telemetria, e é
+renderizado como texto, sem interpretar HTML da página. Chamadas feitas pela API
+local não entram nessa conversa. Limites: [UX_070_SPEC.md](docs/design/UX_070_SPEC.md)
+e [revisão 0.7](docs/design/UX_070_REVIEW.md).
 
 Leia o [guia de configuração e reparo](docs/CHAT_GUIDE.md) e o
 [estado de validação das metas](docs/PRODUCT_VALIDATION.md). Compatibilidade só é
@@ -152,7 +166,9 @@ agentes 24/7 ou automação genérica de sites reais.** Ainda é necessário:
 5. Closed Shadow DOM, iframes cross-origin e CSS externo ocultando conteúdo têm
    limitações: a fixture não demonstra cobertura universal.
 
-Não há FastAPI, SSE, fila, `/v1/models` ou `/v1/chat/completions` neste laboratório.
+A API local da 0.4.0 é um subconjunto textual, opt-in e **não** um serviço 24/7:
+não há FastAPI, fila de mensagens nem paridade com a API OpenAI. Rotas, limites e
+alertas estão em [docs/LOCAL_API.md](docs/LOCAL_API.md).
 
 ## Dashboard e próxima arquitetura
 

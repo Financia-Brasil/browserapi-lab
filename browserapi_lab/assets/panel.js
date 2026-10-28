@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.6.1';
+const PANEL_VERSION = '0.7.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -9,6 +9,7 @@ let state = null;
 let selected = null;
 let chatSignature = '';
 let pending = false;
+let conversation = {name: null, revision: -1, data: null};
 function error(text) { $('error').textContent = text; $('error').hidden = !text; }
 async function api(path, body) {
   const response = await fetch('/api/' + path, {method: body === undefined ? 'GET' : 'POST',
@@ -28,6 +29,78 @@ function controls() {
   profileControls();
   $('cancel').disabled = !busy();
   for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy() || incompatible();
+  conversationControls();
+}
+function conversationSummary() {
+  return (state?.chats || []).find(chat => chat.name === selected)?.conversation || null;
+}
+function conversationData() {
+  return conversation.name === selected ? conversation.data : null;
+}
+function conversationControls() {
+  const messages = conversationData()?.messages || [];
+  const blocked = busy() || incompatible();
+  $('conversation-copy').disabled = blocked || !messages.some(message => message.role === 'assistant');
+  $('conversation-clear').disabled = blocked || !messages.length;
+}
+let conversationSignature = '';
+function renderConversation(force = false) {
+  $('conversation-card').hidden = !selected;
+  if (!selected) {
+    conversationSignature = '';
+    $('conversation').replaceChildren();
+    $('conversation-empty').hidden = false;
+    $('conversation-title').textContent = 'Conversa';
+    $('conversation-scope').textContent = 'Nada enviado por aqui nesta execução.';
+    $('conversation-feedback').textContent = '';
+    conversationControls();
+    return;
+  }
+  const data = conversationData();
+  const messages = data?.messages || [];
+  const signature = JSON.stringify([selected, data?.revision, messages.length, messages.at(-1)?.at]);
+  if (force || signature !== conversationSignature) {
+    conversationSignature = signature;
+    $('conversation-title').textContent = 'Conversa em ' + selected;
+    $('conversation').replaceChildren();
+    for (const message of messages) {
+      const item = document.createElement('li');
+      item.className = 'turn ' + (message.role === 'assistant' ? 'assistant' : 'user');
+      const head = document.createElement('div'); head.className = 'turn-head';
+      const who = document.createElement('strong');
+      who.textContent = message.role === 'assistant' ? 'Resposta capturada da página' : 'Você enviou';
+      const meta = document.createElement('small');
+      meta.textContent = [message.at, Number.isFinite(message.total_ms) ? `${Math.round(message.total_ms)} ms` : ''].filter(Boolean).join(' · ');
+      head.append(who, meta);
+      const body = document.createElement('div'); body.className = 'turn-body';
+      body.textContent = message.text;
+      item.append(head, body);
+      $('conversation').append(item);
+    }
+    $('conversation-empty').hidden = messages.length > 0;
+    const turns = messages.filter(message => message.role === 'user').length;
+    $('conversation-scope').textContent = !data ? 'Carregando a conversa desta conexão…' :
+      messages.length
+        ? `${turns} ${turns === 1 ? 'pergunta' : 'perguntas'} nesta execução do programa.` + (data.dropped ? ` ${data.dropped} mensagens antigas já não são exibidas.` : '')
+        : 'Nada enviado por aqui nesta execução.';
+  }
+  conversationControls();
+}
+async function loadConversation(force = false) {
+  if (!selected) { renderConversation(); return; }
+  const revision = conversationSummary()?.revision ?? 0;
+  if (!force && conversation.name === selected && conversation.revision === revision) return;
+  const requested = selected;
+  try {
+    const data = await api('conversation?name=' + encodeURIComponent(requested));
+    if (selected !== requested) return;
+    conversation = {name: requested, revision: data.revision ?? revision, data};
+  } catch (err) {
+    if (selected !== requested) return;
+    conversation = {name: requested, revision, data: null};
+    error(err.message);
+  }
+  renderConversation();
 }
 async function task(operation, extra = {}) {
   if (busy() || incompatible()) return;
@@ -110,7 +183,7 @@ function renderChats(chats) {
     const label = document.createElement('label');
     const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'saved-chat';
     radio.value = chat.name; radio.checked = chat.name === selected;
-    radio.onchange = () => { selected = chat.name; controls(); };
+    radio.onchange = () => { selected = chat.name; $('conversation-feedback').textContent = ''; controls(); loadConversation(); };
     label.append(radio, document.createTextNode(chat.name)); box.append(label);
     const info = document.createElement('small');
     info.textContent = chat.invalid ? 'Configuração inválida. Crie outra com um nome diferente.' :
@@ -198,6 +271,7 @@ function render(value) {
   $('phase').textContent = labels[state.phase] || state.phase;
   $('prepared-label').textContent = state.prepared ? 'Componente de automação disponível. O teste confirma o navegador.' : 'Primeira vez? Clique em Preparar BrowserAPI.';
   renderChats(state.chats);
+  loadConversation();
   $('log').textContent = state.messages.join('\n\n');
   document.querySelector('.progress').hidden=!state.prompt && !state.receipt && !state.messages.length && !['running','waiting'].includes(state.phase);
   $('prompt').hidden = !state.prompt;
@@ -339,4 +413,22 @@ async function copyValue(id){
 }
 $('copy-api-url').onclick=()=>copyValue('api-url');
 $('copy-api-key').onclick=()=>copyValue('api-key');
+
+$('conversation-copy').onclick=async()=>{
+  const last=[...((conversationData()?.messages)||[])].reverse().find(message=>message.role==='assistant');
+  if(!last) return;
+  try{await navigator.clipboard.writeText(last.text);$('conversation-feedback').textContent='Resposta copiada.';}
+  catch(err){$('conversation-feedback').textContent='Não foi possível copiar. Selecione o texto na conversa e use Ctrl+C.';}
+};
+$('conversation-clear').onclick=async()=>{
+  if(busy() || incompatible() || !selected) return;
+  if(!confirm('Limpar a conversa exibida no painel? A conversa do site NÃO será apagada; o painel só deixa de mostrar este texto.')) return;
+  try{
+    await api('conversation/clear',{name:selected});
+    conversation={name:null,revision:-1,data:null};
+    $('conversation-feedback').textContent='Conversa do painel limpa. Nada foi enviado.';
+    await refresh();
+    await loadConversation(true);
+  }catch(err){error(err.message);}
+};
 sessionFields();

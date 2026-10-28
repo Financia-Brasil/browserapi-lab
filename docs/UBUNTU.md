@@ -463,3 +463,22 @@ Se algo parar, **nada foi escrito ou enviado**:
 
 Não homologado no seu Chrome nem no Linux Lite. Detalhes e fontes: `docs/PROFILE_BINDING_061.md` e
 `pesquisa/2026-10-27-perfis-cdp-e-origem.md`.
+
+## 0.7.0 — a resposta fica na tela
+
+1. Selecione um chat em **Meus chats**, escreva no campo **Conversar** e clique em
+   **Conversar →**. Confirme login/modelo e autorize **uma** mensagem quando pedir.
+2. Ao terminar, o cartão **Conversa** mostra “Você enviou” e “Resposta capturada
+   da página”, com data/hora e o tempo da troca. **Copiar última resposta** leva o
+   texto completo para a área de transferência.
+3. **Limpar painel** pede confirmação e apaga só o que o painel mostra. A conversa
+   no site **não** é apagada; o chat continua com o contexto das mensagens anteriores.
+4. O texto fica apenas na memória do programa. Fechar/reiniciar o BrowserAPI, aplicar
+   uma atualização ou excluir a conexão apaga essa exibição. Não há arquivo de
+   conversa no painel.
+5. A **API local** para agentes não aparece aqui: ela tem registro próprio, com
+   histórico somente se você marcar a opção. Nenhuma mensagem é enviada para
+   monitorar disponibilidade.
+
+Se o cartão não mostrar a resposta, confira a página e o log da operação. Não há
+reenvio automático; uma resposta ambígua ou não confirmada não entra na conversa.

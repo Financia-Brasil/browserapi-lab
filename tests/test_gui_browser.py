@@ -382,6 +382,61 @@ class TestGraphicalJourney(BrowserTestCase):
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(json.dumps(evidence,indent=2)+'\n')
 
+    def test_ask_shows_the_new_answer_in_the_panel_conversation(self):
+        from playwright.sync_api import expect
+        self.seed()
+        self.open_panel()
+        self.page.fill('#message', 'Pergunta sintética do painel')
+        self.page.click('#ask')
+        self.wait_question('Faça login')
+        self.page.click('#continue')
+        self.wait_question('Autoriza enviar a mensagem informada')
+        self.page.click('#yes')
+        self.wait_phase('Concluído')
+        expect(self.page.locator('#conversation-card')).to_be_visible()
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        text = self.page.locator('#conversation').inner_text()
+        self.assertIn('Pergunta sintética do painel', text)
+        self.assertIn('Passos', text)
+        self.assertIn('1 pergunta', self.page.locator('#conversation-scope').inner_text())
+        # O log de operação não repete a resposta longa; ela vive na conversa.
+        self.assertNotIn('Passos', self.page.locator('#log').text_content() or '')
+        self.assertEqual(self.panel.transcript.snapshot('saved')['messages'][1]['role'], 'assistant')
+        self.assertGreater(self.panel.transcript.snapshot('saved')['messages'][1]['total_ms'], 0)
+        evidence = REPO_ROOT/'results/ci/ui-redesign'
+        evidence.mkdir(parents=True, exist_ok=True)
+        self.page.set_viewport_size({'width': 1280, 'height': 900})
+        self.page.locator('#conversation-card').scroll_into_view_if_needed()
+        self.page.screenshot(path=str(evidence/'conversation-desktop.png'), full_page=True)
+        self.page.set_viewport_size({'width': 375, 'height': 812})
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth - window.innerWidth'), 0)
+        self.page.screenshot(path=str(evidence/'conversation-mobile.png'), full_page=True)
+
+    def test_conversation_text_is_not_executable_and_clear_keeps_the_site(self):
+        from playwright.sync_api import expect
+        self.seed()
+        self.open_panel()
+        self.panel.transcript.add_exchange('saved', 'Pergunta salva só na memória',
+                                           '<img src=x onerror="window.secretLeaked=true"> texto',
+                                           at='2026-10-28T10:00:00Z', total_ms=321.4)
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        self.assertIn('<img src=x', self.page.locator('#conversation').inner_text())
+        self.assertEqual(self.page.locator('#conversation img').count(), 0)
+        self.assertFalse(self.page.evaluate('Boolean(window.secretLeaked)'))
+        self.assertIn('321 ms', self.page.locator('#conversation').inner_text())
+        message = []
+        self.page.once('dialog', lambda dialog: (message.append(dialog.message), dialog.dismiss()))
+        self.page.click('#conversation-clear')
+        expect(self.page.locator('#conversation .turn')).to_have_count(2)
+        self.assertIn('NÃO será apagada', message[0])
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.click('#conversation-clear')
+        expect(self.page.locator('#conversation .turn')).to_have_count(0)
+        self.assertEqual(self.panel.transcript.snapshot('saved')['messages'], [])
+        self.assertIn('saved', self.store.names())
+        self.assertEqual(self.page.locator('#conversation-card').is_visible(), True)
+        self.assertIn('Nada enviado por aqui', self.page.locator('#conversation-scope').inner_text())
+
     def test_denial_and_cancel_do_not_run_exchange(self):
         self.seed()
         self.open_panel()

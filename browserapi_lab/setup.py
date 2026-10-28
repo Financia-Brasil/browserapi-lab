@@ -289,7 +289,8 @@ def configure(store, name, *, repairing=False, ask=input, tell=print, session_fa
         return receipt
 
 
-def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None):
+def check(store, name, *, message=None, ask=input, tell=print, session_factory=BrowserSession, cancelled=None,
+          show_answer=True, record=None):
     config = store.load(name)
     if not authorize_session(config, ask, tell):
         return ChatResult('not_authorized').receipt(config)
@@ -313,8 +314,17 @@ def check(store, name, *, message=None, ask=input, tell=print, session_factory=B
             store.save_status(name, receipt)
         tell(receipt['message'])
         tell(receipt['action'])
-        if result.answer is not None and message is not None:
+        if result.answer is not None and message is not None and show_answer:
             tell(result.answer)
+        # Chamado só depois de uma resposta nova validada. Recibos, telemetria e
+        # relatórios continuam sem o texto; quem exibe decide onde guardá-lo.
+        if (record is not None and message is not None and result.status == 'success'
+                and isinstance(result.answer, str) and result.answer.strip()):
+            try:
+                record(name, message, result.answer, receipt)
+            except Exception:
+                tell('A resposta chegou, mas o painel não conseguiu mostrá-la. Nada foi reenviado; '
+                     'veja a conversa no navegador.')
         return receipt
 
 
