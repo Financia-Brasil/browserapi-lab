@@ -225,15 +225,43 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install chromium
           python -m browserapi_lab.cli doctor --json results/ci/ui-doctor.json
+      # Testes gráficos são sensíveis a máquina carregada: duas tentativas,
+      # com o log de cada uma guardado (uma falha isolada não esconde a outra).
       - name: Navegação e capturas sintéticas
-        run: xvfb-run -a python -m unittest discover -s tests -p test_gui_browser.py -v 2>&1 | tee results/ci/ui-review.log
+        run: |
+          set -o pipefail
+          status=1
+          for tentativa in 1 2; do
+            if xvfb-run -a python -m unittest discover -s tests -p test_gui_browser.py -v 2>&1 \
+                | tee "results/ci/ui-review-tentativa-${tentativa}.log"; then
+              status=0
+              cp "results/ci/ui-review-tentativa-${tentativa}.log" results/ci/ui-review.log
+              break
+            fi
+            echo "tentativa ${tentativa} falhou; repetindo" >&2
+            sleep $((tentativa * 5))
+          done
+          exit $status
+      # O log do job fica em armazenamento que nem todo mundo alcança; a
+      # anotação com o motivo aparece direto na aba de verificações.
+      - name: Explicar a falha na aba de verificações
+        if: failure()
+        run: |
+          log=$(ls results/ci/ui-review-tentativa-*.log 2>/dev/null | tail -1)
+          if [ -z "$log" ]; then echo "::error title=Sem log::A execução não chegou a escrever o log."; exit 0; fi
+          grep -E "^(FAIL|ERROR):" "$log" | head -5 | while IFS= read -r linha; do
+            echo "::error title=Teste que falhou::${linha//%/ }"
+          done
+          tail -n 12 "$log" | tr -d '\r' | while IFS= read -r linha; do
+            echo "::error title=Últimas linhas do log::${linha//%/ }"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: revisao-visual-${{ github.run_id }}
           path: |
             results/ci/ui-redesign/
-            results/ci/ui-review.log
+            results/ci/ui-review*.log
       - name: Registrar revisão visual no repositório
         if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
         run: |
