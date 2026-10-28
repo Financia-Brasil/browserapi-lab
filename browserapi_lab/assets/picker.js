@@ -38,10 +38,10 @@
   banner.id = '__browserapi_picker';
   banner.setAttribute('role', 'region');
   banner.setAttribute('aria-label', (step ? 'Passo ' + step + ': ' : '') + 'Selecionar ' + role);
-  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '520px',
+  Object.assign(banner.style, { position: 'fixed', top: '16px', right: '16px', width: '400px',
     maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', zIndex: '2147483647', background: '#fff',
-    color: '#1b3029', border: '2px solid #146c50', borderRadius: '8px', padding: '16px',
-    font: '15px/1.4 system-ui', boxShadow: '0 4px 24px #0003', maxHeight: 'calc(100vh - 32px)', overflow: 'auto' });
+    color: '#1b3029', border: '2px solid #146c50', borderRadius: '8px', padding: '12px',
+    font: '14px/1.4 system-ui', boxShadow: '0 4px 24px #0003', maxHeight: 'calc(100vh - 32px)', overflow: 'auto' });
 
   const top = document.createElement('div');
   Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' });
@@ -70,7 +70,8 @@
   previewLabel.style.fontWeight = '600';
   const previewText = document.createElement('span');
   previewText.textContent = 'nada ainda — clique em uma área destacada.';
-  previewText.style.wordBreak = 'break-word';
+  Object.assign(previewText.style, { wordBreak: 'break-word', display: '-webkit-box',
+    WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' });
   previewBox.append(previewLabel, previewText);
 
   const status = document.createElement('p');
@@ -101,6 +102,12 @@
     return r.width > 2 && r.height > 2 && s.display !== 'none' && s.visibility !== 'hidden';
   };
   const textOf = el => ((el.innerText !== undefined ? el.innerText : el.textContent) || '').replace(/\s+/g, ' ').trim();
+  // Texto como ele será capturado: sem barra de ações nem rótulos de papel.
+  const captureTextOf = el => {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('button,[role=button],script,style,[aria-hidden="true"]').forEach(item => item.remove());
+    return ((clone.textContent) || '').replace(/\s+/g, ' ').trim();
+  };
   const roleOf = el => {
     if (!el || !el.matches) return '';
     if (el.matches('user-query,[data-role="user"],[data-role=user],[data-message-author-role="user"]')) return 'user';
@@ -251,6 +258,8 @@
     preview(child);
   });
   const back = button('Voltar', () => { const el = history.pop(); if (el) preview(el, false); });
+  const another = button('Escolher outra', reset);
+  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; placeBanner(true); });
   const skip = button('Pular este campo', () => finish({ cancelled: true }), 'data-picker-skip');
   const abort = button('Cancelar mapeamento', () => finish({ abort: true }), 'data-picker-abort');
 
@@ -265,8 +274,43 @@
     return b;
   }
 
+  /* O painel não pode cobrir o que a pessoa precisa clicar: fica no canto com
+   * menos sobreposição com as áreas destacadas. "Mover" troca de canto. */
+  const CORNERS = ['top-right', 'bottom-right', 'bottom-left', 'top-left'];
+  let corner = 0;
+  function placeBanner(force) {
+    if (!force && banner.dataset.placed === '1') return;
+    const size = banner.getBoundingClientRect();
+    const width = size.width || 400;
+    const height = size.height || 240;
+    const boxes = candidates().slice(0, 40).map(el => el.getBoundingClientRect());
+    let best = corner;
+    let bestOverlap = Infinity;
+    CORNERS.forEach((name, index) => {
+      const left = name.endsWith('left') ? 16 : innerWidth - width - 16;
+      const top = name.startsWith('top') ? 16 : innerHeight - height - 16;
+      const right = left + width;
+      const bottom = top + height;
+      const overlap = boxes.reduce((sum, box) => {
+        const w = Math.max(0, Math.min(right, box.right) - Math.max(left, box.left));
+        const h = Math.max(0, Math.min(bottom, box.bottom) - Math.max(top, box.top));
+        return sum + w * h;
+      }, 0);
+      if (overlap < bestOverlap) { bestOverlap = overlap; best = index; }
+    });
+    corner = best;
+    const name = CORNERS[corner];
+    Object.assign(banner.style, {
+      left: name.endsWith('left') ? '16px' : 'auto',
+      right: name.endsWith('right') ? '16px' : 'auto',
+      top: name.startsWith('top') ? '16px' : 'auto',
+      bottom: name.startsWith('bottom') ? '16px' : 'auto',
+    });
+    banner.dataset.placed = '1';
+  }
+
   function describe(el) {
-    const text = textOf(el);
+    const text = captureTextOf(el);
     previewText.textContent = text ? '“' + (text.length > 140 ? text.slice(0, 140) + '…' : text) + '”' : '(sem texto legível)';
     const count = query(selector).length;
     previewLabel.textContent = 'Vai capturar: ';
@@ -280,8 +324,9 @@
 
   function draw() {
     confirm.hidden = !chosen;
-    outer.hidden = inner.hidden = back.hidden = !chosen;
+    outer.hidden = inner.hidden = back.hidden = another.hidden = !chosen;
     confirmationState();
+    placeBanner(false);
     marks.replaceChildren();
     const items = chosen ? query(selector) : candidates();
     items.slice(0, 80).forEach((el, index) => {
@@ -311,6 +356,7 @@
     chosen = null;
     selector = '';
     history = [];
+    banner.dataset.placed = '0';
     previewText.textContent = 'nada ainda — clique em uma área destacada em azul.';
     status.textContent = 'Esc pula este campo. Nada é enviado nem alterado no site.';
     confirm.disabled = true;
@@ -374,6 +420,6 @@
   window.__balPickerContainer = messageRole ? messageContainer : null;
   if (window.__balTypingCleanup) window.__balTypingCleanup();
   controls.append(confirm);
-  secondary.append(outer, inner, back, skip, abort);
+  secondary.append(outer, inner, back, another, move, skip, abort);
   reset();
 }

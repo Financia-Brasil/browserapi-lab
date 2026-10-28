@@ -597,7 +597,7 @@ class TestChatWorkflow(BrowserTestCase):
         def factory(browser):
             self.assertFalse(browser.headless, 'assistente deve abrir janela visível por padrão')
             yield WizardSession()
-        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's', 's'])
+        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's', 'n', 's'])
         selectors = iter(['#composer', '#send', '[data-role="user"] .body', '[data-role="assistant"] .body'])
         with tempfile.TemporaryDirectory() as root:
             store = ConfigStore(root)
@@ -643,8 +643,10 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(self.page.locator(selector).inner_text(),'Resposta de exemplo para selecionar visualmente.')
         self.assertEqual(self.page.locator('#__browserapi_picker_marks').count(),0)
         self.page.evaluate(script,'campo de mensagem')
+        self.page.get_by_role('button',name='Escolher outra',exact=True).click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
         self.page.get_by_role('button',name='Cancelar mapeamento',exact=True).click()
-        self.assertTrue(self.page.evaluate('window.__balPick.cancelled'))
+        self.assertTrue(self.page.evaluate('window.__balPick.abort'))
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
     def test_unrelated_page_mutations_do_not_block_completion(self):

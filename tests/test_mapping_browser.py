@@ -17,6 +17,7 @@ import unittest
 from _harness import BrowserTestCase, REPO_ROOT
 from browserapi_lab.chat import exchange
 from browserapi_lab.config import ChatConfig
+from browserapi_lab.discovery import install_probe
 from browserapi_lab.setup import HYPOTHESES, pick, repair_fields
 
 GEMINI_LIKE = {
@@ -32,6 +33,7 @@ class TestGuidedMappingBrowser(BrowserTestCase):
     def open_fixture(self):
         url = self.server.url('gemini_like.html')
         self.page.goto(url, wait_until='load')
+        install_probe(self.page)  # como a troca real de mensagens faz
         return ChatConfig('gemini-like', url, provider='custom', timeout_ms=8000,
                           stability_ms=400, **GEMINI_LIKE)
 
@@ -50,14 +52,19 @@ class TestGuidedMappingBrowser(BrowserTestCase):
         self.assertIn('Vai capturar', preview)
         self.assertIn('Belém', preview)
         self.assertIn('capital do Pará', preview)  # o segundo <span> também entra
-        self.assertIn('Passo 5 de 5', preview)
+        self.assertIn('passo 5 de 5', preview.lower())
+        # A prévia mostra o que será capturado: sem a barra de ações.
+        self.assertNotIn('Copiar', preview)
         self.page.locator('[data-picker-confirm]').click()
         selector = self.page.evaluate('window.__balPick.selector')
         self.assertEqual(selector, 'model-response')
-        texto = self.page.locator(selector).first.inner_text()
-        self.assertIn('Belém é a capital do Pará.', texto)
-        self.assertIn('Fica na região Norte', texto)
-        self.assertNotIn('Copiar', texto)  # botões da barra de ações não são resposta
+        capturado = self.page.evaluate("""() => window.__bal.wholeMessageHtmlOf(
+            document.querySelector('model-response .first-token span'))""")
+        self.assertIn('Belém', capturado)
+        self.assertIn('capital do Pará', capturado)
+        self.assertIn('Fica na região Norte', capturado)
+        self.assertNotIn('Copiar', capturado)
+        self.assertNotIn('👍', capturado)
 
     def test_saved_fragment_selector_still_captures_the_whole_answer(self):
         """Quem já tem o seletor quebrado salvo não perde o resto da resposta."""
@@ -145,7 +152,8 @@ class TestGuidedMappingUnit(unittest.TestCase):
                       picker=lambda *_a, **_k: None, fields=('composer', 'send', 'user', 'assistant'))
         self.assertEqual(len(asked), 4, asked)
         self.assertIn('Passo 1 de 4 · Campo de digitação', asked[0])
-        self.assertIn('CAIXA DE TEXTO', asked[0])
+        self.assertIn('campo onde você digita', asked[0])
+        self.assertIn('não é a conversa', asked[0])
         self.assertIn('Passo 2 de 4 · Botão Enviar', asked[1])
         self.assertIn('Passo 3 de 4 · A sua pergunta', asked[2])
         self.assertIn('A SUA PERGUNTA JÁ ENVIADA', asked[2])
@@ -175,7 +183,7 @@ class TestGuidedMappingUnit(unittest.TestCase):
 
     def test_captured_field_can_be_redone_without_restarting(self):
         picks = iter(['#c-amplo', '#c-novo'])
-        answers = iter(['s', 's', 's'])
+        answers = iter(['s', 's', 's', 's'])
         tells = []
         config = self.config()
 

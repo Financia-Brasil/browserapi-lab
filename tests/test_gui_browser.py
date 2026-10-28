@@ -166,6 +166,9 @@ class TestGraphicalJourney(BrowserTestCase):
         self.page.click('#no')
         self.wait_question('A RESPOSTA DO CHAT')
         self.page.click('#no')
+        # Uma pergunta única antes de concluir; "Não" segue direto.
+        self.wait_question('algum campo saiu errado')
+        self.page.click('#no')
 
     def test_delete_saved_connection_cancel_then_confirm(self):
         from playwright.sync_api import expect

@@ -132,14 +132,14 @@ DRAFT_PREVIEW = 'BrowserAPI: rascunho temporário de configuração, não enviar
 # Passos do mapeamento: título curto, pergunta e dica para o apontamento.
 MAPPING_STEPS = {
     'composer': ('Campo de digitação',
-                 'Apontar a CAIXA DE TEXTO onde você escreve a mensagem? É a de baixo, vazia — não é a conversa.',
+                 'Apontar o campo onde você digita a mensagem? É a caixa de texto de baixo, vazia — não é a conversa.',
                  'Clique na caixa de texto onde você digita. Nada é escrito nem enviado.'),
     'voice': ('Microfone (opcional)',
-              'Este chat tem um botão de microfone ao lado do campo? '
+              'Com o campo de mensagem vazio, este chat tem um botão de entrada por voz (microfone)? '
               'Sim = você aponta agora; Não = seguimos para o botão Enviar.',
-              'Clique no ícone de microfone. Se você respondeu Sim e ele não existe, use "Pular este campo".'),
+              'Clique no ícone de microfone. Se respondeu Sim e ele não existe, use "Pular este campo".'),
     'send': ('Botão Enviar',
-             'Apontar o botão que ENVIA a mensagem? Primeiro digite algo no campo sem enviar.',
+             'Apontar o botão que ENVIA a mensagem (seta ou "Enviar")?',
              'Digite no campo, sem enviar, e clique no botão de enviar (seta ou "Enviar").'),
     'user': ('A sua pergunta',
              'Apontar A SUA PERGUNTA JÁ ENVIADA: o balão com o texto que você mandou (não o campo de digitar)?',
@@ -255,12 +255,13 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
     for index, key in enumerate(order, 1):
         run_step(key, index)
 
-    # Refazer sem recomeçar: cada campo já capturado pode ser apontado de novo.
-    for key in [item for item in order if item in captured]:
-        if not confirmed(ask, f'Conferência — refazer {MAPPING_STEPS[key][0]}? '
-                              'Responda Não para concluir o mapeamento.'):
-            continue
-        run_step(key, order.index(key) + 1)
+    # Refazer sem recomeçar: uma pergunta única; só quem responde Sim percorre
+    # os campos de novo (ninguém deve clicar "Não" cinco vezes para concluir).
+    if captured and confirmed(ask, 'Passo final — algum campo saiu errado? '
+                                   'Sim = refazer um por um; Não = concluir o mapeamento.'):
+        for key in [item for item in order if item in captured]:
+            if confirmed(ask, f'Refazer {MAPPING_STEPS[key][0]}?'):
+                run_step(key, order.index(key) + 1)
 
     if captured:
         resumo = ', '.join(MAPPING_STEPS[key][0].lower() for key in order if key in captured)
