@@ -47,6 +47,10 @@ def pick(page, role, cancelled=None, *, step='', hint=''):
     voice_script = (Path(__file__).parent / 'assets' / 'voice_control.js').read_text()
     page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
     page.evaluate(script, {'role': role, 'step': step, 'hint': hint})
+    if not page.evaluate("() => !!document.querySelector('#__browserapi_picker')"):
+        # Sem esta checagem, um erro de integração virava espera de 2 minutos
+        # sem nenhuma explicação para quem estava usando.
+        raise EOFError('O painel de seleção não abriu nesta página. Nada foi alterado.')
     try:
         if cancelled is None:
             page.wait_for_function('window.__balPick !== null', timeout=120000)

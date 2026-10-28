@@ -458,6 +458,22 @@ class TestPanel(unittest.TestCase):
         # Ações principais primeiro; detalhes técnicos continuam recolhidos.
         self.assertLess(js.index("['Testar agora'"), js.index("['Usar Chrome já aberto'"))
 
+    def test_panel_forwards_step_and_hint_to_the_picker(self):
+        """Regressão: o lambda do painel engolia step/hint e o passo morria."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from browserapi_lab.gui import Panel
+        panel = object.__new__(Panel)
+        panel.cancelled = SimpleNamespace(is_set=lambda: False)
+        with patch('browserapi_lab.gui.pick', return_value='#x') as fake:
+            value = Panel.picker(panel, None, 'campo de mensagem', step='2 de 5', hint='clique aqui')
+        self.assertEqual(value, '#x')
+        fake.assert_called_once()
+        args, kwargs = fake.call_args
+        self.assertEqual(args[1], 'campo de mensagem')
+        self.assertEqual(kwargs.get('step'), '2 de 5')
+        self.assertEqual(kwargs.get('hint'), 'clique aqui')
+
     def test_guided_pointing_questions_say_which_element_to_click(self):
         from browserapi_lab.setup import repair_fields
         asked = []
