@@ -242,8 +242,8 @@ class TestChatWorkflow(BrowserTestCase):
                 config = self.prepare()
                 if case == 'existing':
                     self.page.locator('#composer').fill('rascunho pessoal')
-                replies = iter(['n','s','n' if case == 'denied' else 's','n','n'])
-                def selecting(page, role):
+                replies = iter(['n','s','n' if case == 'denied' else 's','n','n','n','n'])
+                def selecting(page, role, **_options):
                     self.assertEqual(role, 'botão Enviar')
                     value = page.locator('#composer').input_value()
                     if case in ('normal','changed','cancelled'):
@@ -486,6 +486,8 @@ class TestChatWorkflow(BrowserTestCase):
         prompts = []
         def ask(text):
             prompts.append(text)
+            if 'saiu errado' in text:
+                return 'n'  # mapeou tudo de uma vez; refazer é coberto no teste unitário
             if 'digite algo' in text:
                 self.page.locator('#composer').fill('rascunho digitado pela pessoa')
                 self.page.locator('#send').click()
@@ -493,7 +495,7 @@ class TestChatWorkflow(BrowserTestCase):
                 self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 0)
                 return ''
             return 's'
-        def choose(page, role):
+        def choose(page, role, **_options):
             page.evaluate("""() => { const timer = setInterval(() => {
                 if (!window.__balPickerCleanup) return;
                 clearInterval(timer); document.querySelector('#send').click(); document.querySelector('[data-picker-confirm]').click();
@@ -557,9 +559,9 @@ class TestChatWorkflow(BrowserTestCase):
         config = self.prepare()
         config.composer = '#missing'
         self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'composer_missing')
-        answers = iter(['s', 'n', 'n', 'n'])
+        answers = iter(['s', 'n', 'n', 'n', 'n'])
         repair_fields(self.page, config, ask=lambda _: next(answers), tell=lambda *_: None,
-                      picker=lambda *_: '#composer')
+                      picker=lambda *_a, **_k: '#composer')
         self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
 
     def test_blocked_states_and_remedies(self):
@@ -597,12 +599,12 @@ class TestChatWorkflow(BrowserTestCase):
         def factory(browser):
             self.assertFalse(browser.headless, 'assistente deve abrir janela visível por padrão')
             yield WizardSession()
-        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's', 's'])
+        answers = iter(['chromium', 'custom', config.url, '', 's', 's', 's', 's', 's', 'n', 's'])
         selectors = iter(['#composer', '#send', '[data-role="user"] .body', '[data-role="assistant"] .body'])
         with tempfile.TemporaryDirectory() as root:
             store = ConfigStore(root)
             receipt = configure(store, 'wizard', ask=lambda _: next(answers), tell=lambda *_: None,
-                                session_factory=factory, picker=lambda *_: next(selectors))
+                                session_factory=factory, picker=lambda *_a, **_k: next(selectors))
             self.assertTrue(receipt['compatible_in_this_run'], receipt)
             self.assertEqual(status(store, 'wizard')['status'], 'success')
             self.assertTrue(store.load('wizard').ready)
@@ -643,8 +645,10 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(self.page.locator(selector).inner_text(),'Resposta de exemplo para selecionar visualmente.')
         self.assertEqual(self.page.locator('#__browserapi_picker_marks').count(),0)
         self.page.evaluate(script,'campo de mensagem')
-        self.page.get_by_role('button',name='Cancelar',exact=True).click()
-        self.assertTrue(self.page.evaluate('window.__balPick.cancelled'))
+        self.page.get_by_role('button',name='Escolher outra',exact=True).click()
+        self.assertIsNone(self.page.evaluate('window.__balPick'))
+        self.page.get_by_role('button',name='Cancelar mapeamento',exact=True).click()
+        self.assertTrue(self.page.evaluate('window.__balPick.abort'))
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
     def test_unrelated_page_mutations_do_not_block_completion(self):

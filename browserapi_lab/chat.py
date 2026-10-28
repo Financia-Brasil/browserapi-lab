@@ -242,8 +242,27 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         fresh = []
         for index in range(outputs_before, outputs.count()):
             item = outputs.nth(index)
-            if item.is_visible():
-                fresh.append(item.inner_html())
+            if not item.is_visible():
+                continue
+            # Um seletor pode casar com o balão e com um pedaço dentro dele.
+            # Contar os dois transformaria uma resposta em duas ("ambíguo").
+            nested = item.evaluate('''(el, selector) => {
+                try {
+                    const parent = el.parentElement;
+                    return !!(parent && parent.closest(selector));
+                } catch (error) { return false; }
+            }''', config.assistant)
+            if nested:
+                continue
+            # Captura o BALÃO inteiro, não o pedaço apontado no passado
+            # (uso real: Gemini divide a resposta em vários <span>).
+            html = item.evaluate('''el => {
+                if (!window.__bal || !window.__bal.wholeMessageHtmlOf) return null;
+                try { return window.__bal.wholeMessageHtmlOf(el); } catch (error) { return null; }
+            }''')
+            if not html:
+                html = item.inner_html()
+            fresh.append(html)
         if not fresh:
             return outcome('output_invalid')
         if health_check:

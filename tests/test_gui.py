@@ -258,6 +258,25 @@ class TestPanel(unittest.TestCase):
         until(lambda: self.panel.phase == 'cancelled')
         self.assertIn('não desfaz', '\n'.join(self.panel.snapshot()['messages']))
 
+    def test_interrupted_operation_says_where_it_stopped(self):
+        """"Interrompido" sem motivo não dizia se foi você ou o programa."""
+        self.store.save(ChatConfig('chat','https://example.com'))
+        with patch('browserapi_lab.gui.check', side_effect=EOFError('Mapeamento cancelado')):
+            self.panel.submit({'operation':'check','name':'chat'})
+            until(lambda: self.panel.phase == 'cancelled')
+        self.assertIn('Mapeamento cancelado', '\n'.join(self.panel.snapshot()['messages']))
+
+    def test_step_unavailable_is_an_error_with_the_reason_not_a_cancel(self):
+        from browserapi_lab.setup import StepUnavailable
+        self.store.save(ChatConfig('chat','https://example.com'))
+        with patch('browserapi_lab.gui.check',
+                   side_effect=StepUnavailable('O painel de seleção não abriu nesta página. Nada foi alterado.')):
+            self.panel.submit({'operation':'check','name':'chat'})
+            until(lambda: self.panel.phase == 'error')
+        messages = '\n'.join(self.panel.snapshot()['messages'])
+        self.assertIn('O painel de seleção não abriu', messages)
+        self.assertNotIn('não desfaz', messages)
+
     def test_switch_existing_saved_chat_never_launches_and_requires_consent(self):
         self.store.save(ChatConfig('saved','https://example.com'))
         with patch('browserapi_lab.browser.BrowserSession.start') as launch:
@@ -458,6 +477,22 @@ class TestPanel(unittest.TestCase):
         # Ações principais primeiro; detalhes técnicos continuam recolhidos.
         self.assertLess(js.index("['Testar agora'"), js.index("['Usar Chrome já aberto'"))
 
+    def test_panel_forwards_step_and_hint_to_the_picker(self):
+        """Regressão: o lambda do painel engolia step/hint e o passo morria."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from browserapi_lab.gui import Panel
+        panel = object.__new__(Panel)
+        panel.cancelled = SimpleNamespace(is_set=lambda: False)
+        with patch('browserapi_lab.gui.pick', return_value='#x') as fake:
+            value = Panel.picker(panel, None, 'campo de mensagem', step='2 de 5', hint='clique aqui')
+        self.assertEqual(value, '#x')
+        fake.assert_called_once()
+        args, kwargs = fake.call_args
+        self.assertEqual(args[1], 'campo de mensagem')
+        self.assertEqual(kwargs.get('step'), '2 de 5')
+        self.assertEqual(kwargs.get('hint'), 'clique aqui')
+
     def test_guided_pointing_questions_say_which_element_to_click(self):
         from browserapi_lab.setup import repair_fields
         asked = []
@@ -472,7 +507,7 @@ class TestPanel(unittest.TestCase):
         def ask(text):
             asked.append(text)
             return 'n'
-        repair_fields(Page(), config, ask=ask, tell=tells.append, picker=lambda *_: None,
+        repair_fields(Page(), config, ask=ask, tell=tells.append, picker=lambda *_a, **_k: None,
                       fields=('user','assistant'))
         self.assertTrue(any('A SUA PERGUNTA JÁ ENVIADA' in text for text in asked))
         self.assertTrue(any('não o campo de digitar' in text for text in asked))

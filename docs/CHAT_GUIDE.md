@@ -97,17 +97,28 @@ Limpar o painel não apaga a conversa no provedor. Ver
 browserapi-lab repair meu-gemini
 ```
 
-Abra uma conversa que tenha uma mensagem sua e uma resposta visíveis. O assistente
-oferece apontar, por clique:
+Abra uma conversa que tenha uma mensagem sua e uma resposta visíveis. O mapeamento
+é **passo a passo**, e cada pergunta diz qual elemento clicar:
 
-- Campo onde escreve a mensagem.
-- Botão Enviar.
-- Uma mensagem inteira do usuário.
-- Uma resposta inteira do assistente.
+| Passo | Campo | O que clicar |
+|---|---|---|
+| 1 | Campo de digitação | a caixa de texto de baixo, vazia (não a conversa) |
+| 2 | Microfone (opcional) | o ícone de microfone, se existir; responda **Não** se não houver |
+| 3 | Botão Enviar | digite algo **sem enviar** e clique na seta/Enviar |
+| 4 | A sua pergunta | o balão com o texto que você mandou (não o campo de digitar) |
+| 5 | A resposta do chat | o balão da resposta do modelo |
 
-A seleção usa uma faixa temporária no topo da página. `Esc` cancela. Não exige
-código. Cliques de seleção são interceptados; o teste automatizado verifica que
-apontar Enviar com rascunho preenchido não envia a mensagem na fixture.
+O painel mostra **Passo N de M** e o título do passo. Antes de confirmar, a faixa
+mostra **“Vai capturar: …”** com o texto real da área escolhida — é assim que se vê
+que o balão inteiro entrou, e não um pedaço. Para mensagens o programa sobe sozinho
+ao balão completo (o Gemini, por exemplo, divide a resposta em vários `<span>`).
+
+- `Esc` ou **Pular este campo** pula **só** aquele passo; o mapeamento continua.
+- **Cancelar mapeamento** encerra tudo.
+- No fim, cada campo pode ser **refeito** sem recomeçar do zero.
+
+Não exige código. Cliques de seleção são interceptados; o teste automatizado
+verifica que apontar Enviar com rascunho preenchido não envia a mensagem na fixture.
 
 Após reparar, você decide se autoriza outro teste. Não existe reenvio automático
 quando não sabemos se o primeiro envio foi aceito. Confira a conversa antes de

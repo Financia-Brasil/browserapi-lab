@@ -35,26 +35,82 @@ def browser_options():
     }
 
 
-def pick(page, role, cancelled=None):
-    page.bring_to_front()
+class StepUnavailable(RuntimeError):
+    """Um passo do apontamento não pôde abrir nesta página.
+
+    Não é cancelamento de quem usa: o campo fica como estava e o mapeamento
+    segue para os outros passos (antes, isso perdia o mapeamento inteiro).
+    """
+
+
+def pick(page, role, cancelled=None, *, step='', hint=''):
+    """Abre o apontamento guiado e devolve o seletor.
+
+    ``None`` significa "pulei este campo" — o mapeamento continua. Cancelar o
+    mapeamento inteiro levanta ``EOFError``; só a escolha explícita do usuário
+    faz isso (Esc e "Pular este campo" não abortam mais a configuração toda).
+    """
     script = (Path(__file__).parent / 'assets' / 'picker.js').read_text(encoding='utf-8')
     voice_script = (Path(__file__).parent / 'assets' / 'voice_control.js').read_text()
-    page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
-    page.evaluate(script, role)
+    try:
+        page.bring_to_front()
+        page.evaluate('() => { window.__balVoiceControl = (' + voice_script + '); }')
+        page.evaluate(script, {'role': role, 'step': step, 'hint': hint})
+        opened = page.evaluate("() => !!document.querySelector('#__browserapi_picker')")
+    except Exception as problem:  # página fechada, script recusado pela CSP, aba trocada
+        raise StepUnavailable('Não consegui abrir o apontamento nesta página (%s). '
+                             'Nada foi alterado.' % type(problem).__name__) from problem
+    if not opened:
+        # Sem esta checagem, um erro de integração virava espera de 2 minutos
+        # sem nenhuma explicação para quem estava usando.
+        raise StepUnavailable('O painel de seleção não abriu nesta página. Nada foi alterado.')
     try:
         if cancelled is None:
             page.wait_for_function('window.__balPick !== null', timeout=120000)
         else:
-            import time
             deadline = time.monotonic() + 120
             while page.evaluate('window.__balPick === null'):
                 if cancelled() or time.monotonic() > deadline:
                     raise EOFError('Seleção cancelada')
                 page.wait_for_timeout(100)
         value = page.evaluate('window.__balPick')
-        return None if value.get('cancelled') else value.get('selector')
+    except EOFError:
+        raise
+    except Exception as problem:
+        raise StepUnavailable('O apontamento parou: a janela do chat fechou ou mudou de página. '
+                             'Nada foi alterado.') from problem
     finally:
-        page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); delete window.__balVoiceControl; }')
+        try:
+            page.evaluate('() => { if (window.__balPickerCleanup) window.__balPickerCleanup(); '
+                          'delete window.__balVoiceControl; }')
+        except Exception:
+            pass
+    if value.get('abort'):
+        raise EOFError('Mapeamento cancelado')
+    return None if value.get('cancelled') else value.get('selector')
+
+
+def element_preview(page, selector, prefer_last=False):
+    """Texto e contagem que um seletor captura — para o usuário conferir.
+
+    Só leitura: não envia, não altera. Devolve ``(texto_curto, contagem)``.
+    ``prefer_last`` mostra a mensagem mais recente (a que está na tela), não a
+    primeira da conversa.
+    """
+    if not selector or not hasattr(page, 'locator'):
+        return None, 0
+    try:
+        locator = page.locator(selector)
+        count = locator.count()
+        if not count:
+            return None, 0
+        text = (locator.last if prefer_last else locator.first).evaluate(
+            r"el => (((el.innerText !== undefined ? el.innerText : el.textContent) || el.value"
+            r" || el.getAttribute('aria-label') || '') + '').replace(/\s+/g, ' ').trim()")
+        text = ' '.join(str(text or '').split())
+        return (text[:90] + ('…' if len(text) > 90 else '')), count
+    except Exception:
+        return None, 0
 
 
 def suggest(page, config):
@@ -73,92 +129,199 @@ def suggest(page, config):
     return config
 
 
-def manual_send_pick(page, config, ask, tell, picker):
+def manual_send_pick(page, config, ask, tell, picker, *, step='', hint='', prompt=None):
     script = (Path(__file__).parent / 'assets/typing_guard.js').read_text()
     page.evaluate(script)
     try:
-        ask('Na janela do chat, digite algo SEM enviar. Não pressione Enter. Quando aparecer Enviar, volte aqui e clique em Continuar; depois clique nesse botão apenas para selecioná-lo. ')
+        ask(prompt or ('Digite algo no campo do chat SEM enviar. Não pressione Enter. Quando aparecer Enviar, '
+                       'volte aqui e clique em Continuar; depois clique nesse botão apenas para selecioná-lo. '))
         if page.evaluate('window.__balTypingCancelled'):
             raise EOFError('Seleção cancelada')
         from .sender import is_recorded_voice
-        while True:
-            selected = picker(page, 'botão Enviar')
-            if not selected or not is_recorded_voice(page.locator(selected), config):
-                break
-            tell('Esse é o estado de voz registrado. Selecione Enviar depois de digitar, ou Esc para cancelar.')
-        tell('Seu rascunho foi preservado. Apague-o manualmente antes de autorizar um teste; nada foi enviado pelo apontamento.')
-        return selected
+        # Limite de tentativas: num site onde o botão sempre parece o microfone
+        # registrado, repetir para sempre travaria o mapeamento (visto no CI).
+        for attempt in range(3):
+            selected = picker(page, 'botão Enviar', step=step, hint=hint)
+            if not selected:
+                return None
+            readable = page.locator(selected)
+            try:
+                if not is_recorded_voice(readable, config):
+                    tell('Seu rascunho foi preservado. Apague-o manualmente antes de autorizar um teste; '
+                         'nada foi enviado pelo apontamento.')
+                    return selected
+            except Exception:
+                return selected
+            if attempt < 2:
+                tell('Esse botão ainda é o microfone registrado. Digite no campo para ele virar Enviar '
+                     'e clique de novo — ou use "Pular este campo".')
+        tell('Não consegui distinguir o microfone de Enviar. O botão Enviar ficou como estava; '
+             'refaça este campo quando o microfone estiver resolvido.')
+        return None
     finally:
         page.evaluate('() => { if (window.__balTypingCleanup) window.__balTypingCleanup(); delete window.__balTypingCancelled; }')
 
 
+# Rótulo que o picker.js mostra no topo do painel de seleção.
+PICK_ROLES = {'composer': 'campo de mensagem', 'voice': 'botão de comando de voz',
+              'send': 'botão Enviar', 'user': 'mensagem do usuário', 'assistant': 'resposta do assistente'}
+DRAFT_PREVIEW = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
+
+# Passos do mapeamento: título curto, pergunta e dica para o apontamento.
+MAPPING_STEPS = {
+    'composer': ('Campo de digitação',
+                 'Apontar o campo onde você digita a mensagem? É a caixa de texto de baixo, vazia — não é a conversa.',
+                 'Clique na caixa de texto onde você digita. Nada é escrito nem enviado.'),
+    'voice': ('Microfone (opcional)',
+              'Com o campo de mensagem vazio, este chat tem um botão de entrada por voz (microfone)? '
+              'Sim = você aponta agora; Não = seguimos para o botão Enviar.',
+              'Clique no ícone de microfone. Se respondeu Sim e ele não existe, use "Pular este campo".'),
+    'send': ('Botão Enviar',
+             'Apontar o botão que ENVIA a mensagem (seta ou "Enviar")?',
+             'Digite no campo, sem enviar, e clique no botão de enviar (seta ou "Enviar").'),
+    'user': ('A sua pergunta',
+             'Apontar A SUA PERGUNTA JÁ ENVIADA: o balão com o texto que você mandou (não o campo de digitar)?',
+             'Clique em qualquer parte do balão da sua pergunta já enviada.'),
+    'assistant': ('A resposta do chat',
+                  'Apontar A RESPOSTA DO CHAT: o balão da resposta que o modelo deu?',
+                  'Clique em qualquer parte do balão da resposta. Pegamos o balão inteiro.'),
+}
+
+
 def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False, manual_send=False, fields=None):
-    labels = {'composer': 'campo de mensagem', 'send': 'botão Enviar',
-              'user': 'sua pergunta já enviada na conversa', 'assistant': 'a resposta do chat'}
-    # A pergunta antiga ("mensagem do usuário?") não dizia se era o balão da
-    # conversa ou o campo de digitar, e o app parecia mudo sobre o que fazer.
-    questions = {
-        'composer': 'Apontar o campo onde você digita a mensagem (a caixa de texto vazia)?',
-        'send': 'Apontar o botão enviar (Enviar / seta), depois de digitar sem enviar?',
-        'user': 'Apontar A SUA PERGUNTA JÁ ENVIADA: o balão com o texto que você mandou (não o campo de digitar)?',
-        'assistant': 'Apontar A RESPOSTA DO CHAT: o balão da resposta que o modelo deu?',
-        'voice': 'Apontar o botão de microfone, com o campo vazio?',
-    }
-    if manual_send or (fields and 'voice' in fields):
-        labels = {'composer': 'campo de mensagem', 'voice': 'botão de comando de voz', **{key: label for key, label in labels.items() if key != 'composer'}}
-    tells_history = fields is None or bool({'user', 'assistant'} & set(fields))
-    tell('Reparo por apontamento: clique no elemento dentro da janela do chat. Esc cancela.')
-    if tells_history:
-        tell('Para as mensagens da conversa, envie você mesmo uma pergunta no chat, espere a resposta e volte. '
+    """Mapeamento guiado, um passo por campo, com pular/refazer.
+
+    Regras que vieram do uso real (ADR-023):
+
+    * cada pergunta diz o **passo** e **qual elemento** clicar;
+    * ao confirmar, o programa mostra **o texto que vai capturar**;
+    * pular um campo não cancela os outros (antes, um Esc perdia tudo);
+    * no fim, cada campo pode ser refeito sem recomeçar do zero;
+    * para mensagens, o apontamento sobe ao balão inteiro — o Gemini divide a
+      resposta em vários ``<span>`` e um pedaço não é a resposta.
+    """
+    voice_wanted = manual_send or bool(fields and 'voice' in fields)
+    order = [key for key in ('composer', 'voice', 'send', 'user', 'assistant')
+             if (fields is None or key in fields) and (key != 'voice' or voice_wanted)]
+    total = len(order)
+    captured = {}
+    skipped = []
+
+    tell('Mapeamento por apontamento: um passo de cada vez. Esc pula o campo atual; '
+         'o botão "Cancelar mapeamento" encerra tudo.')
+    if {'user', 'assistant'} & set(order):
+        tell('Para os balões da conversa, envie você mesmo uma pergunta no chat, espere a resposta e volte. '
              'O campo onde se digita NÃO é a pergunta já enviada.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
-    for key, label in labels.items():
-        if fields is not None and key not in fields:
-            continue
+
+    def record(key, selector):
+        title = MAPPING_STEPS[key][0]
+        text, count = element_preview(page, selector, prefer_last=key in ('user', 'assistant'))
+        captured[key] = selector
+        if text:
+            extra = f' — {count} elemento(s) casam com este seletor' if count > 1 else ''
+            tell(f'Capturado ({title}): “{text}”{extra}.')
+        else:
+            tell(f'Capturado ({title}) — não consegui ler texto nessa área. '
+                 'Se a resposta não aparecer no teste, refaça este campo no fim.')
+
+    def run_step(key, index):
+        title, question, hint = MAPPING_STEPS[key]
+        prefix = f'Passo {index} de {total} · {title} — '
         if key == 'voice':
-            should_pick = confirmed(ask, 'Com o campo de mensagem vazio, este chat tem um botão de entrada de texto por voz (microfone)?')
-            if not should_pick:
+            if not confirmed(ask, prefix + question):
                 config.voice = ''
                 config.voice_signature = ''
-                tell('Chat sem entrada por voz: nenhum estado de microfone será usado.')
-        else:
-            should_pick = (key == 'send' and manual_send) or confirmed(ask, questions.get(key, f'Apontar {label}?'))
-        if should_pick:
-            preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
-            temporary = False
-            composer = None
+                tell('Seguindo sem microfone. Se o botão Enviar for confundido com o microfone, '
+                     'refaça o campo no fim.')
+                return
             try:
-                if key == 'send' and draft_preview and confirmed(ask,
-                        'Autoriza um rascunho temporário SEM enviar, para o microfone virar Enviar?'):
+                selector = picker(page, 'botão de comando de voz', step=f'{index} de {total}', hint=hint)
+            except StepUnavailable as problem:
+                skipped.append(key)
+                tell('Microfone: ' + str(problem) + ' O campo ficou como estava; os outros passos continuam.')
+                return
+            if not selector:
+                skipped.append(key)
+                tell('Microfone não apontado; seguimos para o botão Enviar.')
+                return
+            from .sender import control_fingerprint
+            config.voice = selector
+            config.voice_signature = control_fingerprint(page.locator(selector))
+            tell('Microfone registrado: esse botão deixa de contar como Enviar.')
+            captured[key] = selector
+            return
+        # No Enviar manual a instrução de digitar JÁ é a pergunta: pedir um
+        # Sim antes só fazia a pessoa clicar duas vezes para o mesmo passo.
+        manual = key == 'send' and manual_send
+        if not manual and not confirmed(ask, prefix + question):
+            return
+        selector = None
+        temporary = False
+        composer = None
+        try:
+            if key == 'send' and draft_preview and confirmed(ask,
+                    'Autoriza um rascunho temporário SEM enviar, para o microfone virar Enviar?'):
+                from .sender import read_composer
+                composer = page.locator(config.composer)
+                if composer.count() != 1 or not composer.is_editable():
+                    tell('Primeiro aponte um campo de mensagem editável. Nenhum rascunho foi escrito.')
+                    return
+                if read_composer(composer):
+                    tell('Seu rascunho será preservado. Aponte o botão Enviar, não o microfone.')
+                else:
+                    temporary = True
+                    composer.fill(DRAFT_PREVIEW)
+                    tell('Rascunho temporário preenchido. Aponte Enviar; nada será enviado pelo apontamento.')
+            if key == 'send' and manual_send:
+                selector = manual_send_pick(
+                    page, config, ask, tell, picker, step=f'{index} de {total}', hint=hint,
+                    prompt=(prefix + 'digite algo SEM enviar no campo do chat. Quando aparecer Enviar, '
+                            'volte aqui e clique em Continuar; depois clique no botão para selecioná-lo. '))
+            else:
+                selector = picker(page, PICK_ROLES.get(key, title), step=f'{index} de {total}', hint=hint)
+        except StepUnavailable as problem:
+            # Falha técnica deste campo não custa o mapeamento dos outros.
+            skipped.append(key)
+            tell(f'{title}: {problem} O campo ficou como estava; siga com os outros passos '
+                 'ou refaça este depois em "Corrigir campos".')
+            return
+        finally:
+            if temporary:
+                try:
                     from .sender import read_composer
-                    composer = page.locator(config.composer)
-                    if composer.count() != 1 or not composer.is_editable():
-                        tell('Primeiro aponte um campo de mensagem editável. Nenhum rascunho foi escrito.')
-                        continue
-                    if read_composer(composer):
-                        tell('Seu rascunho será preservado. Aponte o botão Enviar, não o microfone.')
+                    if composer.count() == 1 and read_composer(composer) == DRAFT_PREVIEW:
+                        composer.fill('')
+                        tell('Rascunho temporário removido.')
                     else:
-                        temporary = True
-                        composer.fill(preview)
-                        tell('Rascunho temporário preenchido. Aponte Enviar; nada será enviado pelo apontamento.')
-                selected = manual_send_pick(page, config, ask, tell, picker) if key == 'send' and manual_send else picker(page, label)
-                if selected:
-                    if key == 'voice':
-                        from .sender import control_fingerprint
-                        config.voice_signature = control_fingerprint(page.locator(selected))
-                    setattr(config, key, selected)
-                    tell('Controle de voz registrado para ignorar esse estado; não bloqueamos o mesmo botão depois que virar Enviar.' if key == 'voice' else 'Seleção atualizada.')
-            finally:
-                if temporary:
-                    try:
-                        from .sender import read_composer
-                        if composer.count() == 1 and read_composer(composer) == preview:
-                            composer.fill('')
-                            tell('Rascunho temporário removido.')
-                        else:
-                            tell('O conteúdo mudou; não apagamos sua edição. Confira o campo antes do teste.')
-                    except Exception:
-                        tell('Não foi possível conferir a remoção do rascunho temporário. Confira a janela do chat.')
+                        tell('O conteúdo mudou; não apagamos sua edição. Confira o campo antes do teste.')
+                except Exception:
+                    tell('Não foi possível conferir a remoção do rascunho temporário. Confira a janela do chat.')
+        if not selector:
+            skipped.append(key)
+            tell(f'{title}: campo não alterado (você pulou). Os outros passos continuam.')
+            return
+        setattr(config, key, selector)
+        record(key, selector)
+
+    for index, key in enumerate(order, 1):
+        run_step(key, index)
+
+    # Refazer sem recomeçar: uma pergunta única; só quem responde Sim percorre
+    # os campos de novo (ninguém deve clicar "Não" cinco vezes para concluir).
+    if captured and confirmed(ask, 'Passo final — algum campo saiu errado? '
+                                   'Sim = refazer um por um; Não = concluir o mapeamento.'):
+        for key in [item for item in order if item in captured]:
+            if confirmed(ask, f'Refazer {MAPPING_STEPS[key][0]}?'):
+                run_step(key, order.index(key) + 1)
+
+    if captured:
+        resumo = ', '.join(MAPPING_STEPS[key][0].lower() for key in order if key in captured)
+        tell(f'Mapeamento concluído: {resumo}.')
+    if skipped:
+        nomes = ', '.join(MAPPING_STEPS[key][0].lower() for key in skipped)
+        tell(f'Campos pulados: {nomes}. Eles continuam com o valor anterior; '
+             'use "Corrigir campos" para refazê-los depois.')
     return config.validate()
 
 

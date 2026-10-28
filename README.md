@@ -13,10 +13,12 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
-**Novo na 0.8.0:** correções vindas do seu uso real — confirmação de envio mais
-honesta, **Excluir** visível, apontamento dizendo qual elemento clicar e a aba
-**Atividade** com gráficos (resultados por tipo, duração, consumo medido em
-caracteres, etapas, sucesso acumulado). Veja [o que mudou e os limites](docs/design/UX_080_SPEC.md).
+**Novo na 0.9.0:** mapeamento guiado de verdade — **Passo N de M** com instrução
+por campo, prévia **“Vai capturar: …”** antes de confirmar, **Pular este campo**
+(sem perder o resto), **refazer** um campo no fim e captura do **balão inteiro**
+(a resposta do Gemini vinha partida em vários `<span>`). A 0.8.0 trouxe a
+confirmação de envio mais honesta, o **Excluir** visível e a aba **Atividade**
+com gráficos. Veja [o que mudou e os limites](docs/design/UX_090_SPEC.md).
 A conversa no painel (0.7.0) e o perfil escolhido (0.6.1) continuam valendo.
 
 ## Janela para Ubuntu (experimental)

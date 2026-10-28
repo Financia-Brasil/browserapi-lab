@@ -437,3 +437,23 @@ normalização de texto e atraso de renderização.
 Corrida corrigida no produto nesta rodada: a chamada da API local só liberava o
 contador depois de escrever o socket, então pedir “apagar histórico/revogar” logo
 após uma resposta podia receber 409 “ocupado”. Novo teste cobre o caso sem espera.
+
+## 0.9.0 — mapeamento guiado (2026-10-28)
+
+Relato que originou o marco: resposta do Gemini partida em dois `<span>` e capturada
+pela metade; “Sim” no microfone levava direto ao campo de mensagem sem volta;
+apontamento destacava botões em vez dos textos; instruções e UI desconexas.
+Contrato: [design/UX_090_SPEC.md](design/UX_090_SPEC.md); revisão:
+[design/UX_090_REVIEW.md](design/UX_090_REVIEW.md); decisão: ADR-023.
+
+| Relato | Estado neste marco | Prova |
+|---|---|---|
+| resposta cortada em vários elementos | apontamento e captura usam o **balão inteiro**; prévia “Vai capturar: …” antes de confirmar | fixture com o DOM relatado + teste de navegador + 22 checagens em jsdom |
+| seletor antigo continuava cortando | runtime sobe ao balão do nó casado e ignora aninhado | teste de navegador com `p.first-token` salvo |
+| “Sim” no microfone sem volta | passos numerados, microfone opcional e explicado, **Pular** só o campo, **refazer** no fim | testes unitários de `repair_fields` + teste de navegador de Esc/abortar |
+| botões destacados no lugar dos textos | candidatos de mensagem são balões; clique em botão é recusado | jsdom + teste de navegador |
+
+Verificação neste ambiente (sem Chromium): **310 testes, 18 ignorados, OK** e
+**22 checagens em jsdom** com a fixture do relato. Os testes de navegador do marco
+dependem do workflow `lab` — até a leitura do log, o layout real continua não
+inspecionado. Gemini/Arena autenticados seguem **não homologados**.

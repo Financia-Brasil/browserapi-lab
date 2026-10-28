@@ -94,7 +94,18 @@ class TestGraphicalJourney(BrowserTestCase):
         self.capture_receipt('receipt-profile')
 
     def wait_question(self, text):
-        self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
+        try:
+            self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
+        except Exception:
+            # Diagnóstico: sem isto, um erro no worker vira só "timeout".
+            details = self.page.evaluate("""() => ({
+                question: document.querySelector('#question').textContent,
+                step: document.querySelector('#prompt-step').textContent,
+                phase: document.querySelector('#phase').textContent,
+                error: (document.querySelector('#error') || {}).textContent || '',
+                log: (document.querySelector('#log').textContent || '').slice(-700),
+            })""")
+            raise AssertionError(f'pergunta {text!r} não apareceu: {details}')
 
     def wait_phase(self, phase):
         self.page.wait_for_function("text => document.querySelector('#phase').textContent === text", arg=phase, timeout=45000)
@@ -161,11 +172,15 @@ class TestGraphicalJourney(BrowserTestCase):
         kwargs['ask'] = ask
         return real_configure(store,name,session_factory=TrainingSession,**kwargs)
 
-    def skip_other_message_fields(self):
+    def skip_other_message_fields(self, gate=True):
         self.wait_question('A SUA PERGUNTA JÁ ENVIADA')
         self.page.click('#no')
         self.wait_question('A RESPOSTA DO CHAT')
         self.page.click('#no')
+        # Uma pergunta única antes de concluir; "Não" segue direto.
+        if gate:
+            self.wait_question('algum campo saiu errado')
+            self.page.click('#no')
 
     def test_delete_saved_connection_cancel_then_confirm(self):
         from playwright.sync_api import expect

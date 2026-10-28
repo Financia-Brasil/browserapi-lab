@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import ChatConfig, ConfigStore, DEFAULT_CONFIG_DIR, PROVIDERS, safe_name
 from .session import ProfileBusyError, ProfileLock
-from .setup import configure, check, pick, status, point_controls
+from .setup import StepUnavailable, configure, check, pick, status, point_controls
 from .existing_chrome import ExistingChromeError
 from .version import APP_VERSION
 from .telemetry import Telemetry
@@ -245,6 +245,14 @@ class Panel:
             self.prompt=None
             self.tasks.put(('api',job))
 
+    def picker(self, page, role, **options):
+        """Apontamento com o botão Interromper ligado ao cancelamento.
+
+        Repassa ``step``/``hint``: sem isso o passo morria com TypeError e o
+        painel ficava parado sem explicar nada (visto no CI da 0.9.0).
+        """
+        return pick(page, role, self.cancelled.is_set, **options)
+
     def snapshot(self):
         with self.lock:
             chats = []
@@ -307,7 +315,7 @@ class Panel:
                               'Não foi encontrado um ambiente gráfico. Abra o programa na sua sessão normal do Ubuntu.')
                 elif operation == 'configure':
                     self.receipt = configure(self.store, value.name, initial_config=value,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
+                                             picker=self.picker, manual_send=True, **common)
                 elif operation == 'use_existing':
                     if self.ask('Mudar este chat salvo para conectar ao Chrome já aberto, sem iniciar perfil separado? A conexão seguinte pedirá permissão e pode acessar todas as abas/contas. [s/N] ') == 's':
                         config = replace(self.store.load(value[0]), browser='chrome', executable=None, session_mode='existing_chrome',
@@ -319,18 +327,27 @@ class Panel:
                         self.tell('Modo anterior preservado. Nenhum navegador foi aberto.')
                 elif operation in ('point_voice', 'point_send'):
                     self.receipt = point_controls(self.store, value[0], 'voice' if operation == 'point_voice' else 'send',
-                        picker=lambda page, role: pick(page, role, self.cancelled.is_set), **common)
+                        picker=self.picker, **common)
                 elif operation == 'repair':
                     self.receipt = configure(self.store, value[0], repairing=True,
-                                             picker=lambda page, role: pick(page, role, self.cancelled.is_set), manual_send=True, **common)
+                                             picker=self.picker, manual_send=True, **common)
                 else:
                     # O texto fica na conversa do painel, não duplicado no log.
                     self.receipt = check(self.store, value[0], message=value[1] if operation == 'ask' else None,
                                          record=self.record_answer, show_answer=False, **common)
                 end_phase = 'done'
-            except (EOFError, KeyboardInterrupt):
-                self.tell('Operação interrompida. Isso não desfaz mensagens que já foram enviadas.')
+            except (EOFError, KeyboardInterrupt) as problem:
+                # O motivo vem do mapeamento (ex.: "Mapeamento cancelado"); sem
+                # ele, "Operação interrompida" não dizia onde a execução parou.
+                reason = str(problem).strip()
+                if reason in ('', 'Operação interrompida'):
+                    reason = ''
+                self.tell('Operação interrompida%s. Isso não desfaz mensagens que já foram enviadas.'
+                          % (f' — {reason}' if reason else ''))
                 end_phase = 'cancelled'
+            except StepUnavailable as problem:
+                self.tell(str(problem))
+                end_phase = 'error'
             except ExistingChromeError as error:
                 self.tell(str(error))
                 end_phase = 'error'

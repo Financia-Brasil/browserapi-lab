@@ -1,0 +1,36 @@
+test_cli_continua_imprimindo_a_resposta (test_answer_display.TestAnswerDisplay.test_cli_continua_imprimindo_a_resposta) ... ok
+test_falha_ao_exibir_nao_transforma_envio_em_erro (test_answer_display.TestAnswerDisplay.test_falha_ao_exibir_nao_transforma_envio_em_erro) ... ok
+test_negacao_nao_envia_nem_exibe (test_answer_display.TestAnswerDisplay.test_negacao_nao_envia_nem_exibe) ... ok
+test_resposta_antiga_ou_nao_confirmada_nao_e_exibida (test_answer_display.TestAnswerDisplay.test_resposta_antiga_ou_nao_confirmada_nao_e_exibida) ... ok
+test_sem_resposta_textual_nao_exibe_turno_incompleto (test_answer_display.TestAnswerDisplay.test_sem_resposta_textual_nao_exibe_turno_incompleto) ... ok
+test_turno_validado_e_exibido_uma_vez_sem_entrar_no_recibo (test_answer_display.TestAnswerDisplay.test_turno_validado_e_exibido_uma_vez_sem_entrar_no_recibo) ... ok
+test_verificacao_sem_mensagem_da_pessoa_nunca_aparece_na_conversa (test_answer_display.TestAnswerDisplay.test_verificacao_sem_mensagem_da_pessoa_nunca_aparece_na_conversa) ... ok
+test_chromium_available_e_boleano (test_browser.TestDeteccaoDeAmbiente.test_chromium_available_e_boleano) ... ok
+test_motivo_quando_indisponivel (test_browser.TestDeteccaoDeAmbiente.test_motivo_quando_indisponivel) ... skipped 'há navegador neste ambiente'
+test_pid_inexistente (test_browser.TestRss.test_pid_inexistente) ... ok
+test_rss_do_proprio_processo (test_browser.TestRss.test_rss_do_proprio_processo) ... ok
+test_aba_quente_e_reutilizada (test_browser.TestSessao.test_aba_quente_e_reutilizada) ... ok
+test_abre_e_fecha (test_browser.TestSessao.test_abre_e_fecha) ... ok
+test_arvore_de_processos_tem_rss (test_browser.TestSessao.test_arvore_de_processos_tem_rss) ... ok
+test_persistencia_apos_fechamento (test_browser.TestSessao.test_persistencia_apos_fechamento)
+E-SESS-1: o perfil sobrevive a fechar e reabrir. ... ok
+test_segundo_processo_e_recusado (test_browser.TestSessao.test_segundo_processo_e_recusado)
+E-SESS-3: nunca dois processos no mesmo user_data_dir. ... ok
+test_check_status_and_ask_from_real_cli (test_chat_browser.TestCLIRealBrowser.test_check_status_and_ask_from_real_cli) ... ok
+test_ambiguous_send_after_fill_never_clicks_or_retries (test_chat_browser.TestChatWorkflow.test_ambiguous_send_after_fill_never_clicks_or_retries) ... ok
+test_ask_returns_markdown_without_health_prompt (test_chat_browser.TestChatWorkflow.test_ask_returns_markdown_without_health_prompt) ... ok
+test_authorized_health_contract (test_chat_browser.TestChatWorkflow.test_authorized_health_contract) ... ok
+test_balao_novo_com_campo_esvaziado_confirma_e_declara_a_evidencia (test_chat_browser.TestChatWorkflow.test_balao_novo_com_campo_esvaziado_confirma_e_declara_a_evidencia)
+O site publica um balão novo, reescreve o texto e consome o rascunho. ... ok
+test_blocked_states_and_remedies (test_chat_browser.TestChatWorkflow.test_blocked_states_and_remedies) ... ok
+test_broken_selector_repair_then_success (test_chat_browser.TestChatWorkflow.test_broken_selector_repair_then_success) ... ok
+test_clique_bloqueado_sem_mensagem_nova_nao_confirma_envio (test_chat_browser.TestChatWorkflow.test_clique_bloqueado_sem_mensagem_nova_nao_confirma_envio)
+Contraprova realista: nada foi publicado no chat, então não há sucesso. ... ok
+test_configure_wizard_with_explicit_confirmation (test_chat_browser.TestChatWorkflow.test_configure_wizard_with_explicit_confirmation) ... ok
+test_connect_existing_browser_does_not_close_or_reload_it (test_chat_browser.TestChatWorkflow.test_connect_existing_browser_does_not_close_or_reload_it) ... ok
+test_draft_not_overwritten (test_chat_browser.TestChatWorkflow.test_draft_not_overwritten) ... ok
+test_failure_is_timed_without_sending_or_inventing_later_stages (test_chat_browser.TestChatWorkflow.test_failure_is_timed_without_sending_or_inventing_later_stages) ... ok
+test_google_refusal_english_no_send (test_chat_browser.TestChatWorkflow.test_google_refusal_english_no_send) ... ok
+test_google_refusal_stops_before_pointing_or_sending (test_chat_browser.TestChatWorkflow.test_google_refusal_stops_before_pointing_or_sending) ... ok
+test_manual_teaching_cancel_preserves_user_draft_and_removes_guard (test_chat_browser.TestChatWorkflow.test_manual_teaching_cancel_preserves_user_draft_and_removes_guard) ... ok
+test_manual_voice_then_type_then_select_send_without_sending (test_chat_browser.TestChatWorkflow.test_manual_voice_then_type_then_select_send_without_sending) ... 
