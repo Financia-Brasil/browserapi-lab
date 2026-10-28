@@ -453,7 +453,39 @@ Contrato: [design/UX_090_SPEC.md](design/UX_090_SPEC.md); revisão:
 | “Sim” no microfone sem volta | passos numerados, microfone opcional e explicado, **Pular** só o campo, **refazer** no fim | testes unitários de `repair_fields` + teste de navegador de Esc/abortar |
 | botões destacados no lugar dos textos | candidatos de mensagem são balões; clique em botão é recusado | jsdom + teste de navegador |
 
-Verificação neste ambiente (sem Chromium): **310 testes, 18 ignorados, OK** e
-**22 checagens em jsdom** com a fixture do relato. Os testes de navegador do marco
-dependem do workflow `lab` — até a leitura do log, o layout real continua não
-inspecionado. Gemini/Arena autenticados seguem **não homologados**.
+### Falhas encontradas no próprio CI e corrigidas antes de publicar
+
+| Sintoma no CI | Causa real | Correção |
+|---|---|---|
+| etapa do mapeamento morria em silêncio | `Panel.picker` repassava o apontamento por um `lambda` de assinatura fixa: `step`/`hint` viravam `TypeError` e o worker inteiro parava | `Panel.picker` com `**options` + teste de repasse |
+| painel do apontamento cobria o campo que precisava ser clicado | canto fixo em 4 posições, sem olhar a altura disponível; em 375px o painel ficava sobre o campo | altura limitada à faixa livre acima/abaixo do alvo e “Mover” travado até a seleção mudar |
+| um campo que não abria perdia o mapeamento inteiro | falha técnica levantava `EOFError`, tratado como cancelamento | `StepUnavailable`: o campo é pulado com explicação e os outros passos seguem |
+| “Interrompido” sem dizer onde parou | mensagem genérica engolia o motivo | a mensagem traz o motivo do mapeamento (`Mapeamento cancelado`, `Seleção cancelada`) |
+
+O job de revisão visual passou a ter duas tentativas com log por tentativa
+(`results/ci/ui-review-tentativa-N.log`) e, quando falha, publica o motivo como
+anotação na aba de verificações — o log cru fica em armazenamento que nem sempre
+é alcançável de fora do runner.
+
+### Evidência
+
+```text
+lab 40716007421 (branch): SUCCESS
+  Integração real com Chromium: Ran 429 tests in 225,857s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 37,508s — OK
+  Núcleo Python (sem navegador): aprovado
+Local, sem Chromium neste ambiente: 316 testes, 18 ignorados, OK
+jsdom: 28 checagens (balão inteiro, painel fora do alvo em 375px, Esc/Pular/Cancelar)
+```
+
+Release estável **v0.9.0** publicada a partir do merge (pacote `.deb`, runtime
+`.zip` e `SHA256SUMS` em `releases/latest/download/`), com o workflow de release
+pegando o mesmo SHA aprovado. A primeira execução em `main`
+([40717723259](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/40717723259))
+teve o job de revisão visual reprovado com o mesmo teste que passou duas vezes na
+branch e no job de navegador do próprio `main`; a leitura do log não foi possível
+deste ambiente (armazenamento do GitHub fora do alcance), então a reprovação é
+tratada como instabilidade, não como defeito homologado.
+
+Gemini/Arena autenticados seguem **não homologados**: nada aqui foi executado
+numa conta real.

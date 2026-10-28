@@ -126,6 +126,9 @@ class BrowserTestCase(unittest.TestCase):
             cls.server.stop()
             raise RuntimeError(f"falha ao abrir o navegador: {type(exc).__name__}: {exc}") from exc
         cls.page = cls.session.page()
+        # Esperas do Playwright (expect incluído) mais pacientes: a máquina de
+        # CI às vezes está carregada e 5 s de padrão viravam falso negativo.
+        cls.page.set_default_timeout(15000)
 
     @classmethod
     def tearDownClass(cls) -> None:
