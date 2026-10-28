@@ -141,6 +141,8 @@ class Panel:
         timings = receipt.get('timings') if isinstance(receipt, dict) else None
         total = timings.get('total_ms') if isinstance(timings, dict) else None
         self.transcript.add_exchange(name, question, answer, total_ms=total)
+        # Contabilidade medida (caracteres), sem transformar em tokens inventados.
+        self.telemetry.usage(len(question), len(answer))
 
     def ask(self, text):
         with self.condition:

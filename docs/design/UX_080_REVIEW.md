@@ -1,0 +1,59 @@
+# Revisão 0.8 — correções do uso real e Atividade gráfica
+
+Contrato: [UX_080_SPEC.md](UX_080_SPEC.md). Mantém o estilo Ledger (Inter 450,
+8pt, 44px de botão) e os tokens de cor existentes.
+
+## Incidente encontrado durante o trabalho
+
+Na 0.7.0, uma edição minha no `panel.html` removeu a aspa de fechamento de
+`id="view-activity"`. O parser do navegador absorvia o resto dos atributos no id e
+a aba Atividade podia não abrir. Corrigido e coberto por
+`test_panel_html_is_valid_and_every_view_is_reachable`, que valida por parser:
+tags balanceadas, nenhum valor de atributo começando com aspas, quatro `view-*`
+presentes e cada view referenciada no JavaScript. O caso não apareceu nos testes
+anteriores porque nenhum deles abria a aba Atividade.
+
+## O que foi inspecionado
+
+- **Configurações**: três cartões (Componentes, Atualização automática, Sobre) com
+  uma linha de estado cada; texto longo dentro de “O que este programa não faz”.
+- **Sua próxima ação**: pergunta + uma linha de ajuda contextual; botões Sim/Não/
+  Continuar; “Detalhes da operação” recolhido.
+- **Meus chats**: `Testar agora`, `Corrigir campos`, `Excluir` visíveis; ações de
+  voz/Enviar/Chrome em “Ajustar ou excluir”.
+- **Atividade**: seis gráficos em cartões; rosca ocupa duas colunas no desktop e
+  uma no celular; legendas em texto ao lado dos gráficos.
+- **Cores dos gráficos**: verde `#146c50` (sucesso), âmbar `#a3712f` (não confirmado/
+  limite), azul-acinzentado `#3f6f9a` (login/consumo enviado), cinza `#8a9a91`
+  (sem autorização), marrom `#7a6f5f` (erro de operação). Todo gráfico tem legenda
+  ou rótulo numérico — cor não é o único canal.
+
+## Verificação executada
+
+- Núcleo local, sem Chromium neste ambiente: **302 testes, 17 ignorados, OK**
+  (`BROWSERAPI_SKIP_BROWSER=1`).
+- Novos testes sem navegador:
+  - confirmação real (`test_sender.TestEvidenciaReal`, 7 casos): NBSP/invisíveis,
+    reuso de nó, campo esvaziado, contraprova de texto divergente;
+  - `test_guided_pointing_questions_say_which_element_to_click`;
+  - `test_delete_is_visible_and_asks_with_the_connection_name`;
+  - `test_activity_is_graphical_and_usage_is_measured_not_invented`;
+  - `test_panel_html_is_valid_and_every_view_is_reachable`;
+  - telemetria de consumo (`test_usage_*`), inclusive par inválido descartado.
+- DOM emulado (jsdom, fora do produto): 33 checagens aprovadas — conversa,
+  exclusão visível com nome na confirmação, seis gráficos renderizados, legenda,
+  `aria-label`, “Não medido” nos tokens, ausência de tabela, configurações.
+- Testes de navegador novos/atualizados (a executar no workflow `lab`):
+  reescrita de texto + atraso de renderização confirmando envio; contraprova de
+  texto divergente com campo preenchido; capturas `activity-desktop.png`,
+  `activity-usage-desktop.png` e `activity-usage-mobile.png`.
+
+## Pendências e riscos
+
+- **Não houve captura em Chromium real nesta rodada** (ambiente sem navegador). As
+  imagens da aba Atividade serão geradas pelo workflow de navegador; até a leitura
+  delas, o desenho dos gráficos está verificado só em DOM emulado, sem layout real.
+- A confirmação mais permissiva (`campo esvaziado + balão novo`) precisa ser
+  observada no seu Gemini/Arena para sabermos se reduz o falso negativo na prática.
+- Estimativa de tokens é grosseira; o número real do provedor continua indisponível.
+- Não há gráficos de CPU/RAM/tráfego: essas métricas não são coletadas nesta versão.

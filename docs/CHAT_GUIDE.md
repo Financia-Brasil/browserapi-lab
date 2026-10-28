@@ -119,7 +119,7 @@ autorizar nova tentativa.
 |---|---|
 | Campo/botão não encontrado ou ambíguo | Usar `repair` e apontar o controle correto |
 | Rascunho presente | Enviar ou remover manualmente; o programa não o sobrescreve |
-| Envio não confirmado | Conferir a conversa; não reenviar às cegas; reparar identificação da mensagem do usuário |
+| Envio não confirmado | Conferir a conversa: se a sua mensagem apareceu, o envio funcionou. Não reenviar às cegas. Persistindo, reparar o balão da pergunta já enviada |
 | Resposta fora do formato | Verificar seleção de saída e se o modelo obedeceu ao pedido |
 | Múltiplas saídas válidas | Apontar somente o contêiner de cada resposta do assistente |
 | Login expirado | Fazer login e escolher o modelo manualmente |

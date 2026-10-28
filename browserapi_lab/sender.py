@@ -17,7 +17,9 @@ O Playwright é importado tardiamente; os tempos e o resultado são puros dados.
 
 from __future__ import annotations
 
+import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -133,17 +135,56 @@ def user_message_state(page: Any, selector: Optional[str] = None) -> Dict[str, A
     return page.evaluate(COUNT_USER_MESSAGES, {"selector": selector})
 
 
-def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: str) -> Tuple[bool, str]:
-    """Sucesso exige mensagem nova **com o texto esperado** (não só contagem)."""
-    if after.get("count", 0) <= before.get("count", 0):
-        return False, "nenhuma nova mensagem do usuário"
-    last = (after.get("last") or "").strip()
-    wanted = expected.strip()
-    if last == wanted:
-        return True, "nova mensagem do usuário com o texto esperado"
-    if wanted and wanted in last:
-        return True, "nova mensagem do usuário contendo o texto esperado"
-    return False, "mensagem nova, mas texto divergente"
+def normalize_text(value: Any) -> str:
+    """Compara o que a pessoa vê, não os bytes exatos do site.
+
+    Chats re-renderizam a mensagem (NBSP, espaços zero-width, quebras de linha
+    colapsadas, normalização Unicode). Comparar o texto cru produzia falso
+    "envio sem confirmação" em sites reais.
+    """
+    if not isinstance(value, str):
+        return ""
+    value = unicodedata.normalize("NFKC", value)
+    for invisible in ("\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"):
+        value = value.replace(invisible, "")
+    return re.sub(r"\s+", " ", value.replace("\xa0", " ")).strip()
+
+
+def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: str,
+                     composer_cleared: Optional[bool] = None) -> Tuple[bool, str]:
+    """Confirmação por evidência observada; nunca por otimismo.
+
+    Aceita, nesta ordem:
+
+    1. mensagem nova com o **texto normalizado** esperado (igual ou contido);
+    2. mesmo nó reutilizado cujo texto mudou para o esperado (lista virtualizada);
+    3. mensagem nova **e** campo de digitação esvaziado — o site consumiu o
+       rascunho e publicou um balão novo, mesmo que tenha reescrito o texto.
+
+    Sem (1), (2) ou (3) o resultado é não confirmado. Texto divergente com o campo
+    ainda preenchido continua sendo ambiguidade, não sucesso.
+    """
+    before_count = before.get("count", 0) or 0
+    after_count = after.get("count", 0) or 0
+    last = normalize_text(after.get("last"))
+    wanted = normalize_text(expected)
+    new_node = after_count > before_count
+    previous = normalize_text(before.get("last"))
+    same_node_changed = (not new_node and bool(previous) and bool(last) and previous != last)
+    matches = bool(wanted) and bool(last) and (last == wanted or wanted in last)
+    if matches:
+        if new_node:
+            return True, "nova mensagem do usuário com o texto esperado"
+        if same_node_changed:
+            return True, "mensagem do usuário atualizada no mesmo nó (texto esperado)"
+        return False, "texto esperado já existia antes do envio; sem mensagem nova"
+    if new_node:
+        if composer_cleared:
+            return True, "nova mensagem do usuário e campo esvaziado (site reescreveu o texto)"
+        return False, "mensagem nova, mas texto divergente"
+    if composer_cleared:
+        return False, "campo esvaziado, mas nenhuma mensagem nova observada"
+    return False, "nenhuma nova mensagem do usuário"
 
 
 # --------------------------------------------------------------------------
@@ -307,7 +348,9 @@ def send_message(
                 attempt.send_ms = (time.perf_counter() - t1) * 1000.0
 
                 t2 = time.perf_counter()
-                ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms, user_selector)
+                ok, evidence = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms,
+                                              user_selector, composer_getter=lambda: read_composer(locator),
+                                              filled=filled_value)
                 attempt.verify_ms = (time.perf_counter() - t2) * 1000.0
                 attempt.evidence = evidence
                 attempt.composer_confirmed = composer_evidence(
@@ -346,12 +389,20 @@ def send_message(
 
 
 def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
-                   timeout_ms: float, poll_ms: float, user_selector: Optional[str] = None) -> Tuple[bool, str]:
+                   timeout_ms: float, poll_ms: float, user_selector: Optional[str] = None,
+                   composer_getter: Any = None, filled: Optional[str] = None) -> Tuple[bool, str]:
     deadline = time.perf_counter() + (timeout_ms / 1000.0)
     last_reason = "sem evidência"
     while time.perf_counter() < deadline:
         after = user_message_state(page, user_selector)
-        ok, reason = evidence_of_send(before, after, text)
+        cleared = False
+        if composer_getter is not None and filled:
+            try:
+                current = composer_getter()
+                cleared = current is not None and not current.strip()
+            except Exception:
+                cleared = False
+        ok, reason = evidence_of_send(before, after, text, composer_cleared=cleared)
         if ok:
             return True, reason
         last_reason = reason

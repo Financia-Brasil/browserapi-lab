@@ -326,3 +326,25 @@ Não é histórico do site, não é o RAG da API local e não é persistente: re
 apaga; excluir a conexão apaga aquele texto. A API de agentes continua com seu
 próprio registro e histórico opt-in, fora desta conversa. Sem autenticação real de
 Gemini/Arena, isto é exibição validada em fixture e DOM emulado, não homologação.
+
+
+## ADR-021 — Confirmação de envio por evidência tolerante, nunca por otimismo
+
+O relato de uso real trouxe “Envio sem confirmação” para uma mensagem que aparecia
+na tela. A regra anterior exigia texto idêntico ao preenchido no último balão do
+usuário, em 5 s — frágil porque sites re-renderizam mensagens (espaços, `NBSP`,
+invisíveis) e podem demorar a pintar o balão.
+
+Decisão: comparar texto normalizado (`NFKC`, invisíveis removidos, espaços
+colapsados); aceitar lista virtualizada que atualiza o mesmo nó; esperar até 9 s
+(teto `timeout_ms`); e aceitar **mensagem nova com campo esvaziado** como evidência
+de que o site consumiu o rascunho. A evidência usada vai no recibo em
+`diagnostics.send_evidence`.
+
+O que permanece proibido: reenvio automático, sucesso com texto divergente e
+rascunho presente, e tratar campo esvaziado sozinho como envio. A mudança só reduz
+falso negativo — não cria caminho para mensagem duplicada. Continua sendo
+observação de DOM; não há garantia de exactly-once em site externo.
+
+Também nesta rodada: HTML do painel passou a ser validado por parser nos testes,
+depois de uma aspa faltante quebrar o id da aba Atividade na 0.7.0.

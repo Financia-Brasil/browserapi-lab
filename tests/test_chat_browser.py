@@ -101,6 +101,55 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(exchange(self.page, config, authorized=True, health_check=True).status, 'success')
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
 
+    def test_site_que_reescreve_o_texto_ainda_confirma_o_envio(self):
+        """Relato real: a mensagem foi enviada, mas o painel disse "sem confirmação".
+
+        O fixture aqui imita chats reais que normalizam o balão da pessoa
+        (espaços/NBSP) e demoram alguns milissegundos para pintá-lo.
+        """
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const conversation = document.querySelector('#conversation');
+            new MutationObserver(() => {
+                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
+                    if (node.dataset.balNormalized) continue;
+                    node.dataset.balNormalized = '1';
+                    node.textContent = node.textContent.replace(/\\s+/g, '\u00a0') + '\u200b';
+                }
+            }).observe(conversation, {childList: true, subtree: true});
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success', result.diagnostics)
+        self.assertEqual(result.send_state, 'confirmed')
+        self.assertEqual(result.answer, 'browserapi-ok')
+        self.assertIn('texto esperado', result.diagnostics.get('send_evidence', ''))
+
+    def test_texto_divergente_sem_campo_esvaziado_nao_vira_sucesso(self):
+        """Contraprova: reescrever o balão sem que o site consuma o rascunho."""
+        config = self.prepare()
+        self.page.evaluate("""() => {
+            const conversation = document.querySelector('#conversation');
+            new MutationObserver(() => {
+                for (const node of conversation.querySelectorAll('.message[data-role="user"] .body')) {
+                    if (node.dataset.balChanged) continue;
+                    node.dataset.balChanged = '1';
+                    node.textContent = 'conteúdo completamente diferente';
+                }
+            }).observe(conversation, {childList: true, subtree: true});
+            // Mantém um texto no campo para o sinal de esvaziamento não valer.
+            const composer = document.querySelector('#composer');
+            setInterval(() => {
+                if (!composer.value) {
+                    composer.value = 'rascunho que permanece';
+                    composer.dispatchEvent(new Event('input', {bubbles: true}));
+                }
+            }, 30);
+        }""")
+        result = exchange(self.page, config, authorized=True, health_check=True)
+        self.assertNotEqual(result.status, 'success')
+        self.assertEqual(result.send_state, 'unknown')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
     def test_ambiguous_send_after_fill_never_clicks_or_retries(self):
         config = self.prepare()
         config.timeout_ms = 500

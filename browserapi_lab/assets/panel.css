@@ -26,3 +26,32 @@
 .empty-conversation{font-size:13px;margin:8px 0 0}
 .conversation-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}
 @media(max-width:640px){.conversation-card{grid-column:auto}}
+
+/* 0.8 — Atividade em gráficos; menos texto, mais leitura rápida. */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
+.chart{margin:0;border:1px solid var(--line);border-radius:8px;padding:16px;background:#fff;min-width:0}
+.chart.wide{grid-column:span 2}
+.chart figcaption{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;text-transform:uppercase;margin-bottom:8px}
+.chart-body{min-height:132px;display:flex;align-items:center}
+.chart-svg{width:100%;height:auto;display:block;overflow:visible}
+.chart-label{font-family:'JetBrains Mono',monospace;font-size:9px;fill:var(--muted)}
+.chart-total{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;fill:var(--ink)}
+.chart-empty{font-size:13px;color:var(--muted);margin:0}
+.chart-note{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.4}
+.legend{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--muted)}
+.legend li{display:flex;align-items:center;gap:8px}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;background:var(--muted)}
+.chart-details{margin-top:16px}
+.chart-details summary{font-size:12px;color:var(--muted);cursor:pointer}
+.chart-details #metrics-scope{font-size:12px;margin:8px 0}
+.chart-details small{display:block;font-size:11px;color:var(--muted);margin-top:8px}
+.chat button.danger{color:#8d3a2c}
+.chat button.danger:hover:not(:disabled){background:#f7ece9}
+.switch{display:flex;align-items:center;gap:8px;font-size:13px;max-width:320px}
+.settings-note{margin-top:16px}
+.settings-note summary{font-size:12px;color:var(--muted);cursor:pointer}
+.settings-note small{display:block;margin-top:8px;color:var(--muted);line-height:1.5}
+#prepared-label,#updates-status{font-size:13px;margin:8px 0}
+#version-status{font-size:13px;margin:0}
+.progress h2{font-size:16px}
+@media(max-width:640px){.chart.wide{grid-column:auto}.chart{padding:8px}}

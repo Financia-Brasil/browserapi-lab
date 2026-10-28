@@ -391,6 +391,95 @@ class TestPanel(unittest.TestCase):
         self.assertNotIn('resposta mostrada na conversa',json.dumps(self.panel.snapshot()['telemetry']))
         self.assertNotIn('resposta mostrada na conversa',json.dumps(self.store.status('chat') or {}))
 
+    def test_panel_html_is_valid_and_every_view_is_reachable(self):
+        """O HTML é editado à mão: um id sem aspa já quebrou a aba Atividade."""
+        from html.parser import HTMLParser
+        from browserapi_lab.gui import ASSETS
+        source = (ASSETS/'panel.html').read_text()
+
+        class Audit(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.views, self.ids, self.broken, self.stack = [], [], [], []
+                self.void = {'meta','link','br','hr','img','input','source','area','base','col','embed','track','wbr'}
+            def handle_starttag(self, tag, attrs):
+                for key, value in attrs:
+                    if value is not None and (value.startswith('"') or value.startswith("'")):
+                        self.broken.append((tag, key, value))
+                values = dict(attrs)
+                if values.get('id'):
+                    self.ids.append(values['id'])
+                if 'view' in (values.get('class') or '').split():
+                    self.views.append(values['id'])
+                if tag not in self.void:
+                    self.stack.append(tag)
+            def handle_endtag(self, tag):
+                if tag in self.void:
+                    return
+                if self.stack and self.stack[-1] == tag:
+                    self.stack.pop()
+                elif tag in self.stack:
+                    self.broken.append(('desbalanceado', tag, self.stack[-1]))
+
+        audit = Audit(); audit.feed(source)
+        self.assertEqual(audit.broken, [])
+        self.assertEqual(audit.stack, [])
+        self.assertEqual(audit.views, ['view-connections','view-activity','view-api','view-settings'])
+        self.assertEqual(sorted({i for i in audit.ids if audit.ids.count(i) > 1}), [])
+        js = (ASSETS/'panel.js').read_text()
+        for view in audit.views:
+            self.assertIn(view.removeprefix('view-'), js)
+
+    def test_activity_is_graphical_and_usage_is_measured_not_invented(self):
+        from browserapi_lab.gui import ASSETS
+        js = (ASSETS/'panel.js').read_text()
+        html = (ASSETS/'panel.html').read_text()
+        for identifier in ('chart-status','chart-latency','chart-usage','chart-stages','chart-success',
+                           'status-legend','stage-details','usage-note','source-health'):
+            self.assertIn(f'id="{identifier}"', html)
+        self.assertNotIn('latency-history', html)
+        self.assertNotIn('<table>', html)
+        self.assertIn("createElementNS(SVG_NS", js)
+        for unsafe in ('innerHTML','insertAdjacentHTML','outerHTML','document.write'):
+            self.assertNotIn(unsafe, js)
+        # Rótulo textual junto do gráfico e estimativa declarada como grosseira.
+        self.assertIn("'aria-label': label", js)
+        self.assertIn('estimativa grosseira', js)
+        self.assertIn('Não medido', html)
+
+    def test_delete_is_visible_and_asks_with_the_connection_name(self):
+        from browserapi_lab.gui import ASSETS
+        js = (ASSETS/'panel.js').read_text()
+        self.assertIn("remove.className='text-button danger'", js)
+        self.assertIn("remove.textContent='Excluir'", js)
+        self.assertIn('actions.append(remove)', js)
+        self.assertIn('Excluir a conexão "${chat.name}"', js)
+        self.assertIn('não são apagados', js)
+        # Ações principais primeiro; detalhes técnicos continuam recolhidos.
+        self.assertLess(js.index("['Testar agora'"), js.index("['Usar Chrome já aberto'"))
+
+    def test_guided_pointing_questions_say_which_element_to_click(self):
+        from browserapi_lab.setup import repair_fields
+        asked = []
+        tells = []
+        class Page:
+            url = 'https://example.com/app'
+            def evaluate(self, *_args, **_kwargs):
+                return None
+            def bring_to_front(self):
+                pass
+        config = ChatConfig('chat','https://example.com', composer='#c', send='#s', user='.u', assistant='.a', root='body')
+        def ask(text):
+            asked.append(text)
+            return 'n'
+        repair_fields(Page(), config, ask=ask, tell=tells.append, picker=lambda *_: None,
+                      fields=('user','assistant'))
+        self.assertTrue(any('A SUA PERGUNTA JÁ ENVIADA' in text for text in asked))
+        self.assertTrue(any('não o campo de digitar' in text for text in asked))
+        self.assertTrue(any('A RESPOSTA DO CHAT' in text for text in asked))
+        self.assertTrue(any('NÃO é a pergunta já enviada' in text for text in tells))
+        self.assertFalse(any('Apontar mensagem do usuário?' == text for text in asked))
+
 @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb não disponível')
 class TestUbuntuPackage(unittest.TestCase):
     def test_build_extract_assets_and_import_outside_checkout(self):

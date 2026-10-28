@@ -13,10 +13,11 @@ completa OpenAI. Veja [contrato, ativação e limites](docs/LOCAL_API.md).
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
-**Novo na 0.7.0:** a resposta capturada agora aparece na **conversa do painel**, com
-“Copiar última resposta” e “Limpar painel”. Veja [o que mudou e os limites](docs/design/UX_070_SPEC.md).
-O perfil escolhido continua sendo o perfil usado (0.6.1, em
-[PROFILE_BINDING_061.md](docs/PROFILE_BINDING_061.md)).
+**Novo na 0.8.0:** correções vindas do seu uso real — confirmação de envio mais
+honesta, **Excluir** visível, apontamento dizendo qual elemento clicar e a aba
+**Atividade** com gráficos (resultados por tipo, duração, consumo medido em
+caracteres, etapas, sucesso acumulado). Veja [o que mudou e os limites](docs/design/UX_080_SPEC.md).
+A conversa no painel (0.7.0) e o perfil escolhido (0.6.1) continuam valendo.
 
 ## Janela para Ubuntu (experimental)
 
@@ -46,6 +47,20 @@ browserapi-lab status meu-gemini
 browserapi-lab repair meu-gemini
 browserapi-lab ask meu-gemini
 ```
+
+## Correções da 0.8.0
+
+- **“Envio sem confirmação” era falso negativo na comparação de texto.** A
+  confirmação agora compara o texto normalizado (espaços, `NBSP`, invisíveis),
+  aceita lista que reutiliza o mesmo nó e espera até 9 s. Mensagem nova com o campo
+  esvaziado também confirma. Texto divergente com rascunho ainda preenchido continua
+  sendo ambiguidade, e nada é reenviado automaticamente.
+- **Excluir** conexão agora é botão visível em cada chat, com o nome na confirmação.
+- **Apontar** pergunta “A SUA PERGUNTA JÁ ENVIADA (não o campo de digitar)” e instrui
+  a enviar uma pergunta antes; cada pergunta tem uma linha de ajuda.
+- **Atividade** virou seis gráficos em SVG; tokens seguem **Não medido**, com consumo
+  real em caracteres e estimativa declarada como grosseira.
+- Menos texto em Configurações e em “Sua próxima ação”.
 
 ## A resposta na tela (0.7.0)
 

@@ -94,10 +94,23 @@ def manual_send_pick(page, config, ask, tell, picker):
 
 def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_preview=False, manual_send=False, fields=None):
     labels = {'composer': 'campo de mensagem', 'send': 'botão Enviar',
-              'user': 'mensagem do usuário', 'assistant': 'resposta do assistente'}
+              'user': 'sua pergunta já enviada na conversa', 'assistant': 'a resposta do chat'}
+    # A pergunta antiga ("mensagem do usuário?") não dizia se era o balão da
+    # conversa ou o campo de digitar, e o app parecia mudo sobre o que fazer.
+    questions = {
+        'composer': 'Apontar o campo onde você digita a mensagem (a caixa de texto vazia)?',
+        'send': 'Apontar o botão enviar (Enviar / seta), depois de digitar sem enviar?',
+        'user': 'Apontar A SUA PERGUNTA JÁ ENVIADA: o balão com o texto que você mandou (não o campo de digitar)?',
+        'assistant': 'Apontar A RESPOSTA DO CHAT: o balão da resposta que o modelo deu?',
+        'voice': 'Apontar o botão de microfone, com o campo vazio?',
+    }
     if manual_send or (fields and 'voice' in fields):
         labels = {'composer': 'campo de mensagem', 'voice': 'botão de comando de voz', **{key: label for key, label in labels.items() if key != 'composer'}}
-    tell('Reparo por apontamento. Tenha uma mensagem sua e uma resposta visíveis na conversa.')
+    tells_history = fields is None or bool({'user', 'assistant'} & set(fields))
+    tell('Reparo por apontamento: clique no elemento dentro da janela do chat. Esc cancela.')
+    if tells_history:
+        tell('Para as mensagens da conversa, envie você mesmo uma pergunta no chat, espere a resposta e volte. '
+             'O campo onde se digita NÃO é a pergunta já enviada.')
     tell('Não envie outra mensagem se a tentativa anterior ficou sem confirmação.')
     for key, label in labels.items():
         if fields is not None and key not in fields:
@@ -109,7 +122,7 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
                 config.voice_signature = ''
                 tell('Chat sem entrada por voz: nenhum estado de microfone será usado.')
         else:
-            should_pick = (key == 'send' and manual_send) or confirmed(ask, f'Apontar {label}?')
+            should_pick = (key == 'send' and manual_send) or confirmed(ask, questions.get(key, f'Apontar {label}?'))
         if should_pick:
             preview = 'BrowserAPI: rascunho temporário de configuração, não enviar.'
             temporary = False

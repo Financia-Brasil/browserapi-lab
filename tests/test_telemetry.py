@@ -133,3 +133,33 @@ class TestTelemetry(unittest.TestCase):
         self.assertEqual(clean_timings({'total_ms':10**1000}),{})
         self.record({'private':'SECRET'})
         self.assertNotIn('SECRET',json.dumps(self.metrics.snapshot()))
+
+    def test_usage_counts_measured_characters_only_and_never_invents_tokens(self):
+        telemetry = Telemetry()
+        telemetry.begin('ask', 'chat')
+        telemetry.usage(120, 480)
+        telemetry.usage(0, -5)          # inválido: ignorado, não vira consumo
+        telemetry.usage(1e12, 3)        # fora do limite: ignorado
+        telemetry.finish({'status':'success','timings':{'total_ms':100}}, 'done')
+        state = telemetry.snapshot()
+        usage = state['usage']
+        self.assertEqual(usage['prompt_chars'], 120)
+        self.assertEqual(usage['response_chars'], 480)
+        self.assertEqual(usage['total_chars'], 600)
+        self.assertEqual(usage['measured_responses'], 1)
+        self.assertIsNone(usage['tokens'])
+        self.assertIsNone(usage['estimated_tokens'])
+        self.assertEqual(usage['token_source'], 'not_reported')
+        record = state['history'][0]
+        self.assertEqual((record['prompt_chars'], record['response_chars']), (120, 480))
+        self.assertNotIn('SECRET', json.dumps(state))
+
+    def test_usage_absent_is_none_not_zero_on_records(self):
+        telemetry = Telemetry()
+        telemetry.begin('doctor')
+        telemetry.finish({'status':None}, 'done')
+        record = telemetry.snapshot()['history'][0]
+        self.assertIsNone(record['prompt_chars'])
+        self.assertIsNone(record['response_chars'])
+        self.assertEqual(telemetry.snapshot()['usage']['total_chars'], 0)
+

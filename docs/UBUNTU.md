@@ -482,3 +482,25 @@ Não homologado no seu Chrome nem no Linux Lite. Detalhes e fontes: `docs/PROFIL
 
 Se o cartão não mostrar a resposta, confira a página e o log da operação. Não há
 reenvio automático; uma resposta ambígua ou não confirmada não entra na conversa.
+
+## 0.8.0 — correções do uso real e Atividade com gráficos
+
+**Se aparecer “Enviamos, mas o site não confirmou a mensagem”:** olhe a conversa.
+Se a sua mensagem apareceu, o envio funcionou — não repita. A 0.8 compara o texto
+normalizado (o site costuma trocar espaços/caracteres invisíveis) e espera mais tempo
+antes de concluir. Nada é reenviado sozinho.
+
+**Excluir uma conexão:** em **Meus chats**, clique em **Excluir** (agora visível) e
+confirme. Some apenas o cadastro, o recibo e a conversa exibida no BrowserAPI; seu
+Chrome, sua conta e o histórico do site não são tocados. Desative a API e espere a
+tarefa terminar.
+
+**Apontar campos:** o programa diz qual elemento clicar. Para as mensagens da
+conversa, envie você mesmo uma pergunta, espere a resposta e volte. “A SUA PERGUNTA
+JÁ ENVIADA” é o balão com o seu texto, **não** o campo onde se digita.
+
+**Atividade:** gráficos de resultados por tipo, duração, consumo medido em
+caracteres, etapas e sucesso acumulado. O site não informa tokens: o número de
+tokens continua “Não medido”, com uma estimativa grosseira apenas informativa.
+
+Detalhes e limites: [UX_080_SPEC.md](design/UX_080_SPEC.md).

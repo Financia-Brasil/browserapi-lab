@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.7.0';
+const PANEL_VERSION = '0.8.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -192,29 +192,202 @@ function renderChats(chats) {
     box.append(info);
     const actions=document.createElement('div');actions.className='chat-actions';
     const advanced=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Ajustar ou excluir';advanced.append(summary);
-    for (const [caption, operation] of [['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send'],['Testar agora','check'],['Corrigir campos','repair']]) {
+    for (const [caption, operation] of [['Testar agora','check'],['Corrigir campos','repair'],['Usar Chrome já aberto','use_existing'],['Selecionar botão de voz','point_voice'],['Digitar e selecionar Enviar / Enter','point_send']]) {
       const button = document.createElement('button'); button.textContent = caption; button.className = 'secondary';
       button.onclick = () => task(operation, {name: chat.name, ...(operation==='use_existing' ? {personal_profile:$('personal-profile').value}: {})});
       (operation==='point_voice' || operation==='point_send' ? advanced : actions).append(button);
     }
-    const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Excluir conexão';
+    const remove=document.createElement('button');remove.type='button';remove.className='text-button danger';remove.textContent='Excluir';
     remove.onclick=async()=>{
-      if(busy() || incompatible() || !confirm('Excluir esta conexão do BrowserAPI? Seu Chrome e suas conversas não serão apagados.'))return;
+      if(busy() || incompatible() || !confirm(`Excluir a conexão "${chat.name}"? Isso remove só o cadastro e a conversa exibida no BrowserAPI. Seu Chrome, sua conta e suas conversas no site não são apagados.`))return;
       pending=true;controls();
       try{await api('chat/delete',{name:chat.name});await refresh();}
       catch(err){error(err.message);}
       finally{pending=false;controls();}
     };
-    advanced.append(remove);
+    actions.append(remove);
     box.append(actions,advanced);$('chats').append(box);
   }
 }
 let metricsSignature = '';
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const milliseconds = value => Number.isFinite(value) ? `${Math.round(value)} ms` : 'N/D';
+const compact = value => value >= 1e6 ? (value / 1e6).toFixed(1) + 'M' : value >= 1e3 ? (value / 1e3).toFixed(1) + 'k' : String(value);
+const STATUS_SHORT = {success:'Sucesso', not_authorized:'Sem autorização', login_required:'Login', google_login_blocked:'Bloqueio de login',
+  rate_limit:'Limite', captcha:'Verificação', timeout:'Tempo esgotado', send_unconfirmed:'Envio não confirmado', send_missing:'Botão não achado',
+  composer_missing:'Campo não achado', draft_present:'Rascunho', ambiguous_output:'Ambíguo', contract_invalid:'Formato', wrong_origin:'Endereço',
+  page_unavailable:'Página', output_invalid:'Leitura', send_is_microphone:'Voz', not_configured:'Configuração'};
+const STATUS_COLOR = {success:'#146c50', not_authorized:'#8a9a91', cancelled:'#b58a2b', operation_error:'#7a6f5f',
+  send_unconfirmed:'#a3712f', timeout:'#a3712f', login_required:'#3f6f9a', google_login_blocked:'#3f6f9a',
+  rate_limit:'#8a5f2b', captcha:'#8a5f2b', wrong_origin:'#6f5f9a', page_unavailable:'#8a5f2b'};
+function statusColor(key) { return STATUS_COLOR[key] || '#a33c2f'; }
+function node(tag, attrs = {}) {
+  const element = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
+}
+function mark(tag, attrs = {}) {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
+}
+function canvas(container, label, width = 320, height = 132) {
+  container.replaceChildren();
+  const figure = mark('svg', {viewBox: `0 0 ${width} ${height}`, class: 'chart-svg', role: 'img',
+    'aria-label': label, preserveAspectRatio: 'none'});
+  container.append(figure);
+  return figure;
+}
+function emptyChart(container, text) {
+  container.replaceChildren();
+  const paragraph = node('p', {class: 'chart-empty'});
+  paragraph.textContent = text;
+  container.append(paragraph);
+}
+function barLabel(figure, x, y, text, anchor = 'middle') {
+  const label = mark('text', {x, y, class: 'chart-label', 'text-anchor': anchor});
+  label.textContent = text;
+  figure.append(label);
+}
+function statusKey(record) {
+  if (record.status) return record.status;
+  if (record.phase === 'cancelled') return 'cancelled';
+  if (record.phase === 'error') return 'operation_error';
+  return 'no_result';
+}
+function renderStatusChart(history) {
+  const counts = new Map();
+  for (const record of history) {
+    const key = statusKey(record);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const container = $('chart-status');
+  const legend = $('status-legend');
+  legend.replaceChildren();
+  if (!entries.length) { emptyChart(container, 'Sem operações ainda.'); return; }
+  const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+  const figure = canvas(container, `Resultados por tipo: ${entries.map(([key, value]) => `${STATUS_SHORT[key] || key} ${value}`).join(', ')}`, 300, 132);
+  const radius = 46, cx = 66, cy = 66, circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  for (const [key, value] of entries) {
+    const length = (value / total) * circumference;
+    const arc = mark('circle', {cx, cy, r: radius, fill: 'none', stroke: statusColor(key), 'stroke-width': 22,
+      'stroke-dasharray': `${Math.max(0, length - 2)} ${circumference}`, 'stroke-dashoffset': -offset,
+      transform: `rotate(-90 ${cx} ${cy})`});
+    const title = mark('title'); title.textContent = `${STATUS_SHORT[key] || key}: ${value}`;
+    arc.append(title); figure.append(arc); offset += length;
+  }
+  const number = mark('text', {x: cx, y: cy + 2, class: 'chart-total', 'text-anchor': 'middle'});
+  number.textContent = total; figure.append(number);
+  const caption = mark('text', {x: cx, y: cy + 20, class: 'chart-label', 'text-anchor': 'middle'});
+  caption.textContent = 'operações'; figure.append(caption);
+  entries.slice(0, 6).forEach(([key, value], index) => {
+    const item = node('li');
+    const swatch = node('span', {class: 'legend-dot'});
+    swatch.style.background = statusColor(key);
+    item.append(swatch, document.createTextNode(`${STATUS_SHORT[key] || key} · ${value}`));
+    legend.append(item);
+  });
+}
+function renderLatencyChart(history) {
+  const values = history.filter(record => Number.isFinite(record.timings?.total_ms)).slice(-14);
+  const container = $('chart-latency');
+  if (!values.length) { emptyChart(container, 'Sem tempos medidos.'); return; }
+  const max = Math.max(1, ...values.map(record => record.timings.total_ms));
+  const figure = canvas(container, `Duração das últimas ${values.length} operações, máximo ${Math.round(max)} ms`);
+  const width = 320 / values.length;
+  values.forEach((record, index) => {
+    const height = Math.max(2, (record.timings.total_ms / max) * 92);
+    const rect = mark('rect', {x: index * width + 3, y: 100 - height, width: Math.max(2, width - 6), height,
+      rx: 2, fill: record.status === 'success' ? '#146c50' : '#a3712f'});
+    const title = mark('title');
+    title.textContent = `#${record.id} ${record.name || ''} · ${milliseconds(record.timings.total_ms)}`;
+    rect.append(title); figure.append(rect);
+  });
+  barLabel(figure, 2, 14, `${Math.round(max)} ms`, 'start');
+  barLabel(figure, 2, 120, `#${values[0].id}`, 'start');
+  barLabel(figure, 318, 120, `#${values[values.length - 1].id}`, 'end');
+}
+function renderUsageChart(history) {
+  const values = history.filter(record => record.prompt_chars || record.response_chars).slice(-12);
+  const container = $('chart-usage');
+  const note = $('usage-note');
+  if (!values.length) {
+    emptyChart(container, 'Sem consumo medido.');
+    note.textContent = 'O site não informa tokens; medimos caracteres enviados e recebidos.';
+    return;
+  }
+  const max = Math.max(1, ...values.map(record => Math.max(record.prompt_chars || 0, record.response_chars || 0)));
+  const figure = canvas(container, `Caracteres por operação, ${values.length} operações`);
+  const width = 320 / values.length;
+  values.forEach((record, index) => {
+    const sent = ((record.prompt_chars || 0) / max) * 84;
+    const received = ((record.response_chars || 0) / max) * 84;
+    figure.append(mark('rect', {x: index * width + 4, y: 96 - sent, width: Math.max(2, width / 2 - 4), height: Math.max(1, sent), rx: 2, fill: '#3f6f9a'}));
+    figure.append(mark('rect', {x: index * width + width / 2, y: 96 - received, width: Math.max(2, width / 2 - 4), height: Math.max(1, received), rx: 2, fill: '#146c50'}));
+  });
+  barLabel(figure, 2, 14, compact(max), 'start');
+  barLabel(figure, 2, 120, 'enviado', 'start');
+  barLabel(figure, 318, 120, 'recebido', 'end');
+  const usage = state?.telemetry?.usage || {};
+  const total = (usage.prompt_chars || 0) + (usage.response_chars || 0);
+  const estimate = Math.round(total / 4);
+  note.textContent = `Nesta sessão: ${compact(usage.prompt_chars || 0)} enviados + ${compact(usage.response_chars || 0)} recebidos. `
+    + `≈ ${compact(estimate)} tokens por estimativa grosseira (4 caracteres/token), não é o número do provedor.`;
+}
+function renderStagesChart(history) {
+  const latest = [...history].reverse().find(record => record.status && record.status !== 'not_authorized');
+  const container = $('chart-stages');
+  const details = $('stage-details');
+  details.replaceChildren();
+  const labels = {browser_start_ms:'Navegador', page_open_ms:'Aba', preflight_ms:'Pré-voo', send_pipeline_ms:'Envio',
+    fill_ms:'↳ digitar', send_ms:'↳ clicar', response_wait_ms:'Espera', parse_ms:'Leitura', total_ms:'Fluxo',
+    ttft_dom_ms:'1º conteúdo', capture_overhead_ms:'Atraso', manual_wait_ms:'Sua espera', operation_wall_ms:'Operação'};
+  if (!latest) { emptyChart(container, 'Sem resultado medido.'); return; }
+  const entries = Object.entries(labels).map(([key, label]) => [label, latest.timings?.[key]])
+    .filter(([, value]) => Number.isFinite(value));
+  if (!entries.length) { emptyChart(container, 'Sem etapas medidas.'); return; }
+  const max = Math.max(1, ...entries.map(([, value]) => value));
+  const figure = canvas(container, `Etapas do último resultado: ${entries.map(([label, value]) => `${label} ${Math.round(value)} ms`).join(', ')}`,
+    320, entries.length * 22 + 10);
+  entries.forEach(([label, value], index) => {
+    const width = Math.max(2, (value / max) * 190);
+    figure.append(mark('rect', {x: 96, y: index * 22 + 4, width, height: 12, rx: 2,
+      fill: label.startsWith('↳') ? '#8aa79a' : '#146c50'}));
+    barLabel(figure, 90, index * 22 + 14, label, 'end');
+    barLabel(figure, 96 + width + 4, index * 22 + 14, `${Math.round(value)} ms`, 'start');
+  });
+  for (const [label, value] of entries) {
+    const item = node('li'); item.textContent = `${label}: ${milliseconds(value)}`; details.append(item);
+  }
+}
+function renderSuccessChart(history) {
+  const requests = history.filter(record => record.status && record.status !== 'not_authorized');
+  const container = $('chart-success');
+  if (!requests.length) { emptyChart(container, 'Sem resultados.'); return; }
+  const figure = canvas(container, 'Taxa de sucesso acumulada por operação', 320, 120);
+  const points = [];
+  let hits = 0;
+  requests.forEach((record, index) => {
+    if (record.status === 'success') hits += 1;
+    const x = 8 + (index / Math.max(1, requests.length - 1)) * 296;
+    const y = 96 - (hits / (index + 1)) * 80;
+    points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  });
+  figure.append(mark('line', {x1: 8, y1: 96, x2: 312, y2: 96, stroke: '#dfe7e2', 'stroke-width': 1}));
+  figure.append(mark('polyline', {points: points.join(' '), fill: 'none', stroke: '#146c50', 'stroke-width': 2.5,
+    'stroke-linejoin': 'round'}));
+  const last = requests[requests.length - 1];
+  const rate = Math.round((hits / requests.length) * 100);
+  barLabel(figure, 8, 16, `${rate}%`, 'start');
+  barLabel(figure, 312, 16, `${requests.length} resultados`, 'end');
+  barLabel(figure, 8, 112, last.at ? String(last.at).slice(11, 19) : '', 'start');
+}
 function renderMetrics(value) {
   const t = value.telemetry;
   if (!t) return;
-  const signature = JSON.stringify([t,value.chats,value.phase]);
+  const signature = JSON.stringify([t, value.chats, value.phase]);
   if (signature === metricsSignature) return;
   metricsSignature = signature;
   $('stat-requests').textContent = t.requests;
@@ -222,33 +395,28 @@ function renderMetrics(value) {
   $('stat-average').textContent = milliseconds(t.average_ms);
   $('stat-p95').textContent = milliseconds(t.p95_ms);
   $('stat-cancelled').textContent = t.cancelled;
-  $('stat-tokens').textContent = 'Não disponível';
-  $('metrics-scope').textContent = `${t.successes} sucessos · ${t.failures} falhas · ${t.denied} sem autorização · ${t.operation_errors} erros de operação · ${t.timed_requests} resultados com latência. Janela: ${t.operations}/${t.limit} operações; inclui verificações e mensagens, não é contagem de chamadas a uma API.`;
-  const labels = {online:'Online (observado)',login_required:'Login necessário',auth_blocked:'Login bloqueado',rate_limited:'Limite de uso observado',human_required:'Verificação humana',degraded:'Resposta não confirmada',unavailable:'Não acessível nesta execução',needs_attention:'Precisa de atenção',not_observed:'Configuração/estado a verificar',interrupted:'Interrompida: confira a página',busy:value.phase === 'waiting' ? 'Aguardando você' : 'Operação em andamento'};
+  $('stat-tokens').textContent = 'Não medido';
+  $('metrics-scope').textContent = `${t.successes} sucessos · ${t.failures} falhas · ${t.denied} sem autorização · ${t.operation_errors} erros de operação · ${t.timed_requests} com latência. Janela ${t.operations}/${t.limit}; inclui verificações e mensagens, não chamadas a uma API.`;
+  const labels = {online:'Online (observado)', login_required:'Login necessário', auth_blocked:'Login bloqueado',
+    rate_limited:'Limite de uso', human_required:'Verificação humana', degraded:'Resposta não confirmada',
+    unavailable:'Não acessível', needs_attention:'Precisa de atenção', not_observed:'A verificar',
+    interrupted:'Interrompida', busy:value.phase === 'waiting' ? 'Aguardando você' : 'Em andamento'};
   $('source-health').replaceChildren();
   for (const chat of value.chats) {
     const health = t.sources[chat.name];
-    const item = document.createElement('li');
-    item.textContent = `${chat.name} · ${health ? (health.stale ? 'Observação antiga' : labels[health.state] || 'Não observado') : 'Não observado nesta sessão'}${health?.at ? ' · ' + health.at : ''}`;
+    const state = health ? (health.stale ? 'Observação antiga' : labels[health.state] || 'Não observado') : 'Não observado';
+    const item = node('li');
+    const swatch = node('span', {class: 'legend-dot'});
+    swatch.style.background = health && !health.stale && health.state === 'online' ? '#146c50' : '#a3712f';
+    item.append(swatch, document.createTextNode(`${chat.name} · ${state}`));
     $('source-health').append(item);
   }
-  if (!value.chats.length) { const item = document.createElement('li'); item.textContent = 'Nenhum chat configurado.'; $('source-health').append(item); }
-  const latest = [...t.history].reverse().find(record => record.status && record.status !== 'not_authorized');
-  const stageLabels = {browser_start_ms:'Iniciar/conectar navegador (pode incluir permissão nativa)',page_open_ms:'Abrir ou encontrar aba',preflight_ms:'Pré-voo e preparação',send_pipeline_ms:'Pipeline de envio (inclui confirmação)',fill_ms:'↳ Preencher campo',send_ms:'↳ Ativação do envio',response_wait_ms:'Esperar término da resposta',parse_ms:'Parsing e validação',total_ms:'Fluxo da mensagem (sem login/abertura)',ttft_dom_ms:'Primeiro conteúdo no DOM',capture_overhead_ms:'Tempo desde a última mutação',manual_wait_ms:'Espera por você no painel',operation_wall_ms:'Operação inteira (inclui esperas)'};
-  $('stage-timings').replaceChildren();
-  for (const [key,label] of Object.entries(stageLabels)) {
-    const row = document.createElement('tr'); const title = document.createElement('td'); const duration = document.createElement('td');
-    title.textContent = label; duration.textContent = milliseconds(latest?.timings[key]); row.append(title,duration); $('stage-timings').append(row);
-  }
-  const history = t.history.filter(record => Number.isFinite(record.timings.total_ms)).slice(-30);
-  const max = Math.max(1,...history.map(record => record.timings.total_ms));
-  $('latency-history').replaceChildren();
-  for (const record of history) {
-    const item = document.createElement('li'); const bar = document.createElement('meter');
-    bar.min = 0; bar.max = max; bar.value = record.timings.total_ms; bar.setAttribute('aria-label',`Latência da execução ${record.id}`);
-    item.append(document.createTextNode(`#${record.id} ${record.name || ''} · ${record.status} `),bar,document.createTextNode(milliseconds(record.timings.total_ms)));
-    $('latency-history').append(item);
-  }
+  if (!value.chats.length) { const item = node('li'); item.textContent = 'Nenhum chat configurado.'; $('source-health').append(item); }
+  renderStatusChart(t.history);
+  renderLatencyChart(t.history);
+  renderUsageChart(t.history);
+  renderStagesChart(t.history);
+  renderSuccessChart(t.history);
 }
 function render(value) {
   if (value.updates?.managed && value.version !== PANEL_VERSION && sessionStorage.getItem('browserapi-reloaded-version') !== value.version) {
@@ -277,6 +445,14 @@ function render(value) {
   $('prompt').hidden = !state.prompt;
   if (state.prompt) {
     $('question').textContent = state.prompt.text;
+    const help = [
+      [/A SUA PERGUNTA JÁ ENVIADA/i, 'Clique no balão com a pergunta que você enviou. Não é o campo de digitar.'],
+      [/A RESPOSTA DO CHAT/i, 'Clique no balão com a resposta do chat.'],
+      [/campo onde você digita/i, 'Clique dentro da caixa de texto vazia do chat.'],
+      [/digite algo SEM enviar/i, 'Escreva uma frase no chat, sem enviar, e volte para clicar em Continuar.'],
+      [/Autoriza/i, 'Nada é enviado sem este Sim.'],
+    ].find(([pattern]) => pattern.test(state.prompt.text));
+    $('prompt-help').textContent = help ? help[1] : 'Clique no elemento dentro da janela do chat. Esc cancela.';
     const yesno = state.prompt.kind === 'yesno';
     $('yes').hidden = $('no').hidden = !yesno;
     $('continue').hidden = yesno;

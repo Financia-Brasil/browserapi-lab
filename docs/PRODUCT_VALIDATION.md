@@ -392,3 +392,33 @@ Limites que permanecem abertos: turno só aparece ao fim da resposta validada (s
 eco parcial de streaming); chamadas da API local/agentes não entram nesta conversa;
 nada é persistido; Gemini/Arena autenticados e Chrome pessoal continuam **não
 homologados**. O Marco 0.6.1 e as pendências externas anteriores não são afetados.
+
+
+## Marco 0.8.0 — correções do uso real e Atividade gráfica (2026-10-28)
+
+Origem: relato do usuário após usar a 0.6.1/0.7.0 (falso “Envio sem confirmação”,
+exclusão de conexões, pergunta de apontamento ambígua, pedido de gráficos na aba
+Atividade e menos texto). Contrato: [design/UX_080_SPEC.md](design/UX_080_SPEC.md);
+revisão: [design/UX_080_REVIEW.md](design/UX_080_REVIEW.md).
+
+| Relato | Estado neste marco | Prova |
+|---|---|---|
+| “Envio sem confirmação” com a mensagem na tela | comparação normalizada, reuso de nó, até 9 s e campo esvaziado como evidência adicional; contraprova de divergência mantida | 7 testes unitários + 2 testes de navegador (a executar no CI) |
+| “Não dá pra excluir” | **Excluir** visível na linha do chat, com nome na confirmação | contrato de UI + DOM emulado + teste de navegador |
+| “Apontar mensagem do usuário?” confuso | perguntas dizem qual elemento e instruem a enviar uma pergunta antes | teste unitário de `repair_fields` |
+| Falta gráficos em Atividade | seis gráficos SVG com legenda e `aria-label` | contrato de UI + DOM emulado + teste de navegador |
+| “Tira esses texto” | Configurações e Próxima ação encurtadas; texto longo recolhido | inspeção das capturas `ui-redesign/*` |
+
+Correção de defeito introduzida na 0.7.0: aspa faltante em `id="view-activity"`
+quebrava o id da aba Atividade. Corrigido; teste de parser impede repetição.
+
+Consumo: caracteres enviados/recebidos são medidos de verdade pelo painel;
+`tokens` continua `null`/“Não medido” e a estimativa de 4 caracteres/token aparece
+rotulada como grosseira. Não há custo, quota ou `usage` do provedor inventados.
+
+Evidência local (sem Chromium neste ambiente): **302 testes, 17 ignorados, OK** e 33
+checagens em DOM emulado. Os testes de navegador novos e as capturas
+`results/ci/ui-redesign/activity-*.png` dependem do workflow `lab`; **até a leitura
+delas, o layout dos gráficos não foi inspecionado em Chromium real**. A causa exata
+do falso negativo no computador do usuário não é afirmada como reproduzida: os
+testes reproduzem normalização de texto e atraso de renderização.
