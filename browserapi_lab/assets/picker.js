@@ -259,7 +259,7 @@
   });
   const back = button('Voltar', () => { const el = history.pop(); if (el) preview(el, false); });
   const another = button('Escolher outra', reset);
-  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; placeBanner(true); });
+  const move = button('Mover', () => { corner = (corner + 1) % CORNERS.length; applyCorner(); });
   const skip = button('Pular este campo', () => finish({ cancelled: true }), 'data-picker-skip');
   const abort = button('Cancelar mapeamento', () => finish({ abort: true }), 'data-picker-abort');
 
@@ -278,27 +278,36 @@
    * menos sobreposição com as áreas destacadas. "Mover" troca de canto. */
   const CORNERS = ['top-right', 'bottom-right', 'bottom-left', 'top-left'];
   let corner = 0;
-  function placeBanner(force) {
-    if (!force && banner.dataset.placed === '1') return;
+  function placeBanner() {
     const size = banner.getBoundingClientRect();
     const width = size.width || 400;
     const height = size.height || 240;
-    const boxes = candidates().slice(0, 40).map(el => el.getBoundingClientRect());
-    let best = corner;
-    let bestOverlap = Infinity;
-    CORNERS.forEach((name, index) => {
+    const boxes = (chosen ? query(selector) : candidates()).slice(0, 40)
+      .map(el => el.getBoundingClientRect());
+    const overlaps = CORNERS.map(name => {
       const left = name.endsWith('left') ? 16 : innerWidth - width - 16;
       const top = name.startsWith('top') ? 16 : innerHeight - height - 16;
       const right = left + width;
       const bottom = top + height;
-      const overlap = boxes.reduce((sum, box) => {
+      return boxes.reduce((sum, box) => {
         const w = Math.max(0, Math.min(right, box.right) - Math.max(left, box.left));
         const h = Math.max(0, Math.min(bottom, box.bottom) - Math.max(top, box.top));
         return sum + w * h;
       }, 0);
-      if (overlap < bestOverlap) { bestOverlap = overlap; best = index; }
+    });
+    // Empate mantém o canto atual: o painel não fica pulando na tela, mas sai
+    // da frente assim que passar a cobrir o alvo (ex.: depois de rolar a página).
+    let best = corner;
+    let bestScore = overlaps[corner];
+    overlaps.forEach((score, index) => {
+      if (score < bestScore - 1) { bestScore = score; best = index; }
     });
     corner = best;
+    applyCorner();
+    banner.dataset.placed = '1';
+  }
+
+  function applyCorner() {
     const name = CORNERS[corner];
     Object.assign(banner.style, {
       left: name.endsWith('left') ? '16px' : 'auto',
@@ -306,7 +315,6 @@
       top: name.startsWith('top') ? '16px' : 'auto',
       bottom: name.startsWith('bottom') ? '16px' : 'auto',
     });
-    banner.dataset.placed = '1';
   }
 
   function describe(el) {
@@ -327,7 +335,7 @@
     outer.hidden = inner.hidden = back.hidden = !chosen;
     another.hidden = false;
     confirmationState();
-    placeBanner(false);
+    placeBanner();
     marks.replaceChildren();
     const items = chosen ? query(selector) : candidates();
     items.slice(0, 80).forEach((el, index) => {
@@ -357,7 +365,6 @@
     chosen = null;
     selector = '';
     history = [];
-    banner.dataset.placed = '0';
     previewText.textContent = 'nada ainda — clique em uma área destacada em azul.';
     status.textContent = 'Esc pula este campo. Nada é enviado nem alterado no site.';
     confirm.disabled = true;

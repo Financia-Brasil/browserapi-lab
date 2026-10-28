@@ -94,7 +94,18 @@ class TestGraphicalJourney(BrowserTestCase):
         self.capture_receipt('receipt-profile')
 
     def wait_question(self, text):
-        self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
+        try:
+            self.page.wait_for_function("text => !document.querySelector('#prompt').hidden && document.querySelector('#question').textContent.includes(text)", arg=text)
+        except Exception:
+            # Diagnóstico: sem isto, um erro no worker vira só "timeout".
+            details = self.page.evaluate("""() => ({
+                question: document.querySelector('#question').textContent,
+                step: document.querySelector('#prompt-step').textContent,
+                phase: document.querySelector('#phase').textContent,
+                error: (document.querySelector('#error') || {}).textContent || '',
+                log: (document.querySelector('#log').textContent || '').slice(-700),
+            })""")
+            raise AssertionError(f'pergunta {text!r} não apareceu: {details}')
 
     def wait_phase(self, phase):
         self.page.wait_for_function("text => document.querySelector('#phase').textContent === text", arg=phase, timeout=45000)
