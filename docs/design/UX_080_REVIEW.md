@@ -28,9 +28,28 @@ anteriores porque nenhum deles abria a aba Atividade.
   (sem autorização), marrom `#7a6f5f` (erro de operação). Todo gráfico tem legenda
   ou rótulo numérico — cor não é o único canal.
 
+## Evidência final (execuções 40622746240 e 40622752574)
+
+```text
+lab 40622746240 (push) e 40622752574 (PR): SUCCESS
+  Integração real com Chromium: Ran 411 tests in 209,026s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 39,061s — OK
+  Núcleo Python (sem navegador): aprovado
+Núcleo local deste ambiente, sem Chromium: 303 testes, 17 ignorados, OK
+```
+
+Capturas em Chromium real da fixture (sem conta): [activity-usage-desktop.png](../../results/ci/ui-review-40622746240/ui-redesign/activity-usage-desktop.png),
+[activity-usage-mobile.png](../../results/ci/ui-review-40622746240/ui-redesign/activity-usage-mobile.png)
+e `activity-desktop.png`. Inspecionadas: rosca com total no centro, barras de
+duração, consumo azul (enviado) × verde (recebido), etapas com rótulos, linha de
+sucesso acumulado, estado por chat e a nota da estimativa de tokens.
+
+Dois ajustes vieram dessa leitura: barra única não vira bloco (largura limitada e
+centralizada) e “1 resultado” em vez de “1 resultados”.
+
 ## Verificação executada
 
-- Núcleo local, sem Chromium neste ambiente: **302 testes, 17 ignorados, OK**
+- Núcleo local, sem Chromium neste ambiente: **303 testes, 17 ignorados, OK**
   (`BROWSERAPI_SKIP_BROWSER=1`).
 - Novos testes sem navegador:
   - confirmação real (`test_sender.TestEvidenciaReal`, 7 casos): NBSP/invisíveis,
@@ -43,18 +62,19 @@ anteriores porque nenhum deles abria a aba Atividade.
 - DOM emulado (jsdom, fora do produto): 33 checagens aprovadas — conversa,
   exclusão visível com nome na confirmação, seis gráficos renderizados, legenda,
   `aria-label`, “Não medido” nos tokens, ausência de tabela, configurações.
-- Testes de navegador novos/atualizados (a executar no workflow `lab`):
-  reescrita de texto + atraso de renderização confirmando envio; contraprova de
-  texto divergente com campo preenchido; capturas `activity-desktop.png`,
-  `activity-usage-desktop.png` e `activity-usage-mobile.png`.
+- Testes de navegador novos/atualizados, **executados e aprovados** no CI:
+  reescrita de texto + atraso de renderização confirmando envio; contraprova com
+  clique em Enviar interceptado (nada publicado) exigindo ausência de confirmação;
+  capturas da aba Atividade; exclusão visível com nome na confirmação.
 
 ## Pendências e riscos
 
-- **Não houve captura em Chromium real nesta rodada** (ambiente sem navegador). As
-  imagens da aba Atividade serão geradas pelo workflow de navegador; até a leitura
-  delas, o desenho dos gráficos está verificado só em DOM emulado, sem layout real.
-- A confirmação mais permissiva (`campo esvaziado + balão novo`) precisa ser
-  observada no seu Gemini/Arena para sabermos se reduz o falso negativo na prática.
+- A confirmação mais permissiva (`campo esvaziado + balão novo`) ainda precisa ser
+  observada no **seu** Gemini/Arena: os testes provam o mecanismo, não a sua conta.
+- Não houve leitura humana de usabilidade no Linux Lite; as capturas são do runner.
+- Três rodadas de CI falharam antes desta (40620094973, 40620940568 e 40621633923):
+  duas por erros nos meus testes novos e uma por corrida real no contador da API
+  local — todas descritas acima e corrigidas, sem aumentar prazos nem reenvio.
 - Estimativa de tokens é grosseira; o número real do provedor continua indisponível.
 - Não há gráficos de CPU/RAM/tráfego: essas métricas não são coletadas nesta versão.
 

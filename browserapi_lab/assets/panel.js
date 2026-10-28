@@ -296,18 +296,22 @@ function renderLatencyChart(history) {
   if (!values.length) { emptyChart(container, 'Sem tempos medidos.'); return; }
   const max = Math.max(1, ...values.map(record => record.timings.total_ms));
   const figure = canvas(container, `Duração das últimas ${values.length} operações, máximo ${Math.round(max)} ms`);
-  const width = 320 / values.length;
+  const slot = 320 / values.length;
+  // Barra estreita e centrada: com uma única operação, a barra não vira um bloco.
+  const barWidth = Math.max(3, Math.min(28, slot - 6));
   values.forEach((record, index) => {
     const height = Math.max(2, (record.timings.total_ms / max) * 92);
-    const rect = mark('rect', {x: index * width + 3, y: 100 - height, width: Math.max(2, width - 6), height,
+    const x = index * slot + (slot - barWidth) / 2;
+    const rect = mark('rect', {x, y: 100 - height, width: barWidth, height,
       rx: 2, fill: record.status === 'success' ? '#146c50' : '#a3712f'});
     const title = mark('title');
     title.textContent = `#${record.id} ${record.name || ''} · ${milliseconds(record.timings.total_ms)}`;
     rect.append(title); figure.append(rect);
   });
   barLabel(figure, 2, 14, `${Math.round(max)} ms`, 'start');
-  barLabel(figure, 2, 120, `#${values[0].id}`, 'start');
-  barLabel(figure, 318, 120, `#${values[values.length - 1].id}`, 'end');
+  barLabel(figure, values.length === 1 ? 160 : 2, 120,
+    values.length === 1 ? `#${values[0].id}` : `#${values[0].id}`, values.length === 1 ? 'middle' : 'start');
+  if (values.length > 1) barLabel(figure, 318, 120, `#${values[values.length - 1].id}`, 'end');
 }
 function renderUsageChart(history) {
   const values = history.filter(record => record.prompt_chars || record.response_chars).slice(-12);
@@ -352,7 +356,7 @@ function renderStagesChart(history) {
   const figure = canvas(container, `Etapas do último resultado: ${entries.map(([label, value]) => `${label} ${Math.round(value)} ms`).join(', ')}`,
     320, entries.length * 22 + 10);
   entries.forEach(([label, value], index) => {
-    const width = Math.max(2, (value / max) * 190);
+    const width = Math.max(2, (value / max) * 150);
     figure.append(mark('rect', {x: 96, y: index * 22 + 4, width, height: 12, rx: 2,
       fill: label.startsWith('↳') ? '#8aa79a' : '#146c50'}));
     barLabel(figure, 90, index * 22 + 14, label, 'end');
@@ -381,7 +385,7 @@ function renderSuccessChart(history) {
   const last = requests[requests.length - 1];
   const rate = Math.round((hits / requests.length) * 100);
   barLabel(figure, 8, 16, `${rate}%`, 'start');
-  barLabel(figure, 312, 16, `${requests.length} resultados`, 'end');
+  barLabel(figure, 312, 16, `${requests.length} ${requests.length === 1 ? 'resultado' : 'resultados'}`, 'end');
   barLabel(figure, 8, 112, last.at ? String(last.at).slice(11, 19) : '', 'start');
 }
 function renderMetrics(value) {

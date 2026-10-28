@@ -416,9 +416,24 @@ Consumo: caracteres enviados/recebidos são medidos de verdade pelo painel;
 `tokens` continua `null`/“Não medido” e a estimativa de 4 caracteres/token aparece
 rotulada como grosseira. Não há custo, quota ou `usage` do provedor inventados.
 
-Evidência local (sem Chromium neste ambiente): **302 testes, 17 ignorados, OK** e 33
-checagens em DOM emulado. Os testes de navegador novos e as capturas
-`results/ci/ui-redesign/activity-*.png` dependem do workflow `lab`; **até a leitura
-delas, o layout dos gráficos não foi inspecionado em Chromium real**. A causa exata
-do falso negativo no computador do usuário não é afirmada como reproduzida: os
-testes reproduzem normalização de texto e atraso de renderização.
+Evidência em 2026-10-28:
+
+```text
+lab 40622746240 (branch) e 40622752574 (PR): SUCCESS
+  Integração real com Chromium: Ran 411 tests in 209,026s — OK (skipped=1)
+  Revisão visual (desktop + 375px): Ran 16 tests in 39,061s — OK
+  Núcleo Python (sem navegador): aprovado
+Local, sem Chromium neste ambiente: 303 testes, 17 ignorados, OK
+```
+
+Capturas em Chromium real da fixture, inspecionadas:
+`results/ci/ui-review-40622746240/ui-redesign/activity-usage-desktop.png`,
+`activity-usage-mobile.png` e `activity-desktop.png`. Três rodadas anteriores
+falharam: duas por erros nos testes novos deste marco e uma por corrida real no
+contador da API local (resolvida no produto). A causa exata do falso negativo no
+computador do usuário não é afirmada como reproduzida — os testes reproduzem
+normalização de texto e atraso de renderização.
+
+Corrida corrigida no produto nesta rodada: a chamada da API local só liberava o
+contador depois de escrever o socket, então pedir “apagar histórico/revogar” logo
+após uma resposta podia receber 409 “ocupado”. Novo teste cobre o caso sem espera.
