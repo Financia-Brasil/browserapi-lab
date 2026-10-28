@@ -234,7 +234,7 @@ class TestGraphicalJourney(BrowserTestCase):
         # API presente mas desligada: o endereço completo pode ser mostrado.
         self.panel.api_service = APIService(self.panel)
         self.open_panel()
-        expect(self.page.locator('#quick-action')).to_have_text('Testar agora')
+        expect(self.page.locator('#quick-action')).to_have_text('Testar a conexão')
         expect(self.page.locator('#quick-steps li[data-step="2"]')).to_have_attribute('data-state', 'current')
         self.assertIn('saved', self.page.locator('#quick-note').inner_text())
 

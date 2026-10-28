@@ -100,7 +100,7 @@ async function main() {
     session_mode: 'existing_chrome', compatible: false, conversation: {turns: 0, revision: 0}}]});
   win.__harness.refresh();
   await settle();
-  check('passo 2: testar', q('quick-action').textContent === 'Testar agora',
+  check('passo 2: testar', q('quick-action').textContent === 'Testar a conexão',
     q('quick-action').textContent);
   check('nota diz qual conexão está em jogo', q('quick-note').textContent.includes('meu-gemini'),
     q('quick-note').textContent);

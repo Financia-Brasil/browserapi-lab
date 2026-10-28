@@ -177,7 +177,7 @@ const FLOW = {
       'Conectar e testar'],
   2: ['Testar o chat',
       'O teste envia UMA mensagem sua, com a sua autorização, e confere se a resposta é lida.',
-      'Testar agora'],
+      'Testar a conexão'],
   3: ['Ligar a API para os agentes',
       'A API fica em 127.0.0.1:8765 e só existe enquanto esta janela estiver aberta.',
       'Ligar API'],
