@@ -1,0 +1,178 @@
+{
+  "scope": "synthetic_chromium_only",
+  "samples_per_mode": 3,
+  "limitations": "No real site, memory/CPU measurement, statistical speedup or 4GB/24x7 claim",
+  "measurements": [
+    {
+      "mode": "visible",
+      "samples": [
+        {
+          "elapsed_ms": 3054.078,
+          "timings": {
+            "preflight_ms": 270.515,
+            "fill_ms": 8.187,
+            "send_ms": 35.599,
+            "send_pipeline_ms": 90.267,
+            "response_wait_ms": 1854.47,
+            "ttft_dom_ms": 79.0,
+            "capture_overhead_ms": 252.8,
+            "parse_ms": 9.278,
+            "total_ms": 2224.532,
+            "browser_start_ms": 739.514,
+            "page_open_ms": 88.553
+          },
+          "reused": false
+        },
+        {
+          "elapsed_ms": 1994.92,
+          "timings": {
+            "preflight_ms": 35.18,
+            "fill_ms": 4.783,
+            "send_ms": 39.796,
+            "send_pipeline_ms": 322.663,
+            "response_wait_ms": 1626.51,
+            "ttft_dom_ms": 69.8,
+            "capture_overhead_ms": 266.6,
+            "parse_ms": 9.309,
+            "total_ms": 1993.663,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        },
+        {
+          "elapsed_ms": 1992.956,
+          "timings": {
+            "preflight_ms": 31.203,
+            "fill_ms": 5.395,
+            "send_ms": 47.522,
+            "send_pipeline_ms": 323.37,
+            "response_wait_ms": 1627.709,
+            "ttft_dom_ms": 78.1,
+            "capture_overhead_ms": 256,
+            "parse_ms": 9.447,
+            "total_ms": 1991.731,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        }
+      ],
+      "warm_median_ms": 1993.938
+    },
+    {
+      "mode": "headless",
+      "samples": [
+        {
+          "elapsed_ms": 2578.693,
+          "timings": {
+            "preflight_ms": 153.863,
+            "fill_ms": 5.814,
+            "send_ms": 36.855,
+            "send_pipeline_ms": 82.18,
+            "response_wait_ms": 1847.317,
+            "ttft_dom_ms": 72.4,
+            "capture_overhead_ms": 244.3,
+            "parse_ms": 9.674,
+            "total_ms": 2093.037,
+            "browser_start_ms": 443.398,
+            "page_open_ms": 40.753
+          },
+          "reused": false
+        },
+        {
+          "elapsed_ms": 2044.026,
+          "timings": {
+            "preflight_ms": 34.966,
+            "fill_ms": 4.767,
+            "send_ms": 49.498,
+            "send_pipeline_ms": 265.099,
+            "response_wait_ms": 1733.331,
+            "ttft_dom_ms": 80.6,
+            "capture_overhead_ms": 304.9,
+            "parse_ms": 9.375,
+            "total_ms": 2042.773,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        },
+        {
+          "elapsed_ms": 1978.04,
+          "timings": {
+            "preflight_ms": 32.345,
+            "fill_ms": 4.606,
+            "send_ms": 42.254,
+            "send_pipeline_ms": 312.3,
+            "response_wait_ms": 1622.624,
+            "ttft_dom_ms": 71.7,
+            "capture_overhead_ms": 245.2,
+            "parse_ms": 9.485,
+            "total_ms": 1976.756,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        }
+      ],
+      "warm_median_ms": 2011.033
+    },
+    {
+      "mode": "headless_light",
+      "samples": [
+        {
+          "elapsed_ms": 2625.723,
+          "timings": {
+            "preflight_ms": 156.322,
+            "fill_ms": 6.134,
+            "send_ms": 49.536,
+            "send_pipeline_ms": 93.545,
+            "response_wait_ms": 1853.951,
+            "ttft_dom_ms": 85.1,
+            "capture_overhead_ms": 250,
+            "parse_ms": 10.345,
+            "total_ms": 2114.164,
+            "browser_start_ms": 461.614,
+            "page_open_ms": 48.407
+          },
+          "reused": false
+        },
+        {
+          "elapsed_ms": 2001.558,
+          "timings": {
+            "preflight_ms": 37.142,
+            "fill_ms": 4.657,
+            "send_ms": 42.109,
+            "send_pipeline_ms": 319.514,
+            "response_wait_ms": 1634.438,
+            "ttft_dom_ms": 71.7,
+            "capture_overhead_ms": 268.8,
+            "parse_ms": 9.177,
+            "total_ms": 2000.273,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        },
+        {
+          "elapsed_ms": 1979.315,
+          "timings": {
+            "preflight_ms": 35.881,
+            "fill_ms": 4.949,
+            "send_ms": 40.314,
+            "send_pipeline_ms": 309.621,
+            "response_wait_ms": 1623.156,
+            "ttft_dom_ms": 71.9,
+            "capture_overhead_ms": 244,
+            "parse_ms": 9.418,
+            "total_ms": 1978.078,
+            "browser_start_ms": 0.0,
+            "page_open_ms": 0.0
+          },
+          "reused": true
+        }
+      ],
+      "warm_median_ms": 1990.437
+    }
+  ]
+}
