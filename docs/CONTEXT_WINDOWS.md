@@ -182,10 +182,14 @@ primeira requisição do CLI:
 3. a última mensagem da lista é um lembrete de **sistema** (`[user, system]`), e
    a regra “a última precisa ser do usuário” recusava a chamada.
 
-Também caiu um erro de desenho: decidir “a página está vazia, mande tudo” pela
-contagem de itens do DOM. Conversa com carregamento preguiçoso parece vazia, e o
-contexto ia **duas vezes** ao site. Agora o plano autossuficiente só entra quando
-a aba foi reaberta ou o endereço mudou.
+Também caíram **dois** erros de desenho na mesma decisão. Primeiro, decidir “a
+página está vazia, mande tudo” pela contagem de itens do DOM: conversa com
+carregamento preguiçoso parece vazia e o contexto ia **duas vezes** ao site.
+Depois, usar a **URL** como identidade da conversa: sites trocam o endereço ao
+criar a conversa, e aí o delta ia para uma página recarregada — o CI mostrou
+`AssertionError: 109 != 0` exatamente nisso. A identidade agora é o **documento**
+(`performance.timeOrigin`): recarregar muda a marca, trocar a URL não. Os dois
+casos têm teste (`two_turns` em `tests/test_conversation.py`).
 
 ## 7. O que continua não sendo prometido
 

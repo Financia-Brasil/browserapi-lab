@@ -198,6 +198,11 @@ class ReadyPage:
 
     def __init__(self, url='https://chat.example/t'):
         self.url = url
+        # Identidade do documento: muda quando a página é recarregada.
+        self.stamp = 1000.0
+
+    def evaluate(self, script, *a):
+        return self.stamp
 
     def is_closed(self):
         return False
@@ -332,3 +337,45 @@ class TestWorkerWithSimulatedSite(unittest.TestCase):
         self.assertEqual(job.result.status, 'success')
         self.assertEqual(site.calls, ['[system]\ntudo de novo\n\n[user]\nc'])
         self.assertTrue(job.conversation_shared)
+
+    def two_turns(self, limits, reload=False, url_change=False):
+        """Dois turnos na MESMA aba: o segundo é delta sobre a mesma conversa."""
+        site = SimulatedSite(limits)
+        browser = WarmBrowser(self.store, Session)
+        with patch('browserapi_lab.llm_api.exchange', side_effect=site):
+            first = self.job(['primeiro'], limits)
+            browser.run(first, lambda: False)
+            self.assertEqual(first.result.status, 'success')
+            stamp = browser.page.stamp
+            if reload:
+                browser.page.stamp = stamp + 1   # documento novo, mesma URL
+            if url_change:
+                browser.page.url = 'https://chat.example/conversation-nova'
+            plan = windows.plan_turn([msg('user', 'a'), msg('assistant', 'b'),
+                                      msg('user', 'c')], limits=limits)
+            job = self.job(plan.sends, limits)
+            job.plan_report = {'mode': 'delta'}
+            job.fallback_sends = ['[system]\ntudo de novo\n\n[user]\nc']
+            job.previous_document = f'{stamp:.3f}'
+            browser.run(job, lambda: False)
+        return job, plan, site
+
+    def test_reloaded_document_in_the_same_url_uses_the_self_contained_plan(self):
+        # O caso que mais dói: o DOM parece vazio por carregamento preguiçoso e
+        # a URL muda ao criar a conversa. Quem manda é o DOCUMENTO.
+        limits = windows.Limits(message_chars=5000)
+        job, plan, site = self.two_turns(limits, reload=True)
+        self.assertEqual(job.result.status, 'success')
+        self.assertEqual(site.calls[-1], '[system]\ntudo de novo\n\n[user]\nc')
+        self.assertEqual(job.plan_report['fallback'], 'page_reloaded')
+        self.assertEqual(job.characters, len(site.calls[-1]))
+        self.assertTrue(job.conversation_shared)
+
+    def test_same_document_and_new_url_still_sends_only_the_delta(self):
+        # URL nova com o mesmo documento NÃO é conversa nova: mandar tudo de
+        # novo entregava o contexto duas vezes ao site.
+        limits = windows.Limits(message_chars=5000)
+        job, plan, site = self.two_turns(limits, url_change=True)
+        self.assertEqual(job.result.status, 'success')
+        self.assertEqual(site.calls[-1], plan.sends[-1])
+        self.assertNotIn('fallback', job.plan_report)

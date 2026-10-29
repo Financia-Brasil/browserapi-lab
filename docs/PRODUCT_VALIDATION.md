@@ -638,8 +638,10 @@ sistema (`[user, system]`) e a regra “última = usuário” recusava a chamada
 
 **Um erro de desenho corrigido:** usar “a página parece vazia” para decidir
 mandar o contexto inteiro. Conversa com carregamento preguiçoso parece vazia, e o
-contexto ia **duas vezes** ao site. Agora isso só acontece quando a aba foi
-reaberta ou o endereço mudou.
+contexto ia **duas vezes** ao site; e o URL muda quando o site cria a conversa,
+então o delta era mandado para página recarregada. Agora a identidade é o
+**documento** (`performance.timeOrigin`): reabrir/recarregar dispara a retomada,
+trocar a URL não.
 
 **Provas deste ambiente:** `discover -s tests` **424 testes** (18 ignorados);
 `node scripts/panel_jsdom_check.js` **19 checagens**; e o **teste de fogo**

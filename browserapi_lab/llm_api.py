@@ -124,6 +124,20 @@ from .api_compat import prompt_messages, sse as reply_sse
 from . import tool_calls
 
 
+def document_stamp(page):
+    """Identidade do documento aberto: recarregar muda ``performance.timeOrigin``.
+
+    A URL não serve: muitos chats trocam o endereço ao criar a conversa, e isso
+    não é uma conversa nova. Sem esta marca, o delta era mandado para uma página
+    recém-carregada (conversa sem começo) e o agente via "não está funcionando".
+    """
+    try:
+        value = page.evaluate('performance.timeOrigin')
+    except Exception:
+        return ''
+    return f'{float(value):.3f}' if isinstance(value, (int, float)) else ''
+
+
 @dataclass
 class Job:
     prompt: str
@@ -141,7 +155,8 @@ class Job:
     plan_report: dict = field(default_factory=dict)
     characters: int = 0
     page_reused: bool = False
-    page_url: str = ''
+    document: str = ''
+    previous_document: str = ''
     conversation: str = ''
     conversation_shared: bool = False
     blocks: int = 0
@@ -265,12 +280,17 @@ class WarmBrowser:
         # envio precisa ser autossuficiente. Julgar por "a página parece vazia"
         # era pior: conversa com carregamento preguiçoso parece vazia e o
         # contexto seria enviado duas vezes.
-        moved = job.conversation and job.page_url and job.conversation != job.page_url
+        # A identidade da conversa é o DOCUMENTO (performance.timeOrigin), não a
+        # URL: sites trocam a URL ao criar a conversa e isso não é conversa nova.
+        reloaded = (job.previous_document and job.document
+                    and job.previous_document != job.document)
         if job.plan_report.get('mode') == 'delta' and job.fallback_sends and (
-                not job.page_reused or moved):
+                not job.page_reused or reloaded):
             sends = list(job.fallback_sends)
             job.conversation_shared = True
-            job.plan_report['fallback'] = 'page_reopened' if not job.page_reused else 'url_changed'
+            job.plan_report['fallback'] = 'page_reloaded' if reloaded else 'page_reopened'
+            job.characters = sum(len(text) for text in sends)
+            job.hashes = []
         result = None
         for index, text in enumerate(sends):
             result = self.send_with_retry(job, config, text, cancelled)
@@ -395,13 +415,16 @@ class WarmBrowser:
                     return
                 continue
             job.page_reused = reused
-            job.page_url = getattr(self.page, 'url', '') or ''
+            job.document = document_stamp(self.page)
             result, _ = self.run_sends(job, config, cancelled)
             result.timings.update(browser_start_ms=round(browser_ms, 3),
                                   page_open_ms=round(page_ms, 3))
             job.result, job.config = result, config
             job.attempts.append({'model': name, 'status': result.status,
-                                 'send_state': result.send_state, 'browser_reused': reused})
+                                 'send_state': result.send_state, 'browser_reused': reused,
+                                 'document_reloaded': bool(job.previous_document and
+                                                           job.document and
+                                                           job.previous_document != job.document)})
             if result.status == 'success':
                 return
             # Somente antes de qualquer ativação; nunca timeout/aceito/ambíguo.
@@ -740,6 +763,8 @@ class APIService:
                 report['tools_prompt_characters']=len(protocol)
             options={k:self.state.get(k,False) for k in ('headless','lightweight','retrieval','fallback')}
             job=Job(turn.sends[-1],names,options,report,owner=self,cache_key=key,scope=scope,
+                    previous_document=(delivered.conversation if turn.mode=='delta' and
+                                       delivered else ''),
                     question=payload['messages'][-1]['content'] if scope else '',
                     documents=(payload.get('documents') or []) if scope else [],
                     sends=list(turn.sends),rotate=turn.rotate,limits=limits,tools=tools,
@@ -964,7 +989,7 @@ class APIHandler(BaseHTTPRequestHandler):
                          else 'A fonte não confirmou a resposta; confira o navegador antes de repetir')
                 raise APIError(message,result.status,code)
             if callable(job.commit):
-                job.commit(conversation_id=job.conversation,shared=job.conversation_shared)
+                job.commit(conversation_id=job.document,shared=job.conversation_shared)
             parsed=tool_calls.parse(result.answer or '',request['tools'])
             if request['stream']:
                 raw=reply_sse(style,request,job,parsed)
