@@ -19,7 +19,8 @@ deste código é histórica (0.3.1): não use os arquivos dela.
 
 **Novo na 0.13.0:** a API passou a lidar com o que uma CLI manda **antes** da
 primeira pergunta: um pedido medido do Claude Code tem **~46 mil caracteres**
-(system + 12 esquemas de ferramentas). Agora esse pedido cabe em **1–2 blocos**
+(system + 12 esquemas de ferramentas) e, num arquivo grande, pode passar de
+**100 mil**. Agora esse pedido cabe em **1–2 blocos**
 (o bloco de ferramentas vai resumido, ~7 mil em vez de ~30 mil), os turnos
 seguintes enviam **só o delta** (medido: 326 caracteres no terceiro passo) e,
 quando a conversa do site chega na janela, ela é **trocada e retomada** por
@@ -27,7 +28,9 @@ escrito — sem perder o pedido atual. Resposta cortada ganha **continuação** 
 blocos são unidos. `usage` deixou de ser zero: é **estimativa rotulada**
 (4 caracteres ≈ 1 token), porque zero fazia o agente nunca compactar.
 `output_config`, `system` no meio de `messages` e o lembrete de sistema no fim
-(a forma real que o CLI envia) passaram a ser aceitos. Falha **antes de digitar**
+(a forma real que o CLI envia) passaram a ser aceitos. Envio confirmado cuja
+resposta demora não é mais “falhou”: a API **continua esperando e relendo**, com
+prazos crescentes, em vez de reenviar a pergunta. Falha **antes de digitar**
 é repetida aqui e responde 503 (retentável), não 409 — era isso que fazia o
 agente dizer “não está funcionando” e desistir.
 

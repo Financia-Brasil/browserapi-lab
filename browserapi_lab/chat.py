@@ -141,6 +141,50 @@ def preflight(page, config):
     return None
 
 
+def harvest(page, config, *, cancelled=None, timeout_ms=None):
+    """Relê a resposta de um envio **já confirmado**, sem enviar de novo.
+
+    Existe por causa do relato “manda a mensagem, aparece rápido, ele diz que
+    não está funcionando e nem tenta de novo”. Depois que o balão do usuário
+    apareceu, reenviar duplicaria a pergunta; o certo é continuar esperando.
+    Devolve ``success`` com o texto, ou o motivo (``timeout``/``output_invalid``).
+    """
+    def check_cancel():
+        if cancelled and cancelled():
+            raise EOFError('Operação interrompida')
+    check_cancel()
+    try:
+        observation = wait_for_completion(
+            page, WatchConfig(stability_window_ms=config.stability_ms,
+                              timeout_ms=timeout_ms or max(config.timeout_ms, 30_000),
+                              min_stable_samples=3),
+            config.root, on_poll=lambda *_: check_cancel())
+    except EOFError:
+        raise
+    except Exception:
+        failed = ChatResult('page_unavailable', stage='harvest')
+        failed.send_state = 'confirmed'      # já foi enviado: nunca reenviar
+        return failed
+    if observation.status != 'success':
+        try:
+            block = read_ui(page, config.root).blocking
+        except Exception:
+            block = ''
+        status = block or ('timeout' if observation.status == 'timeout' else 'page_unavailable')
+        failed = ChatResult(status, stage='harvest')
+        failed.send_state = 'confirmed'
+        return failed
+    captured = capture.last_answer(page, config.assistant)
+    html = (captured or {}).get('html') or ''
+    if not html:
+        failed = ChatResult('output_invalid', stage='harvest')
+        failed.send_state = 'confirmed'
+        return failed
+    result = ChatResult('success', True, answer=html_to_markdown(html), stage='harvest')
+    result.send_state = 'confirmed'
+    return result
+
+
 def exchange(page, config, text=None, *, authorized=False, health_check=False, cancelled=None):
     """Não registra texto. O caller decide exibir answer, nunca inclui no recibo."""
     if not authorized:

@@ -1,30 +1,85 @@
 {
   "scope": "synthetic_chat_real_claude_code",
-  "limits": {
-    "message_chars": 20000,
-    "conversation_chars": 60000,
-    "block_chars": 8000,
-    "max_blocks": 4,
-    "max_parts": 8,
-    "restore_chars": 14000,
-    "tool_result_chars": 4000,
-    "keep_recent": 6
-  },
   "claude": null,
-  "steps": [
-    {
-      "step": "http_v1_messages",
-      "status": 200,
-      "stop_reason": "tool_use",
-      "mode": "bootstrap"
+  "scenarios": {
+    "simples": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "simples"
+    },
+    "ferramenta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "ferramenta"
+    },
+    "arquivo": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "arquivo"
+    },
+    "janela": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "janela"
+    },
+    "lenta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "lenta"
+    },
+    "resposta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "end_turn",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "resposta"
     }
-  ],
-  "port": 38731,
-  "site_sends": 1,
-  "site_refused": [],
-  "largest_send": 8566,
-  "site_conversation_characters": 8566,
-  "not_ready_hits": 2,
-  "limits_respected": true,
+  },
   "ok": true
 }

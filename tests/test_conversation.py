@@ -127,10 +127,14 @@ class TestPlanTurn(unittest.TestCase):
         self.assertGreater(len(plan.sends), 1)
         for send in plan.sends:
             self.assertLessEqual(len(send), self.limits.message_chars)
-        # Acima do que os blocos comportam, recusa em vez de cortar calado.
+        # Acima do que os blocos comportam (max_parts × message_chars), recusa
+        # em vez de cortar calado.
         with self.assertRaises(windows.WindowError):
-            windows.plan_turn([msg('user', 'palavra ' * 9000)], limits=self.limits,
+            windows.plan_turn([msg('user', 'palavra ' * 20_000)], limits=self.limits,
                               stateless=True)
+        small = windows.Limits(message_chars=5000, conversation_chars=12000, max_parts=2)
+        with self.assertRaises(windows.WindowError):
+            windows.plan_turn([msg('user', 'palavra ' * 3000)], limits=small, stateless=True)
 
     def test_unknown_contract_is_refused_with_the_client_vocabulary(self):
         anthropic = windows.dialect_error('anthropic', 300_000, windows.Limits())
@@ -400,3 +404,27 @@ class TestWorkerWithSimulatedSite(unittest.TestCase):
                                    msg('user', 'mais')], delivered=delivered, limits=limits)
         self.assertEqual(third.mode, 'restore')
         self.assertTrue(third.rotate)
+
+    def test_confirmed_send_that_times_out_is_waited_again_and_never_resent(self):
+        # O relato: a mensagem aparece, o site demora, e o agente ouve "não está
+        # funcionando" na primeira tentativa. Reenviar duplicaria a pergunta;
+        # o certo é esperar de novo.
+        limits = windows.Limits(message_chars=5000)
+        calls = []
+
+        def slow(page, config, text, **kwargs):
+            calls.append(text)
+            return ChatResult('timeout', send_state='confirmed')
+
+        def later(page, config, **kwargs):
+            return ChatResult('success', True, answer='resposta que chegou depois',
+                              send_state='confirmed')
+
+        job = self.job(['pergunta'], limits)
+        with patch('browserapi_lab.llm_api.exchange', side_effect=slow), \
+             patch('browserapi_lab.llm_api.harvest', side_effect=later):
+            WarmBrowser(self.store, Session).run(job, lambda: False)
+        self.assertEqual(calls, ['pergunta'])
+        self.assertEqual(job.result.status, 'success')
+        self.assertIn('resposta que chegou depois', job.result.answer)
+        self.assertEqual(len(job.harvests), 1)

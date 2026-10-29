@@ -159,6 +159,9 @@ class TestClaudeCodePayload(unittest.TestCase):
         self.assertEqual(job.plan_report['mode'], 'bootstrap')
 
     def test_first_turn_too_big_for_the_chat_is_compacted_not_refused(self):
+        # Janela pequena de propósito: o caminho de compactação precisa ser
+        # exercitado mesmo com o padrão novo (200 mil caracteres por conversa).
+        self.service.state['conversation_chars'] = 60_000
         history = [{'role': 'user', 'content': [{'type': 'text', 'text': 'começo'}]}]
         for turn in range(10):
             history.append({'role': 'assistant',
@@ -213,6 +216,7 @@ class TestClaudeCodePayload(unittest.TestCase):
         self.assertIn('linha de saída', ''.join(job.sends))
 
     def test_conversation_that_fills_restarts_and_says_so(self):
+        self.service.state['conversation_chars'] = 40_000
         messages = [{'role': 'user', 'content': [{'type': 'text', 'text': 'pedido inicial'}]}]
         restarted = False
         for turn in range(12):

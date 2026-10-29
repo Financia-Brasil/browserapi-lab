@@ -105,10 +105,12 @@ class SimulatedSite:
     — o defeito do relato (“manda antes de carregar e diz que não funciona”).
     """
 
-    def __init__(self, limits, not_ready=0, tool=True):
+    def __init__(self, limits, not_ready=0, tool=True, long_answer=False):
         self.limits = limits
         self.remaining_not_ready = not_ready
         self.tool = tool
+        self.long_answer = long_answer
+        self.continued = 0
         self.received = []
         self.refused = []
         self.not_ready_hits = 0
@@ -136,6 +138,13 @@ class SimulatedSite:
 
     def answer(self, text):
         flat = text.lower()
+        if self.long_answer and '[continuação]' in flat:
+            self.continued += 1
+            return 'fim do bloco\n```\n'
+        if self.long_answer:
+            # Resposta cortada no meio de uma cerca de código: é o sinal que o
+            # site dá quando o teto de saída do chat é atingido.
+            return 'relatório longo do chat simulado\n```python\nprint("parte 1")\n' + 'x = 1\n' * 300
         if '[parte ' in flat and 'não responda' in flat:
             return 'recebido'
         if '[continuação]' in flat:
@@ -187,9 +196,15 @@ def run_cli(claude, port, key, prompt, home, extra=()):
         'DISABLE_TELEMETRY': '1',
         'DISABLE_ERROR_REPORTING': '1',
     })
-    command = [claude, '-p', prompt, '--output-format', 'json', *extra]
+    # Um arquivo gigante não cabe em um argumento (limite de ~128 KB do Linux):
+    # vai pela entrada padrão, que é como o CLI lê um prompt grande de verdade.
+    if len(prompt) > 60_000:
+        command, stdin = [claude, '-p', '--output-format', 'json', *extra], prompt
+    else:
+        command, stdin = [claude, '-p', prompt, '--output-format', 'json', *extra], None
     started = time.time()
-    done = subprocess.run(command, env=env, capture_output=True, text=True, timeout=300)
+    done = subprocess.run(command, env=env, input=stdin, capture_output=True, text=True,
+                          timeout=300)
     payload = None
     for line in reversed((done.stdout or '').strip().splitlines()):
         try:
@@ -206,110 +221,161 @@ def merge(state, out):
     state['tool_round_trips'] += 1 if out.get('num_turns', 1) > 1 else 0
 
 
+SCENARIOS = {
+    # nome: (prompt, argumentos extras, ajustes do site/da API)
+    'simples': ('responda apenas OK', (), {}),
+    'ferramenta': ('use a ferramenta para ver o sistema', ('--allowedTools', 'Bash'), {}),
+    'arquivo': (None, (), {'file_chars': 120_000}),
+    'janela': ('responda apenas OK', (), {'limits': {'conversation_chars': 24_000},
+                                        'runs': 2}),
+    'lenta': ('responda apenas OK', (), {'not_ready': 4}),
+    'resposta': ('escreva o relatório longo', (), {'long_answer': True}),
+}
+
+
+def exercise(root, args, scenario, name=''):
+    prompt, extra, options = scenario
+    limits = windows.Limits(**({'message_chars': 20_000, 'conversation_chars': 200_000,
+                                'block_chars': 8_000} | options.get('limits', {})))
+    site = SimulatedSite(limits, not_ready=options.get('not_ready', 0),
+                         long_answer=bool(options.get('long_answer')))
+    store = ConfigStore(root / 'config')
+    config = ChatConfig('meu-agente', 'https://chat.example/', **HYPOTHESES['fixture'])
+    store.save(config)
+    store.save_status('meu-agente', ChatResult('success', True).receipt(config))
+    panel = Panel(store, root / 'data')
+    warm = FireWarm(store)
+    warm.site = site
+    panel.warm = warm
+    api = APIService(panel, port=0)
+    panel.api_service = api
+    # Os mesmos tetos dos dois lados: o "site" recusa o que passaria da janela e
+    # a API precisa saber da janela para trocar de conversa antes disso.
+    api.configure({'enabled': True, 'names': ['meu-agente'], 'headless': True,
+                   **limits.as_dict()})
+    steps = []
+    try:
+        port, key = api.server.server_port, api.state['key']
+        if options.get('file_chars'):
+            # Um arquivo maior que o campo do chat, entregue como o CLI entrega
+            # o que o usuário cola: uma mensagem gigante.
+            body = ''.join(f'linha {i:06d} do arquivo grande\n'
+                           for i in range(options['file_chars'] // 25))
+            prompt = ('resuma o arquivo abaixo em uma frase\n\n' + body)
+        with patch('browserapi_lab.llm_api.exchange', side_effect=site):
+            for run in range(int(options.get('runs', 1))):
+                before = len(site.received)
+                used = prompt if run == 0 or options.get('file_chars') else (
+                    'e agora resuma em uma linha')
+                flags = list(extra) + (['--continue'] if run else [])
+                out = run_cli(args.claude, port, key, used, root / 'home', tuple(flags))
+                sends = site.received[before:]
+                step = {'step': f'run {run + 1}', 'exit': out['exit'],
+                        'seconds': out['seconds'],
+                        'is_error': (out['result'] or {}).get('is_error'),
+                        'num_turns': (out['result'] or {}).get('num_turns'),
+                        'result': ((out['result'] or {}).get('result') or '')[:160],
+                        'site_sends': len(sends),
+                        'largest_send': max((len(item) for item in sends), default=0),
+                        'terminal_reason': (out['result'] or {}).get('terminal_reason'),
+                        'plan': dict(FireWarm.last),
+                        'stderr': out['stderr'][-300:] if out['exit'] else ''}
+                steps.append(step)
+                print(f'[{name}] run {run + 1}: exit={step["exit"]} turnos={step["num_turns"]} '
+                      f'envios={step["site_sends"]} maior={step["largest_send"]} '
+                      f'motivo={step["terminal_reason"]} -> {step["result"][:70]}')
+                if out['exit'] != 0 or step['is_error']:
+                    return {'steps': steps, 'ok': False, 'site_refused': site.refused}
+    finally:
+        api.close()
+        panel.close()
+    return {'steps': steps, 'ok': not site.refused, 'site_refused': site.refused,
+            'site_sends': len(site.received),
+            'largest_send': max((len(item) for item in site.received), default=0),
+            'site_conversation_characters': sum(map(len, site.conversation)),
+            'not_ready_hits': site.not_ready_hits,
+            'continues_requested': site.continued,
+            'site_conversation_reset': sum(1 for _ in site.conversation) == 0 or None,
+            'limits': limits.as_dict()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--claude', default=os.environ.get('CLAUDE_BIN') or
                         shutil.which('claude') or '')
     parser.add_argument('--no-cli', action='store_true',
-                        help='não roda o binário; exercita só o chat simulado')
+                        help='não roda o binário; exercita só a API HTTP')
+    parser.add_argument('--only', default='', help='roda só este cenário: '
+                        + ', '.join(SCENARIOS))
     parser.add_argument('--output', default=str(ROOT / 'results/ci/claude-firetest.json'))
     args = parser.parse_args()
 
-    limits = windows.Limits(message_chars=20_000, conversation_chars=60_000, block_chars=8_000)
-    site = SimulatedSite(limits, not_ready=2)
-    evidence = {'scope': 'synthetic_chat_real_claude_code', 'limits': limits.as_dict(),
-                'claude': args.claude or None, 'steps': []}
+    names = [args.only] if args.only else list(SCENARIOS)
+    evidence = {'scope': 'synthetic_chat_real_claude_code', 'claude': args.claude or None,
+                'scenarios': {}, 'ok': True}
+    for name in names:
+        scenario = SCENARIOS[name]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            if args.claude and not args.no_cli:
+                result = exercise(root, args, scenario, name)
+            else:
+                http = no_cli_check(root, scenario)
+                result = {'steps': [], 'ok': bool(http.get('ok')), 'site_refused': http['refused'],
+                          'http': http}
+            result['name'] = name
+            evidence['scenarios'][name] = result
+            evidence['ok'] = evidence['ok'] and bool(result.get('ok'))
+            if result.get('site_refused'):
+                print(f'[{name}] FALHOU: o site recusou {len(result["site_refused"])} envio(s): '
+                      f'{result["site_refused"][:3]}')
+    return finish(evidence, args.output, 0 if evidence['ok'] else 1)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        store = ConfigStore(root / 'config')
-        config = ChatConfig('meu-agente', 'https://chat.example/', **HYPOTHESES['fixture'])
-        store.save(config)
-        store.save_status('meu-agente', ChatResult('success', True).receipt(config))
-        panel = Panel(store, root / 'data')
-        warm = FireWarm(store)
-        warm.site = site
-        panel.warm = warm
-        api = APIService(panel, port=0)
-        panel.api_service = api
-        api.configure({'enabled': True, 'names': ['meu-agente'], 'headless': True})
-        port = api.server.server_port
-        key = api.state['key']
-        evidence['port'] = port
-        try:
-            with patch('browserapi_lab.llm_api.exchange', side_effect=site):
-                if args.claude and not args.no_cli:
-                    steps = [
-                        ('pergunta simples', 'responda apenas OK', ()),
-                        ('ferramenta', 'use a ferramenta para ver o sistema', ('--allowedTools', 'Bash')),
-                        ('continuação da sessão', 'e agora escreva um texto longo',
-                         ('--allowedTools', 'Bash', '--continue')),
-                    ]
-                else:
-                    steps = []
-                for name, prompt, extra in steps:
-                    before = len(site.received)
-                    out = run_cli(args.claude, port, key, prompt, root / 'home', extra)
-                    sends = site.received[before:]
-                    step = {'step': name, 'exit': out['exit'], 'seconds': out['seconds'],
-                            'is_error': (out['result'] or {}).get('is_error'),
-                            'num_turns': (out['result'] or {}).get('num_turns'),
-                            'result': ((out['result'] or {}).get('result') or '')[:200],
-                            'site_sends': len(sends),
-                            'largest_send': max((len(s) for s in sends), default=0),
-                            'terminal_reason': (out['result'] or {}).get('terminal_reason'),
-                            'plan': dict(FireWarm.last),
-                            'stderr': out['stderr'][-400:] if out['exit'] else ''}
-                    evidence['steps'].append(step)
-                    print(f"[{name}] exit={step['exit']} turnos={step['num_turns']} "
-                          f"envios={step['site_sends']} maior={step['largest_send']} "
-                          f"motivo={step['terminal_reason']} plano={step['plan']} "
-                          f"-> {step['result'][:80]}")
-                    if out['exit'] != 0 or step['is_error']:
-                        print('FALHOU: o CLI não completou o passo.')
-                        evidence['ok'] = False
-                        return finish(evidence, args.output, 1)
-                if not steps:
-                    # Sem o binário: exercita o mesmo caminho pela API HTTP.
-                    import http.client
-                    body = {'model': 'meu-agente', 'max_tokens': 8000,
-                            'system': [{'type': 'text', 'text': 'agente de terminal ' * 400}],
-                            'tools': [{'name': 'Bash', 'description': 'roda comando ' * 200,
-                                       'input_schema': {'type': 'object',
-                                                        'properties': {'command': {'type': 'string'}}}}],
-                            'messages': [{'role': 'user', 'content': 'use a ferramenta'}],
-                            'output_config': {'effort': 'medium'},
-                            'thinking': {'type': 'enabled'}, 'context_management': {'edits': []}}
-                    connection = http.client.HTTPConnection('127.0.0.1', port, timeout=120)
-                    connection.request('POST', '/v1/messages', json.dumps(body),
-                                       {'Content-Type': 'application/json', 'x-api-key': key})
-                    response = connection.getresponse()
-                    raw = response.read().decode()
-                    connection.close()
-                    value = json.loads(raw)
-                    evidence['steps'].append({'step': 'http_v1_messages', 'status': response.status,
-                                              'stop_reason': value.get('stop_reason'),
-                                              'mode': value['browserapi']['window']['mode']})
-                    print(f"[http /v1/messages] status={response.status} "
-                          f"stop={value.get('stop_reason')} janela={value['browserapi']['window']['mode']}")
-                    if response.status != 200:
-                        evidence['ok'] = False
-                        return finish(evidence, args.output, 1)
-            evidence.update({
-                'site_sends': len(site.received),
-                'site_refused': site.refused,
-                'largest_send': max((len(s) for s in site.received), default=0),
-                'site_conversation_characters': sum(map(len, site.conversation)),
-                'not_ready_hits': site.not_ready_hits,
-                'limits_respected': not site.refused,
-            })
-            print(f"envios ao site={len(site.received)} maior={evidence['largest_send']} "
-                  f"recusas={len(site.refused)} página_lenta={site.not_ready_hits}")
-            evidence['ok'] = not site.refused
-            return finish(evidence, args.output, 0 if evidence['ok'] else 1)
-        finally:
-            api.close()
-            panel.close()
+
+def no_cli_check(root, scenario):
+    """Sem o binário: o mesmo pedido do CLI, pelo HTTP, contra o chat simulado."""
+    import http.client
+    limits = windows.Limits(**({'message_chars': 20_000, 'conversation_chars': 200_000,
+                                'block_chars': 8_000} | scenario[2].get('limits', {})))
+    site = SimulatedSite(limits, long_answer=bool(scenario[2].get('long_answer')))
+    store = ConfigStore(root / 'config')
+    config = ChatConfig('meu-agente', 'https://chat.example/', **HYPOTHESES['fixture'])
+    store.save(config)
+    store.save_status('meu-agente', ChatResult('success', True).receipt(config))
+    panel = Panel(store, root / 'data')
+    warm = FireWarm(store)
+    warm.site = site
+    panel.warm = warm
+    api = APIService(panel, port=0)
+    panel.api_service = api
+    api.configure({'enabled': True, 'names': ['meu-agente'], 'headless': True,
+                   **limits.as_dict()})
+    try:
+        body = {'model': 'meu-agente', 'max_tokens': 8000,
+                'system': [{'type': 'text', 'text': 'agente de terminal ' * 400}],
+                'tools': [{'name': 'Bash', 'description': 'roda comando ' * 200,
+                           'input_schema': {'type': 'object',
+                                            'properties': {'command': {'type': 'string'}}}}],
+                'messages': [{'role': 'user', 'content': 'use a ferramenta'}],
+                'output_config': {'effort': 'medium'},
+                'thinking': {'type': 'enabled'}, 'context_management': {'edits': []}}
+        with patch('browserapi_lab.llm_api.exchange', side_effect=site):
+            connection = http.client.HTTPConnection('127.0.0.1', api.server.server_port,
+                                                    timeout=120)
+            connection.request('POST', '/v1/messages', json.dumps(body),
+                               {'Content-Type': 'application/json', 'x-api-key': api.state['key']})
+            response = connection.getresponse()
+            value = json.loads(response.read().decode())
+            connection.close()
+        window = (value.get('browserapi') or {}).get('window') or {}
+        print(f'[http] status={response.status} stop={value.get("stop_reason")} '
+              f'janela={window.get("mode")} recusas={len(site.refused)}')
+        return {'status': response.status, 'ok': response.status == 200,
+                'stop_reason': value.get('stop_reason'),
+                'mode': window.get('mode'), 'refused': site.refused}
+    finally:
+        api.close()
+        panel.close()
 
 
 def finish(evidence, path, code):

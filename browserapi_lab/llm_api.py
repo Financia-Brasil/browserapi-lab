@@ -21,7 +21,7 @@ from .config import ConfigStore, safe_name, origin
 from .context import plan, ContextError
 from . import conversation as windows
 from . import tool_calls as tools_mod
-from .chat import ChatResult, browser_config, config_fingerprint, exchange
+from .chat import ChatResult, browser_config, config_fingerprint, exchange, harvest
 from .browser import BrowserSession
 from .setup import status
 from .history import History
@@ -153,6 +153,7 @@ class Job:
     limits: object = field(default_factory=windows.Limits)
     tools: list = field(default_factory=list)
     plan_report: dict = field(default_factory=dict)
+    harvests: list = field(default_factory=list)
     characters: int = 0
     page_reused: bool = False
     document: str = ''
@@ -190,7 +191,8 @@ class WarmBrowser:
     """
 
     READY_SECONDS = 25
-    ATTEMPTS = 2          # além da primeira tentativa
+    ATTEMPTS = 2          # além da primeira tentativa (só antes de digitar)
+    HARVEST_ATTEMPTS = 2  # reesperas depois de um envio já confirmado
     RELOAD_SECONDS = 15
 
     def __init__(self, store, factory=BrowserSession):
@@ -247,12 +249,18 @@ class WarmBrowser:
 
     # -- envio com repetição segura ---------------------------------------
     def send_with_retry(self, job, config, text, cancelled):
-        """Um envio; repete só o que falhou **antes** de digitar."""
+        """Um envio; repete só o que falhou **antes** de digitar.
+
+        Depois de um envio confirmado, resposta que não terminou a tempo não é
+        “falhou”: continua esperando (``harvest``). Só então, se ainda não veio
+        texto, devolve o motivo — nunca reenviando a mesma pergunta.
+        """
         last = None
         for attempt in range(self.ATTEMPTS + 1):
             if cancelled and cancelled():
                 raise EOFError('Operação interrompida')
             result = exchange(self.page, config, text, authorized=True, cancelled=cancelled)
+            result = self.keep_waiting(job, config, result, cancelled)
             if result.status == 'success' or not windows.retryable_status(result.status, result.send_state):
                 if attempt:
                     result.diagnostics = dict(result.diagnostics or {}) | {'retried': attempt}
@@ -271,6 +279,28 @@ class WarmBrowser:
             if not ready:
                 continue
         return last
+
+    def keep_waiting(self, job, config, result, cancelled):
+        """Envio confirmado e resposta incompleta: esperar de novo, sem reenviar."""
+        if result.status == 'success' or result.send_state != 'confirmed':
+            return result
+        if result.status not in ('timeout', 'output_invalid', 'page_unavailable'):
+            return result
+        for extra in range(self.HARVEST_ATTEMPTS):
+            # Reespera não é tentativa de envio: fica em lista própria para
+            # "quantas vezes reenviei" continuar honesto.
+            job.harvests.append({'model': config.name, 'status': result.status,
+                                 'send_state': result.send_state, 'harvest': extra + 1})
+            waited = harvest(self.page, config, cancelled=cancelled,
+                             timeout_ms=config.timeout_ms * (extra + 1))
+            if waited.status == 'success':
+                waited.diagnostics = dict(waited.diagnostics or {}) | {'harvested': extra + 1,
+                                                                      'first_status': result.status}
+                return waited
+            if waited.status != 'timeout':
+                return waited
+            result = waited
+        return result
 
     def run_sends(self, job, config, cancelled):
         """Executa todos os envios do turno e as continuações da saída."""

@@ -119,6 +119,13 @@ resposta**. O agente não sabe disso; a API resolve aqui.
 | o agente reescreveu o histórico (compactou) | mesma retomada, porque o começo não confere mais |
 | resposta cortada (cerca de código aberta, JSON de ferramenta incompleto, teto do bloco) | pede **continuação** e une os blocos removendo a sobreposição |
 | resultado de ferramenta gigante em turno antigo | cortado em cabeça e cauda com marcador; o mais recente vai inteiro |
+| **envio confirmado, resposta que não terminou a tempo** | continua **esperando e relendo** (`harvest`), com prazos crescentes: reenviar duplicaria a pergunta |
+
+**Tetos padrão** (ajustáveis no painel, em caracteres): **20.000** por envio e
+**200.000** por conversa. O campo é o limite duro do site; a janela é quando a
+conversa é trocada e retomada. Medido com o Claude Code real: o pedido inicial
+tem ~46 mil caracteres e cabe em **2 blocos**; um arquivo de **120 KB** vira
+**9 blocos** sem recusa.
 
 A resposta diz o que aconteceu: `browserapi.window` (caracteres, teto, modo
 `bootstrap`/`delta`/`restore`/`compacted`) e `browserapi.conversation`

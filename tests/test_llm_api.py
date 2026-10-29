@@ -295,7 +295,14 @@ class TestWarmRouting(unittest.TestCase):
                 with patch('browserapi_lab.llm_api.exchange',return_value=ChatResult(status,send_state=state)) as send:
                     browser.run(job,lambda:False)
                 self.assertEqual(send.call_count,1)
+                # Reespera depois de um envio confirmado não é reenvio: o
+                # veredito pode mudar (timeout -> page_unavailable na página
+                # falsa), mas o envio aconteceu UMA vez e fica registrado.
                 self.assertEqual(len(job.attempts),1)
+                if state=='confirmed' and status=='timeout':
+                    self.assertTrue(job.harvests, 'envio confirmado deve ser reesperado')
+                else:
+                    self.assertEqual(job.harvests,[])
                 browser.close()
 
     def test_pre_send_failure_can_fallback_to_distinct_authorized_origin(self):

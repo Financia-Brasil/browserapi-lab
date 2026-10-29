@@ -15,11 +15,12 @@ trivial — `claude -p "responda apenas OK"` — manda:
 
 | Componente | Tamanho |
 |---|---|
-| corpo da requisição | **45.783 bytes** |
-| `system` (3 blocos de texto) | 5.935 caracteres |
+| corpo da requisição | **46.125 bytes** |
+| `system` (3 blocos de texto) | 5.985 caracteres |
 | `tools` (12 ferramentas) | 29.995 caracteres |
-| `messages` (2 itens) | 9.664 caracteres |
-| `max_tokens` | 8.000 |
+| `messages` (2 itens) | 665 + **9.258** caracteres |
+| papéis em `messages` | `[user, system]` — o último é um lembrete de sistema |
+| `max_tokens` | 128.000 |
 | chaves extras | `context_management`, `output_config`, `thinking`, `metadata.user_id` |
 | cabeçalhos | `anthropic-version: 2023-06-01`, `anthropic-beta: claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24` |
 
@@ -31,10 +32,13 @@ Comportamento do CLI diante de erro (medido, mesmo servidor de captura):
 
 | Resposta do servidor | O que o Claude Code faz |
 |---|---|
-| 400 `prompt is too long: N tokens > M maximum` (1º turno) | **1 requisição**, `terminal_reason: prompt_too_long`, sai com erro — **não** tenta fatiar |
-| 400 `Parâmetro não suportado: …` | **6 requisições** (retentativas inúteis) e desiste |
-| 500 / 529 | **11 requisições** com espera, depois desiste |
-| SSE cortado sem `message_stop` | 3 requisições, depois desiste |
+| 400 `prompt is too long: N tokens > M maximum` (1º turno) | **1 requisição**, `terminal_reason: prompt_too_long`, sai com erro — **não** tenta fatiar (a mensagem dele sugere “reduza arquivos/ferramentas”, porque “uma conversa de um turno não pode ser compactada”) |
+| 400 de parâmetro (`max_tokens: … > …`) | **6 requisições**, corpo cresce de 46k para 74k, depois desiste |
+| 400 `Parâmetro não suportado: …` (nosso erro antigo) | **2 requisições** e desiste com “API Error” |
+| 500 | **9 requisições** com espera; o processo fica pendurado (>120 s) |
+| 429 / 529 | 9 requisições (429, pendura) / **3** requisições (529, mensagem clara) |
+| SSE cortado sem `message_stop` | 3 requisições: tenta de novo **sem streaming** e reporta o corte |
+| `stop_reason: max_tokens` | o CLI **continua sozinho** por 4 turnos e então falha (“exceeded the output maximum”) |
 | 200 com SSE completo | funciona; `tool_use` → executa Bash → 2º pedido com `tool_result` → resposta final |
 
 Duas conclusões que mudam o desenho:
@@ -151,26 +155,30 @@ nunca enche e ele nunca compacta. Honestidade aqui é **rotular a estimativa**.
 
 ## 6. Resultados (depois do código)
 
-Teste de fogo: **Claude Code 2.1.312 de verdade** (`scripts/claude_firetest.py`)
-apontado para esta API, com um chat simulado que recusa o que um chat real
-recusa (campo de 20.000 caracteres, janela de 60.000) e que **falha duas vezes
-“antes de digitar”** para simular a página carregando.
+Teste de fogo: **Claude Code 2.1.312 de verdade** (`scripts/claude_firetest.py`,
+execução de 75 s) apontado para esta API, com um chat simulado que recusa o que um
+chat real recusa (campo de 20.000 caracteres, janela de 60.000) e que **falha
+duas vezes “antes de digitar”** para simular a página carregando. Seis cenários,
+todos `exit 0` e nenhuma recusa do site:
 
-| Passo | O que aconteceu | Envios ao site |
+| Cenário | O que prova | Envios ao site |
 |---|---|---|
-| pergunta simples | sucesso; o pedido de ~46k virou **2 blocos** de ~19,7k | 2 |
-| pedido com ferramenta | `tool_use` → agente executou → `tool_result` → resposta | 1 (o 2º turno foi **delta**) |
-| sessão retomada (`--continue`) | sucesso; só o turno novo foi enviado | **1 envio de 326 caracteres** |
+| pergunta simples | pedido de ~46k vira **2 blocos** de ~19,2k | 2 |
+| ferramenta | `tool_use` → Bash → `tool_result` → resposta | 2 (2º turno em **delta**) |
+| **arquivo de 120 KB** | arquivo muito maior que o campo vai pela entrada padrão e é **fatiado em 9 blocos**, remontado sem perda | **9**, maior 19,9k |
+| **janela pequena (24k)** | 2ª sessão (`--continue`) dispara **retomada**: conversa nova (`rotate`), contexto reescrito em 2 envios | 2 + 2 |
+| **página lenta** (4 falhas antes de digitar) | repetição interna + reespera; o CLI **não vê erro** | 2 |
+| **resposta cortada** | cerca de código aberta → continuação pedida e blocos unidos | 3 |
 
-Nenhum envio passou do campo; nenhuma recusa do site; as duas falhas de
-prontidão foram repetidas internamente e **o CLI não viu erro**.
+Medido no total: maior envio **19.901 caracteres** (teto 20.000), nenhuma recusa,
+`página_lenta=2` absorvidas.
 
 | # | Hipótese | Veredito |
 |---|---|---|
-| H1 | delta mantém a conversa linear | **confirmada** — 3º passo: 326 caracteres em vez de ~46k |
+| H1 | delta mantém a conversa linear | **confirmada** — numa sessão retomada (`--continue`) o turno novo foi de **326 caracteres** em vez de ~46k |
 | H2 | 1º pedido real cabe em ≤ 3 blocos de 20k | **confirmada com folga** — 2 blocos (com o protocolo resumido em ~7,3k em vez de ~30k de esquema) |
-| H3 | falha antes de digitar é repetida e vira sucesso | **confirmada** — 2 falhas, `site_refused: []`, CLI com `exit 0` |
-| H4 | continuação recupera chamada cortada | **confirmada em teste unitário**; no teste de fogo a resposta não foi cortada |
+| H3 | falha antes de digitar é repetida e vira sucesso | **confirmada** — até **4** falhas de prontidão no cenário “página lenta”, `site_refused: []`, CLI com `exit 0` |
+| H4 | continuação recupera saída cortada | **confirmada nos dois níveis** — unitário e no cenário “resposta cortada” do teste de fogo (cerca aberta → 3 envios, texto unido) |
 | H5 | `usage` estimado sai de zero | **confirmada** — `input_tokens`/`output_tokens` > 0, `estimated: true` |
 
 Três defeitos reais apareceram **só** no teste de fogo, e cada um quebrava a

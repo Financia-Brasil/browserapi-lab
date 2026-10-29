@@ -28,10 +28,10 @@ from dataclasses import dataclass, field, replace
 CHAR_PER_TOKEN = 4
 
 DEFAULT_MESSAGE_CHARS = 20_000
-DEFAULT_CONVERSATION_CHARS = 60_000
+DEFAULT_CONVERSATION_CHARS = 200_000
 DEFAULT_BLOCK_CHARS = 8_000
 DEFAULT_MAX_BLOCKS = 4
-DEFAULT_MAX_PARTS = 8
+DEFAULT_MAX_PARTS = 24
 DEFAULT_RESTORE_CHARS = 14_000
 DEFAULT_TOOL_RESULT_CHARS = 4_000
 DEFAULT_KEEP_RECENT = 6
@@ -70,10 +70,10 @@ class Limits:
     def __post_init__(self):
         rules = {
             'message_chars': (4_000, 30_000),
-            'conversation_chars': (8_000, 400_000),
+            'conversation_chars': (8_000, 1_000_000),
             'block_chars': (1_000, 40_000),
             'max_blocks': (1, 12),
-            'max_parts': (1, 24),
+            'max_parts': (1, 40),
             'restore_chars': (2_000, 60_000),
             'tool_result_chars': (500, 40_000),
             'keep_recent': (2, 40),
