@@ -379,3 +379,24 @@ class TestWorkerWithSimulatedSite(unittest.TestCase):
         self.assertEqual(job.result.status, 'success')
         self.assertEqual(site.calls[-1], plan.sends[-1])
         self.assertNotIn('fallback', job.plan_report)
+
+    def test_client_that_sends_only_the_new_message_gets_a_delta(self):
+        # Regressão vista no CI com Chromium: o pedido 2 traz só "segunda
+        # pergunta"; sem regra própria isso virava "histórico reescrito",
+        # criava conversa nova e apagava a anterior.
+        limits = windows.Limits(message_chars=5000)
+        first = windows.plan_turn([msg('user', 'primeira')], limits=limits)
+        self.assertEqual(first.mode, 'bootstrap')
+        delivered = windows.Delivered(hashes=first.hashes, characters=first.characters,
+                                      conversation='1000.000', bootstrap=True, turns=1)
+        second = windows.plan_turn([msg('user', 'segunda')], delivered=delivered,
+                                   limits=limits)
+        self.assertEqual(second.mode, 'delta')
+        self.assertFalse(second.rotate)
+        self.assertEqual(second.report['reason'], 'history_omitted')
+        self.assertEqual(second.sends, ['[user]\nsegunda'])
+        # Já um histórico que não bate e tem mais de uma mensagem é reescrita.
+        third = windows.plan_turn([msg('user', 'outra'), msg('assistant', 'x'),
+                                   msg('user', 'mais')], delivered=delivered, limits=limits)
+        self.assertEqual(third.mode, 'restore')
+        self.assertTrue(third.rotate)

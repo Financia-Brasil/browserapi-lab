@@ -330,14 +330,25 @@ def plan_turn(messages, *, delivered=None, limits=Limits(), protocol='', reminde
 
     if entry is None or not entry.bootstrap:
         return _bootstrap(messages, hashes, report, limits, protocol, stateless)
+    fresh = None
     if prefix < len(entry.hashes):
-        # O cliente reescreveu o histórico (compactação dele) ou é outra sessão.
-        report['reason'] = 'history_rewritten'
-        return _restore(messages, hashes, report, limits, protocol)
-    if prefix >= len(messages):
-        report['reason'] = 'no_new_message'
-        return _restore(messages, hashes, report, limits, protocol)
-    fresh = messages[prefix:]
+        if len(messages) == 1 and messages[0]['role'] == 'user':
+            # Cliente que manda SÓ a mensagem nova em cada pedido (o caso da
+            # API OpenAI quando o cliente guarda o histórico do lado dele e
+            # reescreve o contexto): não houve reescrita por compactação, é o
+            # próximo turno. Tratar como retomada criava conversa nova a cada
+            # pergunta e esvaziava o chat.
+            report['reason'] = 'history_omitted'
+            fresh = messages
+        else:
+            # O cliente reescreveu o histórico (compactação dele).
+            report['reason'] = 'history_rewritten'
+            return _restore(messages, hashes, report, limits, protocol)
+    if fresh is None:
+        if prefix >= len(messages):
+            report['reason'] = 'no_new_message'
+            return _restore(messages, hashes, report, limits, protocol)
+        fresh = messages[prefix:]
     text = render(fresh)
     if reminder:
         text += '\n\n' + reminder
