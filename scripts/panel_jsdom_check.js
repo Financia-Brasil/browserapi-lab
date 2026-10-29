@@ -49,6 +49,10 @@ function state(overrides = {}) {
       agent_example: 'export ANTHROPIC_BASE_URL="http://127.0.0.1:8765"\n'
         + 'export ANTHROPIC_AUTH_TOKEN="<cole aqui a chave local>"',
       message: 'Desativada. Autorize explicitamente antes de usar agentes.',
+      limits: {message_chars: 20000, conversation_chars: 60000, block_chars: 8000,
+               max_blocks: 4, max_parts: 8, restore_chars: 14000,
+               tool_result_chars: 4000, keep_recent: 6},
+      context: {'meu-gemini': {characters: 12000, turns: 3, conversation: 'https://chat'}},
     },
     updates: {managed: false, enabled: false, message: 'Atualização não gerenciada.'},
     ...overrides,
@@ -132,6 +136,14 @@ async function main() {
   check('rota do agente é /v1/messages',
     q('messages-url-display').textContent === '/v1/messages',
     q('messages-url-display').textContent);
+  check('janela de contexto aparece com os dois tetos',
+    Number(q('api-message-chars').value) === 20000
+    && Number(q('api-conversation-chars').value) === 60000,
+    [q('api-message-chars').value, q('api-conversation-chars').value]);
+  check('janela mostra o que já foi entregue na sessão',
+    q('api-context-status').textContent.includes('meu-gemini')
+    && q('api-context-status').textContent.includes('caracteres'),
+    q('api-context-status').textContent);
 
   // Clicar em "Ligar API" leva à aba certa sem enviar nada.
   q('quick-action').click();

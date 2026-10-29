@@ -19,6 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import ConfigStore, safe_name, origin
 from .context import plan, ContextError
+from . import conversation as windows
+from . import tool_calls as tools_mod
 from .chat import ChatResult, browser_config, config_fingerprint, exchange
 from .browser import BrowserSession
 from .setup import status
@@ -128,6 +130,24 @@ class Job:
     names: list
     options: dict
     context: dict
+    # Um turno pode virar vários envios (início em blocos) e uma resposta pode
+    # precisar de continuação (saída em blocos). ``prompt`` continua sendo o
+    # último envio, para quem já dependia dele.
+    sends: list = field(default_factory=list)
+    fallback_sends: list = field(default_factory=list)
+    rotate: bool = False
+    limits: object = field(default_factory=windows.Limits)
+    tools: list = field(default_factory=list)
+    plan_report: dict = field(default_factory=dict)
+    characters: int = 0
+    page_reused: bool = False
+    page_url: str = ''
+    conversation: str = ''
+    conversation_shared: bool = False
+    blocks: int = 0
+    stop_reason: str = 'end_turn'
+    continuation_reason: str = ''
+    commit: object = None
     identifier: str = field(default_factory=lambda:'chatcmpl-'+secrets.token_hex(16))
     done: threading.Event = field(default_factory=threading.Event)
     result: object = None
@@ -145,82 +165,250 @@ class Job:
 
 
 class WarmBrowser:
-    def __init__(self,store,factory=BrowserSession):
-        self.store,self.factory=store,factory
-        self.session=self.page=self.key=None
+    """Uma aba quente, um worker: prontidão, blocos, retomada e continuação.
+
+    O defeito do relato (“abre o chat, manda antes de carregar e diz que não
+    funciona, e nem tenta de novo”) está resolvido em três camadas: espera ativa
+    de prontidão antes do primeiro envio, repetição interna das falhas que
+    aconteceram **antes de digitar**, e código HTTP retentável quando nem assim
+    deu (503), em vez de 409 — que faz o agente desistir.
+    """
+
+    READY_SECONDS = 25
+    ATTEMPTS = 2          # além da primeira tentativa
+    RELOAD_SECONDS = 15
+
+    def __init__(self, store, factory=BrowserSession):
+        self.store = store
+        self.factory = factory
+        self.session = self.page = self.key = None
 
     def close(self):
         try:
             if self.session:
                 self.session.close()
         finally:
-            self.session=self.page=self.key=None
+            self.session = self.page = self.key = None
 
-    def run(self,job,cancelled):
-        visited=set()
+    # -- prontidão ---------------------------------------------------------
+    def wait_ready(self, page, config, cancelled, seconds=None):
+        """Espera o campo aparecer e ficar editável; recarrega uma vez se sumir.
+
+        SPA pinta o campo depois de `domcontentloaded`. Julgar antes disso era o
+        que produzia “não funcionou” com a página ainda carregando.
+        """
+        deadline = time.monotonic() + (seconds or self.READY_SECONDS)
+        reloaded = False
+        while True:
+            if cancelled and cancelled():
+                raise EOFError('Operação interrompida')
+            try:
+                if page.is_closed():
+                    return False, 'page_unavailable'
+                locator = page.locator(config.composer)
+                if (locator.count() == 1 and locator.is_visible() and locator.is_editable()
+                        and not page.locator(config.root).count() == 0):
+                    return True, ''
+            except Exception:
+                pass
+            if time.monotonic() >= deadline:
+                return False, 'composer_missing'
+            if not reloaded and time.monotonic() >= deadline - self.READY_SECONDS + 8:
+                reloaded = True
+                try:
+                    page.reload(wait_until='domcontentloaded', timeout=self.RELOAD_SECONDS * 1000)
+                except Exception:
+                    pass
+            try:
+                page.wait_for_timeout(200)
+            except Exception:
+                time.sleep(0.2)
+
+    def _reload(self, page, config):
+        try:
+            page.reload(wait_until='domcontentloaded', timeout=self.RELOAD_SECONDS * 1000)
+        except Exception:
+            pass
+
+    # -- envio com repetição segura ---------------------------------------
+    def send_with_retry(self, job, config, text, cancelled):
+        """Um envio; repete só o que falhou **antes** de digitar."""
+        last = None
+        for attempt in range(self.ATTEMPTS + 1):
+            if cancelled and cancelled():
+                raise EOFError('Operação interrompida')
+            result = exchange(self.page, config, text, authorized=True, cancelled=cancelled)
+            if result.status == 'success' or not windows.retryable_status(result.status, result.send_state):
+                if attempt:
+                    result.diagnostics = dict(result.diagnostics or {}) | {'retried': attempt}
+                    job.attempts.append({'model': config.name, 'status': result.status,
+                                         'send_state': result.send_state, 'retried': attempt})
+                return result
+            last = result
+            if attempt == self.ATTEMPTS:
+                break
+            # Nada foi digitado: recarregar não duplica mensagem nenhuma.
+            job.attempts.append({'model': config.name, 'status': result.status,
+                                 'send_state': result.send_state,
+                                 'retry': attempt + 1, 'reason': 'pré-envio'})
+            self._reload(self.page, config)
+            ready, _ = self.wait_ready(self.page, config, cancelled)
+            if not ready:
+                continue
+        return last
+
+    def run_sends(self, job, config, cancelled):
+        """Executa todos os envios do turno e as continuações da saída."""
+        sends = list(job.sends) or [job.prompt]
+        # O delta só vale para a MESMA conversa. Se a aba foi reaberta (o worker
+        # recriou a página) ou o endereço mudou, o chat pode estar vazio e o
+        # envio precisa ser autossuficiente. Julgar por "a página parece vazia"
+        # era pior: conversa com carregamento preguiçoso parece vazia e o
+        # contexto seria enviado duas vezes.
+        moved = job.conversation and job.page_url and job.conversation != job.page_url
+        if job.plan_report.get('mode') == 'delta' and job.fallback_sends and (
+                not job.page_reused or moved):
+            sends = list(job.fallback_sends)
+            job.conversation_shared = True
+            job.plan_report['fallback'] = 'page_reopened' if not job.page_reused else 'url_changed'
+        result = None
+        for index, text in enumerate(sends):
+            result = self.send_with_retry(job, config, text, cancelled)
+            if result.status != 'success':
+                return result, index
+            job.conversation = getattr(self.page, 'url', '') or ''
+        # Saída em blocos: resposta que parece cortada ganha continuação.
+        blocks = [result.answer or '']
+        job.blocks = 1
+        while True:
+            merged = windows.merge_blocks(blocks)
+            parsed = tools_mod.parse(merged, job.tools)
+            more, reason = windows.needs_continuation(merged, job.blocks, job.limits,
+                                                      incomplete=parsed.incomplete,
+                                                      last=blocks[-1])
+            job.continuation_reason = reason
+            if not more:
+                break
+            cont = self.send_with_retry(job, config, windows.CONTINUATION_PROMPT, cancelled)
+            if cont.status != 'success':
+                break
+            blocks.append(cont.answer or '')
+            job.blocks += 1
+        job.stop_reason = ('max_tokens' if job.continuation_reason in
+                           ('block_limit', 'max_blocks', 'open_code_fence', 'incomplete_tool_call')
+                           else 'end_turn')
+        result.answer = windows.merge_blocks(blocks)
+        result.timings = dict(result.timings or {}) | {'output_blocks': job.blocks}
+        return result, len(sends) - 1
+
+    # -- abertura de página ------------------------------------------------
+    def open_page(self, config, headless, light, cancelled):
+        self.close()
+        if cancelled():
+            raise EOFError()
+        self.session = self.factory(browser_config(config, self.store.root, headless=headless))
+        opened = time.perf_counter()
+        self.session.start()
+        browser_ms = (time.perf_counter() - opened) * 1000
+        opened = time.perf_counter()
+        if light:
+            self.session.context.route('**/*', lambda route: route.abort()
+                                       if route.request.resource_type in ('image', 'media', 'font')
+                                       else route.continue_())
+        target = origin(config.url)
+        if config.session_mode == 'existing_chrome':
+            # O Playwright agrupa abas de TODOS os perfis neste contexto.
+            # Só a sessão verificada pode escolher uma aba do perfil confirmado.
+            self.page = self.session.page(config.url)
+        else:
+            matches = [p for p in self.session.context.pages
+                       if p.url.startswith(('http:', 'https:')) and origin(p.url) == target]
+            if len(matches) > 1:
+                raise APIError('Deixe somente uma aba do chat aberta', 'ambiguous_tabs', 409)
+            self.page = matches[0] if matches else self.session.page(config.url)
+        self.page.wait_for_load_state('domcontentloaded',
+                                      timeout=config.timeout_ms)
+        return browser_ms, (time.perf_counter() - opened) * 1000
+
+    def rotate(self, config, cancelled):
+        """Conversa nova para retomar contexto: navega ao endereço do chat."""
+        if not self.page or self.page.is_closed():
+            return False
+        try:
+            self.page.goto(config.url, wait_until='domcontentloaded',
+                           timeout=config.timeout_ms)
+            ready, _ = self.wait_ready(self.page, config, cancelled, seconds=10)
+            return ready
+        except Exception:
+            return False
+
+    def run(self, job, cancelled):
+        visited = set()
         for name in job.names:
-            config=self.store.load(name)
-            target=origin(config.url)
+            config = self.store.load(name)
+            target = origin(config.url)
             if target in visited:
                 continue  # Não trocar contas do mesmo provedor para contornar quota.
             visited.add(target)
             if job.observe:
                 job.observe(name)
-            headless=job.options['headless']
-            light=job.options['lightweight']
-            if config.session_mode=='existing_chrome' and (headless or light):
-                raise APIError('Não alteramos modo/recursos do navegador pessoal','personal_browser_policy',409)
-            key=(config_fingerprint(config),headless,light)
-            reused=self.key==key and self.page is not None and not self.page.is_closed()
-            browser_ms=page_ms=0.0
+            headless = job.options['headless']
+            light = job.options['lightweight']
+            if config.session_mode == 'existing_chrome' and (headless or light):
+                raise APIError('Não alteramos modo/recursos do navegador pessoal',
+                               'personal_browser_policy', 409)
+            key = (config_fingerprint(config), headless, light)
+            reused = self.key == key and self.page is not None and not self.page.is_closed()
+            browser_ms = page_ms = 0.0
             if not reused:
-                self.close()
-                if cancelled():
-                    raise EOFError()
                 try:
-                    self.session=self.factory(browser_config(config,self.store.root,headless=headless))
-                    opened=time.perf_counter()
-                    self.session.start()
-                    browser_ms=(time.perf_counter()-opened)*1000
-                    opened=time.perf_counter()
-                    if light:
-                        self.session.context.route('**/*',lambda route:route.abort() if route.request.resource_type in ('image','media','font') else route.continue_())
-                    if config.session_mode=='existing_chrome':
-                        # O Playwright agrupa abas de TODOS os perfis neste contexto.
-                        # Só a sessão verificada pode escolher uma aba do perfil
-                        # confirmado; nunca casar origem entre perfis diferentes.
-                        self.page=self.session.page(config.url)
-                    else:
-                        matches=[p for p in self.session.context.pages if p.url.startswith(('http:','https:')) and origin(p.url)==target]
-                        if len(matches)>1:
-                            raise APIError('Deixe somente uma aba do chat aberta','ambiguous_tabs',409)
-                        self.page=matches[0] if matches else self.session.page(config.url)
-                    # Abas restauradas podem ter URL final antes de o DOM estar
-                    # pronto; não navegar de novo nem perder a conversa existente.
-                    self.page.wait_for_load_state('domcontentloaded',timeout=config.timeout_ms)
-                    self.key=key
-                    page_ms=(time.perf_counter()-opened)*1000
-                except (EOFError,KeyboardInterrupt):
+                    browser_ms, page_ms = self.open_page(config, headless, light, cancelled)
+                except (EOFError, KeyboardInterrupt):
+                    self.close()
+                    raise
+                except APIError:
                     self.close()
                     raise
                 except Exception:
                     self.close()
-                    job.result=ChatResult('browser_unavailable')
-                    job.config=config
-                    job.attempts.append({'model':name,'status':'browser_unavailable','send_state':'not_sent','browser_reused':False})
+                    job.result = ChatResult('browser_unavailable')
+                    job.config = config
+                    job.attempts.append({'model': name, 'status': 'browser_unavailable',
+                                         'send_state': 'not_sent', 'browser_reused': False})
                     if job.options.get('fallback'):
                         continue
                     return
-            result=exchange(self.page,config,job.prompt,authorized=True,cancelled=cancelled)
-            result.timings.update(browser_start_ms=round(browser_ms,3),page_open_ms=round(page_ms,3))
-            job.result,job.config=result,config
-            job.attempts.append({'model':name,'status':result.status,'send_state':result.send_state,'browser_reused':reused})
-            if result.status=='success':
+                self.key = key
+            if job.rotate:
+                job.rotate = False
+                job.conversation_shared = not self.rotate(config, cancelled)
+            ready, problem = self.wait_ready(self.page, config, cancelled)
+            if not ready:
+                result = ChatResult(problem, stage='preflight')
+                result.timings = {'browser_start_ms': round(browser_ms, 3),
+                                  'page_open_ms': round(page_ms, 3)}
+                job.result, job.config = result, config
+                job.attempts.append({'model': name, 'status': problem,
+                                     'send_state': 'not_sent', 'browser_reused': reused,
+                                     'wait_ready': 'timeout'})
+                if not job.options.get('fallback'):
+                    return
+                continue
+            job.page_reused = reused
+            job.page_url = getattr(self.page, 'url', '') or ''
+            result, _ = self.run_sends(job, config, cancelled)
+            result.timings.update(browser_start_ms=round(browser_ms, 3),
+                                  page_open_ms=round(page_ms, 3))
+            job.result, job.config = result, config
+            job.attempts.append({'model': name, 'status': result.status,
+                                 'send_state': result.send_state, 'browser_reused': reused})
+            if result.status == 'success':
                 return
             # Somente antes de qualquer ativação; nunca timeout/aceito/ambíguo.
-            if result.send_state!='not_sent' or result.status not in (
-                    'not_configured','wrong_origin','composer_missing','draft_present',
-                    'send_missing','send_is_microphone','browser_unavailable','page_unavailable','rate_limit'):
+            if result.send_state != 'not_sent' or result.status not in (
+                    'not_configured', 'wrong_origin', 'composer_missing', 'draft_present',
+                    'send_missing', 'send_is_microphone', 'browser_unavailable',
+                    'page_unavailable', 'rate_limit'):
                 return
             if not job.options.get('fallback'):
                 return
@@ -256,6 +444,9 @@ class APIService:
             self.state['enabled']=False
         self.server=self.thread=None
         self.active=0
+        # O que a API acredita já ter entregue a cada conversa do site. Vive só
+        # em memória: reiniciar o programa reinicia a janela (e a retomada).
+        self.delivered={}
         self.cache=OrderedDict()
         self.notice='Desativada. Autorize explicitamente antes de usar agentes.'
         if self.ledger_error:
@@ -281,7 +472,11 @@ class APIService:
                                                       (self.state.get('names') or ['meu-gemini'])[0]),
                     'names':self.state.get('names',[]),'headless':self.state.get('headless',False),
                     'lightweight':self.state.get('lightweight',False),'retrieval':self.state.get('retrieval',False),
-                    'fallback':self.state.get('fallback',False),'remember':self.state.get('remember',False),'personal_consent':self.state.get('personal_consent',False),'message':self.notice}
+                    'fallback':self.state.get('fallback',False),'remember':self.state.get('remember',False),'personal_consent':self.state.get('personal_consent',False),'message':self.notice,
+                    'limits':windows.Limits.from_state(self.state).as_dict(),
+                    'context':{model:{'characters':entry.characters,'turns':entry.turns,
+                                      'conversation':entry.conversation}
+                               for model,entry in self.delivered.items()}}
 
     def configure(self,value):
         if type(value.get('enabled')) is not bool:
@@ -302,6 +497,7 @@ class APIService:
                     self.ledger_error=False
                 self.state['enabled']=False
                 self.cache.clear()
+                self.delivered.clear()
                 ConfigStore.write_json(self.path,self.state)
             self.close()
             self.panel.tasks.put(('api_close',None))
@@ -314,6 +510,10 @@ class APIService:
         for key in ('headless','lightweight','retrieval','fallback','remember'):
             if type(value.get(key,False)) is not bool:
                 raise APIError('Opção inválida')
+        try:
+            limits=windows.Limits.from_state(value)
+        except ValueError as problem:
+            raise APIError(str(problem)) from None
         if value.get('remember') and not value.get('retrieval'):
             raise APIError('Histórico exige recuperação local habilitada')
         for name in names:
@@ -346,6 +546,8 @@ class APIService:
                                    f'({type(problem).__name__}). Nada foi ativado.','port_unavailable',409) from problem
                 policy={key:value.get(key,False) for key in ('headless','lightweight','retrieval','fallback','personal_consent','remember')}
                 self.state.update(policy,names=list(names),enabled=True)
+                # Tetos de janela: ficam gravados com a política, não em cada envio.
+                self.state.update(limits.as_dict())
                 try:
                     ConfigStore.write_json(self.path,self.state)
                 except BaseException:
@@ -491,21 +693,84 @@ class APIService:
             # CLI de agente manda prompt grande (instruções + esquemas de
             # ferramentas). Recusar por orçamento fixo quebrava o uso; o teto
             # agora acompanha o pedido e continua explícito no relatório.
-            if payload.get('tools'):
-                # O protocolo de ferramentas entra como instrução; o orçamento
-                # é medido depois dele, porque é ele que ocupa espaço.
-                messages=prompt_messages({'messages':messages,'tools':payload['tools'],
-                                          'tool_choice':payload.get('tool_choice')})
-            budget=max(24_000,min(160_000,sum(len(item['content']) for item in messages)+4_000))
-            text,report=plan(messages,documents,retrieve=self.state.get('retrieval',False),
-                             budget=budget)
-            report.update(history_persisted=bool(scope),history_limit_characters=self.history.limit if scope else None)
-            if payload.get('tools'):
-                report['tools_emulated']=len(payload['tools'])
+            limits=windows.Limits.from_state(self.state)
+            tools=payload.get('tools') or []
+            choice=payload.get('tool_choice')
+            protocol=reminder=''
+            if tools and choice not in ('none',{'type':'none'}):
+                protocol=tools_mod.protocol_prompt(tools,choice)
+                reminder=tools_mod.protocol_reminder(tools,choice)
+            # Dois caminhos, de propósito:
+            # * documentos/recuperação local -> planejador lexical, pedido
+            #   autossuficiente (comportamento anterior preservado);
+            # * agente (histórico completo no cliente) -> janelas: início em
+            #   blocos, delta por turno, retomada quando a conversa enche.
+            stateless={
+                'input_characters':sum(len(item['content']) for item in messages)+sum(map(len,documents or [])),
+                'budget_characters':None,'token_count':None,'retrieved_chunks':0,
+                'reduced':False,'history_persisted':False}
+            if documents or self.state.get('retrieval'):
+                room=limits.max_parts*(limits.message_chars-300)
+                budget=max(24_000,min(160_000,room,
+                    sum(len(item['content']) for item in messages)+sum(map(len,documents or []))+4_000))
+                text,stateless=plan(messages,documents,retrieve=self.state.get('retrieval',False),
+                                    budget=budget)
+                messages=[{'role':'user','content':text}]
+            delivered=self.delivered.get(names[0]) if not (documents or self.state.get('retrieval')) else None
+            total_chars=sum(len(item['content']) for item in messages)+len(protocol)
+            try:
+                turn=windows.plan_turn(messages,delivered=delivered,limits=limits,
+                                       protocol=protocol,reminder=reminder,
+                                       stateless=bool(documents or self.state.get('retrieval')))
+            except windows.WindowError as problem:
+                # Erro no vocabulário do cliente (context_length_exceeded /
+                # prompt is too long), só depois de tentar os blocos.
+                failure=APIError(str(problem),problem.code,problem.http)
+                failure.payload=windows.dialect_error(payload.get('kind','openai-chat'),
+                                                      total_chars,limits)
+                raise failure from None
+            except ValueError as problem:
+                raise APIError(str(problem)) from None
+            report=dict(stateless)|dict(turn.report)
+            report.update(history_persisted=bool(scope),
+                          history_limit_characters=self.history.limit if scope else None,
+                          description=windows.describe(turn,limits))
+            if tools:
+                report['tools_emulated']=len(tools)
+                report['tools_prompt_characters']=len(protocol)
             options={k:self.state.get(k,False) for k in ('headless','lightweight','retrieval','fallback')}
-            job=Job(text,names,options,report,owner=self,cache_key=key,scope=scope,
+            job=Job(turn.sends[-1],names,options,report,owner=self,cache_key=key,scope=scope,
                     question=payload['messages'][-1]['content'] if scope else '',
-                    documents=(payload.get('documents') or []) if scope else [])
+                    documents=(payload.get('documents') or []) if scope else [],
+                    sends=list(turn.sends),rotate=turn.rotate,limits=limits,tools=tools,
+                    plan_report=dict(report)|{'mode':turn.mode,
+                                              'tools_prompt_characters':len(protocol)},
+                    characters=turn.characters)
+            if turn.mode=='delta':
+                # Se a página estiver vazia (recarregou, aba trocada), mandar só
+                # o delta seria conversa sem começo: existe um plano de retomada.
+                try:
+                    job.fallback_sends=list(windows.plan_turn(
+                        messages,delivered=None,limits=limits,protocol=protocol).sends)
+                except windows.WindowError:
+                    # O plano autossuficiente não cabe inteiro: a retomada
+                    # compactada é o que cabe por construção.
+                    job.fallback_sends=list(windows.plan_restore(
+                        messages,limits=limits,protocol=protocol).sends)
+            target=names[0]
+            def commit(conversation_id='',shared=False,turn=turn,model=target):
+                if getattr(job_holder,'committed',False):
+                    return
+                job_holder.committed=True
+                with self.lock:
+                    previous=self.delivered.get(model)
+                    turns=(previous.turns if previous and turn.mode=='delta' else 0)+1
+                    self.delivered[model]=windows.Delivered(
+                        hashes=list(turn.hashes),characters=turn.characters,
+                        conversation=conversation_id or (previous.conversation if previous else ''),
+                        bootstrap=True,turns=turns)
+            job_holder=job
+            job.commit=commit
             self.ledger.pop(key,None)
             self.ledger[key]={'digest':digest,'at':time.time(),'done':False}
             while len(self.ledger)>128:
@@ -641,11 +906,23 @@ class APIHandler(BaseHTTPRequestHandler):
         route=self.route()
         style=self.ROUTES.get(route)
         if route=='/v1/messages/count_tokens':
-            # A CLI usa isto só para avisar sobre contexto. Contar tokens não é
-            # possível aqui; devolver zero com explicação é melhor que inventar.
-            return self.send_json(200,{'input_tokens':0,'browserapi':{
-                'usage':'O site não informa tokens; a contagem é feita em caracteres.',
-                'note':'contexto local em caracteres, não tokens'}})
+            # A CLI usa isto para aprender o tamanho do contexto. Zero fazia o
+            # medidor nunca encher; a estimativa é rotulada como estimativa.
+            try:
+                payload=self.read_payload()
+                # Mede o que iria ao chat: texto das mensagens + system + o
+                # bloco de ferramentas (o resto é sintaxe do protocolo).
+                normalized=normalize_request('anthropic',payload)
+                characters=sum(len(item['content']) for item in normalized['messages'])
+                characters+=len(tools_mod.protocol_prompt(normalized['tools']))
+            except Exception:
+                characters=0
+            limits=windows.Limits.from_state(service.state)
+            return self.send_json(200,{'input_tokens':windows.estimate_tokens(characters),
+                                       'browserapi':{
+                'estimated':True,'characters':characters,
+                'window_characters':limits.conversation_chars,
+                'note':'Estimativa por caracteres (4:1); o site não informa tokens.'}})
         if route in ('/v1/embeddings','/v1/audio/transcriptions','/v1/images/generations'):
             return self.send_json(501,{'error':{'message':'A API local só faz conversa em texto; '
                                                           'este endpoint não é emulado.',
@@ -681,8 +958,13 @@ class APIHandler(BaseHTTPRequestHandler):
                                'execution_failed',502)
             result=job.result
             if result.status!='success':
-                code=504 if result.status=='timeout' else 429 if result.status=='rate_limit' else 409
-                raise APIError('A fonte não confirmou a resposta; confira o navegador antes de repetir',result.status,code)
+                code=windows.http_for_status(result.status,result.send_state)
+                sent=result.send_state!='not_sent'
+                message=('A página não estava pronta e nada foi digitado; pode repetir' if code==503
+                         else 'A fonte não confirmou a resposta; confira o navegador antes de repetir')
+                raise APIError(message,result.status,code)
+            if callable(job.commit):
+                job.commit(conversation_id=job.conversation,shared=job.conversation_shared)
             parsed=tool_calls.parse(result.answer or '',request['tools'])
             if request['stream']:
                 raw=reply_sse(style,request,job,parsed)
@@ -699,7 +981,10 @@ class APIHandler(BaseHTTPRequestHandler):
             if not isinstance(error,APIError):
                 error=APIError(str(error) if isinstance(error,ContextError) else 'Solicitação inválida')
             try:
-                self.send_json(error.http,{'error':{'message':str(error),'type':'invalid_request_error','code':error.code}})
+                body=getattr(error,'payload',None)
+                if body is None:
+                    body={'error':{'message':str(error),'type':'invalid_request_error','code':error.code}}
+                self.send_json(error.http,body)
             except OSError:
                 pass
         except OSError:

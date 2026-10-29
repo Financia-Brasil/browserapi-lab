@@ -26,6 +26,7 @@ import secrets
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from . import conversation as windows
 from . import tool_calls
 
 KINDS = ('openai-chat', 'openai-completions', 'anthropic', 'openai-responses')
@@ -43,6 +44,8 @@ IGNORED = {
     'anthropic': (
         'max_tokens', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'metadata',
         'thinking', 'service_tier', 'container', 'mcp_servers', 'betas', 'context_management',
+        # Claude Code manda isto sempre; recusar derrubava o primeiro pedido real.
+        'output_config',
     ),
     'openai-completions': (
         'temperature', 'top_p', 'n', 'stop', 'max_tokens', 'presence_penalty',
@@ -66,7 +69,8 @@ ACCEPTED = {
                          'tools', 'tool_choice', 'documents', 'conversation_id'},
 }
 
-USAGE_NOTE = 'O site do chat não informa tokens; a contagem fica zerada e em caracteres.'
+USAGE_NOTE = ('O site do chat não informa tokens: os números são estimativa por caracteres '
+              '(4 caracteres ≈ 1 token), não uma medição do provedor.')
 
 
 class APIError(ValueError):
@@ -157,8 +161,13 @@ def _anthropic_messages(payload: Dict[str, Any]) -> List[Dict[str, str]]:
         if not isinstance(item, dict):
             raise APIError('messages precisa de objetos')
         role = item.get('role')
-        if role not in ('user', 'assistant'):
-            raise APIError('Papéis aceitos em messages: user e assistant')
+        # A API atual aceita mensagens de sistema no meio da conversa e o
+        # Claude Code usa isso (beta mid-conversation-tool-changes). Recusar
+        # derrubava a primeira requisição real.
+        if role == 'developer':
+            role = 'system'
+        if role not in ('user', 'assistant', 'system'):
+            raise APIError('Papéis aceitos em messages: user, assistant e system')
         text = _text_of(item.get('content'), 'messages[].content')
         if not text.strip():
             continue
@@ -236,8 +245,13 @@ def normalize(kind: str, payload: Any) -> Dict[str, Any]:
                 messages.append({'role': role, 'content': text})
     if not messages:
         raise APIError('Nenhuma mensagem de texto para enviar')
-    if messages[-1]['role'] != 'user':
-        raise APIError('A última mensagem precisa ser do usuário')
+    # O Claude Code manda um lembrete de sistema DEPOIS do pedido
+    # (`[user, system]`). Exigir "última = user" recusava a primeira requisição
+    # real; o que vale é o último turno não-sistema ser do usuário.
+    last_user = next((item for item in reversed(messages) if item['role'] != 'system'), None)
+    if last_user is None or last_user['role'] != 'user':
+        raise APIError('A última mensagem do usuário precisa estar no fim; '
+                       'mensagens de sistema podem vir depois dela')
     stream = payload.get('stream', False)
     if type(stream) is not bool:
         raise APIError('stream deve ser booleano')
@@ -277,13 +291,38 @@ def prompt_messages(request: Dict[str, Any]) -> List[Dict[str, str]]:
     return [instruction] + messages
 
 
-def _usage(request: Dict[str, Any], answer: str) -> Dict[str, Any]:
+def _usage(request: Dict[str, Any], answer: str, job: Any = None) -> Dict[str, Any]:
+    """Estimativa rotulada, no dialeto OpenAI.
+
+    Zero parecia honesto e era armadilha: o medidor do agente nunca enchia e ele
+    nunca compactava (ver docs/CONTEXT_WINDOWS.md).
+    """
     sent = sum(len(item['content']) for item in request['messages'])
-    return {
-        'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0,
-        'browserapi': {'prompt_characters': sent, 'response_characters': len(answer or ''),
-                       'note': USAGE_NOTE},
-    }
+    estimate = windows.usage_block(sent, len(answer or ''), window=_window(job))
+    return {'prompt_tokens': estimate['input_tokens'],
+            'completion_tokens': estimate['output_tokens'],
+            'total_tokens': estimate['total_tokens'],
+            'browserapi': estimate['browserapi'] | {'note': USAGE_NOTE}}
+
+
+def _anthropic_usage(request: Dict[str, Any], answer: str, job: Any = None) -> Dict[str, Any]:
+    estimate = _usage(request, answer, job)
+    return {'input_tokens': estimate['prompt_tokens'],
+            'output_tokens': estimate['completion_tokens'],
+            'browserapi': estimate['browserapi']}
+
+
+def _window(job: Any) -> Optional[Dict[str, Any]]:
+    plan = getattr(job, 'plan_report', None) or {}
+    limits = getattr(job, 'limits', None)
+    if not limits:
+        return None
+    return {'mode': plan.get('mode'), 'send_blocks': plan.get('sends'),
+            'output_blocks': getattr(job, 'blocks', 0),
+            'conversation_characters': plan.get('conversation_characters'),
+            'limit_characters': getattr(limits, 'conversation_chars', None),
+            'message_limit_characters': getattr(limits, 'message_chars', None),
+            'note': 'janela do chat de navegador, medida em caracteres'}
 
 
 def _meta(request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed) -> Dict[str, Any]:
@@ -294,6 +333,17 @@ def _meta(request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed) -> Dict[
         'model_alias': request['model'],
         'tools': 'emulated' if request.get('tools') else 'none',
         'usage': USAGE_NOTE,
+        'window': _window(job),
+        'conversation': {
+            'shared': bool(getattr(job, 'conversation_shared', False)),
+            'restarted': bool((getattr(job, 'plan_report', {}) or {}).get('mode') == 'restore'),
+            'output_blocks': getattr(job, 'blocks', 0),
+            'continuation': getattr(job, 'continuation_reason', '') or None,
+            'estimated_tokens': windows.estimate_tokens(
+                sum(len(item['content']) for item in request['messages'])),
+            'note': ('A conversa do site guarda uma janela; o historico completo fica '
+                     'com o cliente. Reinicios sao declarados aqui.'),
+        },
     }
     if request.get('ignored'):
         # Dizer o que foi ignorado é o oposto de fingir que funcionou.
@@ -301,6 +351,12 @@ def _meta(request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed) -> Dict[
     if parsed.used_tool:
         meta['tool_calls'] = len(parsed.calls)
     return meta
+
+
+def _finish(job: Any, parsed: tool_calls.Parsed) -> str:
+    if parsed.calls:
+        return 'tool_calls'
+    return 'length' if getattr(job, 'stop_reason', '') == 'max_tokens' else 'stop'
 
 
 def _call_payload(call: Dict[str, Any]) -> str:
@@ -323,11 +379,11 @@ def body(kind: str, request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed
             content.append({'type': 'text', 'text': ''})
         return {'id': 'msg_' + secrets.token_hex(12), 'type': 'message', 'role': 'assistant',
                 'model': model, 'content': content,
-                'stop_reason': 'tool_use' if parsed.calls else 'end_turn',
+                'stop_reason': ('tool_use' if parsed.calls
+                                else 'max_tokens' if getattr(job, 'stop_reason', '') == 'max_tokens'
+                                else 'end_turn'),
                 'stop_sequence': None,
-                'usage': {'input_tokens': 0, 'output_tokens': 0,
-                          'browserapi': {'note': USAGE_NOTE,
-                                         'response_characters': len(text)}},
+                'usage': _anthropic_usage(request, text, job),
                 'browserapi': meta}
     if kind == 'openai-responses':
         output: List[Dict[str, Any]] = []
@@ -342,15 +398,16 @@ def body(kind: str, request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed
         return {'id': 'resp_' + secrets.token_hex(12), 'object': 'response',
                 'created_at': int(getattr(job, 'created_at', time.time())),
                 'status': 'completed', 'model': model, 'output': output,
-                'usage': _usage(request, text) | {'browserapi': None},
+                'usage': {k: v for k, v in _usage(request, text, job).items()
+                          if k in ('input_tokens', 'output_tokens', 'total_tokens')},
                 'browserapi': meta}
     if kind == 'openai-completions':
         return {'id': getattr(job, 'identifier', 'cmpl-' + secrets.token_hex(8)),
                 'object': 'text_completion', 'created': int(getattr(job, 'created_at', time.time())),
                 'model': model,
                 'choices': [{'index': 0, 'text': text, 'logprobs': None,
-                             'finish_reason': 'stop'}],
-                'usage': _usage(request, text),
+                             'finish_reason': _finish(job, parsed)}],
+                'usage': _usage(request, text, job),
                 'browserapi': meta}
     message: Dict[str, Any] = {'role': 'assistant', 'content': text or None}
     if parsed.calls:
@@ -362,8 +419,8 @@ def body(kind: str, request: Dict[str, Any], job: Any, parsed: tool_calls.Parsed
             'object': 'chat.completion', 'created': int(getattr(job, 'created_at', time.time())),
             'model': model,
             'choices': [{'index': 0, 'message': message,
-                         'finish_reason': 'tool_calls' if parsed.calls else 'stop'}],
-            'usage': _usage(request, text),
+                         'finish_reason': _finish(job, parsed)}],
+            'usage': _usage(request, text, job),
             'browserapi': meta}
 
 
@@ -386,7 +443,8 @@ def sse(kind: str, request: Dict[str, Any], job: Any,
     text = parsed.text
     meta = _meta(request, job, parsed)
     model = request['model']
-    usage = {'input_tokens': 0, 'output_tokens': 0}
+    usage = _usage(request, text, job)
+    usage = {'input_tokens': usage['prompt_tokens'], 'output_tokens': 0}
     if kind == 'anthropic':
         start = {'type': 'message_start', 'message': {
             'id': 'msg_' + secrets.token_hex(12), 'type': 'message', 'role': 'assistant',
@@ -409,8 +467,10 @@ def sse(kind: str, request: Dict[str, Any], job: Any,
                 'delta': {'type': 'input_json_delta', 'partial_json': _call_payload(call)}}))
             chunks.append(_event('content_block_stop', {'type': 'content_block_stop', 'index': index}))
         chunks.append(_event('message_delta', {'type': 'message_delta', 'delta': {
-            'stop_reason': 'tool_use' if parsed.calls else 'end_turn', 'stop_sequence': None},
-            'usage': {'output_tokens': 0}}))
+            'stop_reason': ('tool_use' if parsed.calls
+                            else 'max_tokens' if getattr(job, 'stop_reason', '') == 'max_tokens'
+                            else 'end_turn'), 'stop_sequence': None},
+            'usage': {'output_tokens': _usage(request, text, job)['completion_tokens']}}))
         chunks.append(_event('message_stop', {'type': 'message_stop'}))
         return b''.join(chunks)
     if kind == 'openai-responses':
@@ -440,7 +500,7 @@ def sse(kind: str, request: Dict[str, Any], job: Any,
                    'object': 'text_completion', 'created': int(getattr(job, 'created_at', time.time())),
                    'model': model, 'choices': [{'index': 0, 'text': text,
                                                 'finish_reason': None}]}
-        end = dict(payload, choices=[{'index': 0, 'text': '', 'finish_reason': 'stop'}])
+        end = dict(payload, choices=[{'index': 0, 'text': '', 'finish_reason': _finish(job, parsed)}])
         return _data(payload) + _data(end) + b'data: [DONE]\n\n'
     identifier = getattr(job, 'identifier', 'chatcmpl-' + secrets.token_hex(16))
     created = int(getattr(job, 'created_at', time.time()))
@@ -456,5 +516,5 @@ def sse(kind: str, request: Dict[str, Any], job: Any,
     end = {'id': identifier, 'object': 'chat.completion.chunk', 'created': created,
            'model': model,
            'choices': [{'index': 0, 'delta': {},
-                        'finish_reason': 'tool_calls' if parsed.calls else 'stop'}]}
+                        'finish_reason': _finish(job, parsed)}]}
     return _data(first) + _data(end) + b'data: [DONE]\n\n'

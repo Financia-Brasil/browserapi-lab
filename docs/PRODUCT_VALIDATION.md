@@ -605,3 +605,47 @@ de variáveis do agente e a rota `/v1/messages` no painel. O caminho completo co
 Chromium (`test_anthropic_messages_route_end_to_end_with_real_browser`) roda no
 CI, porque aqui não há navegador instalado. **Implementado ≠ testado local/CI ≠
 homologado** — e nenhum teste toca conta real.
+
+## 0.13.0 — janelas de contexto, blocos e o teste com o CLI de verdade (2026-10-28)
+
+Relato: *“agora temos que lidar com system prompts gigantes iniciais de CLIs,
+mais arquivos gigantes que excedem o limite de caracteres no campo de prompt,
+reverter contexto, sistema de prompts em bloco, saídas em bloco, manutenção e
+restauração de contexto… e quando vou usar a API e ele vai abrir o chat ele não
+espera a página carregar pra mandar algo, ou se manda mesmo a mensagem
+aparecendo rápido ele fala que não tá funcionando, e nem tenta de novo.”*
+
+**O que foi medido antes de decidir** (Claude Code 2.1.312, servidor de captura):
+um pedido trivial tem **45.783 bytes** — `system` 5.935 caracteres, `tools`
+29.995, `messages` 9.664 — e traz `context_management`, `output_config`,
+`thinking`. Diante de erro: 400 `prompt is too long` → **1 requisição e desiste**;
+400 de parâmetro → 6 tentativas inúteis; 500/529 → 11 tentativas. Ou seja: quem
+precisa fatiar é esta API, e 4xx é terminal para o agente.
+
+| Antes | Agora |
+|---|---|
+| pedido de ~46k enviado de uma vez (ou recusado) | **blocos numerados** com confirmação; o bloco de ferramentas vai resumido (~7k) e o pedido real cabe em 1–2 blocos |
+| todo turno reenviava o histórico inteiro | **delta** depois de um início verificado; medido: 326 caracteres no 3º passo |
+| conversa do site enchia e o envio morria | **livro-caixa** de caracteres + **troca de conversa** + **retomada** (system e pedido atuais inteiros; antigos em uma linha) |
+| resposta cortada chegava truncada | **continuação** quando a cerca de código ou o JSON de ferramenta ficam abertos; blocos unidos sem sobreposição |
+| `usage` zerado | **estimativa rotulada** (4 caracteres ≈ 1 token), porque zero fazia o agente nunca compactar |
+| falha de prontidão virava 409 e o agente desistia | **espera ativa** + 2 repetições internas **só antes de digitar**; depois, **503** (retentável) |
+
+**Defeitos que só o binário real mostrou** (cada um quebrava a primeira
+requisição, e todos agora têm teste): `output_config` recusado; mensagem de
+papel `system` dentro de `messages` recusada; a última mensagem é um lembrete de
+sistema (`[user, system]`) e a regra “última = usuário” recusava a chamada.
+
+**Um erro de desenho corrigido:** usar “a página parece vazia” para decidir
+mandar o contexto inteiro. Conversa com carregamento preguiçoso parece vazia, e o
+contexto ia **duas vezes** ao site. Agora isso só acontece quando a aba foi
+reaberta ou o endereço mudou.
+
+**Provas deste ambiente:** `discover -s tests` **424 testes** (18 ignorados);
+`node scripts/panel_jsdom_check.js` **19 checagens**; e o **teste de fogo**
+`python scripts/claude_firetest.py` com o binário real do Claude Code contra um
+chat simulado — 3 passos verdes, `site_refused: []`, 2 falhas de prontidão
+absorvidas. Evidência em `results/ci/claude-firetest.json`, e o passo roda no CI
+(`Claude Code real contra a API (chat simulado)`).
+**Implementado ≠ testado local/CI ≠ homologado**: o chat simulado tem os limites
+observados, não é um site real; a conta real continua sendo a sua sessão.
