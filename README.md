@@ -239,9 +239,9 @@ npm i @anthropic-ai/claude-code
 python scripts/claude_firetest.py --claude "$PWD/node_modules/.bin/claude"
 ```
 
-Ele aponta o **Claude Code real** para esta API e roda seis cenários (pergunta
-simples, ferramenta, arquivo de 120 KB, janela pequena com retomada, página lenta
-e resposta cortada) contra um chat simulado com os limites observados. Sem o
+Ele aponta o **Claude Code real** para esta API e roda sete cenários (pergunta
+simples, ferramenta, arquivo de 120 KB, janela apertada com compactação e
+retomada, página lenta, resposta cortada e mensagem que demora a pintar) contra um chat simulado com os limites observados. Sem o
 binário, `--no-cli` exercita o mesmo caminho pela HTTP. A saída fica em
 `results/ci/claude-firetest.json` e o passo roda no CI.
 

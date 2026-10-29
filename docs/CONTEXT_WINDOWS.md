@@ -159,8 +159,8 @@ Teste de fogo: **Claude Code 2.1.312 de verdade** (`scripts/claude_firetest.py`,
 execução de 75 s) apontado para esta API, com um chat simulado que recusa o que um
 chat real recusa (campo de 20.000 caracteres por envio; janela de 200.000, e de
 **24.000** no cenário que força a rotação) e que **falha “antes de digitar”** para
-simular a página carregando. Seis cenários, todos `exit 0` e nenhuma recusa do
-site:
+simular a página carregando. **Sete cenários**, todos `exit 0` e nenhuma recusa
+do site:
 
 | Cenário | O que prova | Envios ao site |
 |---|---|---|
@@ -168,8 +168,10 @@ site:
 | ferramenta | `tool_use` → Bash → `tool_result` → resposta | 2 (2º turno em **delta**) |
 | **arquivo de 120 KB** | arquivo muito maior que o campo vai pela entrada padrão e é **fatiado em 9 blocos**, remontado sem perda | **9**, maior 19,9k |
 | **janela pequena (24k)** | 2ª sessão (`--continue`) dispara **retomada**: conversa nova (`rotate`), contexto reescrito em 2 envios | 2 + 2 |
+| **janela apertada (22k)** | o 1º turno **compacta** em vez de ser recusado; o 2º dispara **retomada** (`restore`) | 2 + 2 |
 | **página lenta** (4 falhas antes de digitar) | repetição interna + reespera; o CLI **não vê erro** | 2 |
 | **resposta cortada** | cerca de código aberta → continuação pedida e blocos unidos | 3 |
+| **mensagem que demora a pintar** | envio confirmado, 1º veredito `timeout` → **reespera** (`harvest`) e o CLI recebe a resposta | 2 |
 
 Medido no total: maior envio **19.901 caracteres** (teto 20.000), nenhuma recusa,
 `página_lenta=2` absorvidas.

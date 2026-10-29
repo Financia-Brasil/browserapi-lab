@@ -1,84 +1,344 @@
 {
   "scope": "synthetic_chat_real_claude_code",
-  "claude": null,
+  "claude": "/tmp/cc/node_modules/.bin/claude",
   "scenarios": {
     "simples": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.51,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 2,
+          "largest_send": 19751,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 2,
+            "characters": 23687,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 23687
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "tool_use",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 2,
+      "largest_send": 19751,
+      "site_conversation_characters": 23687,
+      "not_ready_hits": 0,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "simples"
     },
     "ferramenta": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.49,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 2,
+          "largest_send": 19768,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 2,
+            "characters": 23704,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 23704
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "tool_use",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 2,
+      "largest_send": 19768,
+      "site_conversation_characters": 23704,
+      "not_ready_hits": 0,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "ferramenta"
     },
     "arquivo": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.51,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 9,
+          "largest_send": 19901,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 9,
+            "characters": 173228,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 173228
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "tool_use",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 9,
+      "largest_send": 19901,
+      "site_conversation_characters": 173228,
+      "not_ready_hits": 0,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "arquivo"
     },
     "janela": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.47,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 2,
+          "largest_send": 19899,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "compacted",
+            "sends": 2,
+            "characters": 21993,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 21993
+          },
+          "stderr": ""
+        },
+        {
+          "step": "run 2",
+          "exit": 0,
+          "seconds": 0.48,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 2,
+          "largest_send": 19904,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "restore",
+            "sends": 2,
+            "characters": 20741,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 20741
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "tool_use",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 4,
+      "largest_send": 19904,
+      "site_conversation_characters": 20741,
+      "not_ready_hits": 0,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 22000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "janela"
     },
     "lenta": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 68.23,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "OK do chat simulado",
+          "site_sends": 2,
+          "largest_send": 19751,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 2,
+            "characters": 23687,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 23687
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "tool_use",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 2,
+      "largest_send": 19751,
+      "site_conversation_characters": 23687,
+      "not_ready_hits": 4,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "lenta"
     },
     "resposta": {
-      "steps": [],
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.48,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "relatório longo do chat simulado\n```python\nprint(\"parte 1\")\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = 1\nx = ",
+          "site_sends": 3,
+          "largest_send": 19758,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 2,
+            "characters": 23694,
+            "rotate": false,
+            "blocks": 2,
+            "site_conversation": 23830
+          },
+          "stderr": ""
+        }
+      ],
       "ok": true,
       "site_refused": [],
-      "http": {
-        "status": 200,
-        "ok": true,
-        "stop_reason": "end_turn",
-        "mode": "bootstrap",
-        "refused": []
+      "late_answers_waited": 0,
+      "late_waits": [],
+      "site_sends": 3,
+      "largest_send": 19758,
+      "site_conversation_characters": 23830,
+      "not_ready_hits": 0,
+      "continues_requested": 1,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
       },
       "name": "resposta"
+    },
+    "demorada": {
+      "steps": [
+        {
+          "step": "run 1",
+          "exit": 0,
+          "seconds": 0.47,
+          "is_error": false,
+          "num_turns": 1,
+          "result": "resposta que demorou para aparecer",
+          "site_sends": 2,
+          "largest_send": 19751,
+          "terminal_reason": "completed",
+          "plan": {
+            "mode": "bootstrap",
+            "sends": 2,
+            "characters": 23687,
+            "rotate": false,
+            "blocks": 1,
+            "site_conversation": 23687
+          },
+          "stderr": ""
+        }
+      ],
+      "ok": true,
+      "site_refused": [],
+      "late_answers_waited": 2,
+      "late_waits": [
+        60000,
+        60000
+      ],
+      "site_sends": 2,
+      "largest_send": 19751,
+      "site_conversation_characters": 23687,
+      "not_ready_hits": 0,
+      "continues_requested": 0,
+      "site_conversation_reset": null,
+      "limits": {
+        "message_chars": 20000,
+        "conversation_chars": 200000,
+        "block_chars": 8000,
+        "max_blocks": 4,
+        "max_parts": 24,
+        "restore_chars": 14000,
+        "tool_result_chars": 4000,
+        "keep_recent": 6
+      },
+      "name": "demorada"
     }
   },
   "ok": true
