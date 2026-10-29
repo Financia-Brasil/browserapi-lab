@@ -1,0 +1,85 @@
+{
+  "scope": "synthetic_chat_real_claude_code",
+  "claude": null,
+  "scenarios": {
+    "simples": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "simples"
+    },
+    "ferramenta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "ferramenta"
+    },
+    "arquivo": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "arquivo"
+    },
+    "janela": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "janela"
+    },
+    "lenta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "tool_use",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "lenta"
+    },
+    "resposta": {
+      "steps": [],
+      "ok": true,
+      "site_refused": [],
+      "http": {
+        "status": 200,
+        "ok": true,
+        "stop_reason": "end_turn",
+        "mode": "bootstrap",
+        "refused": []
+      },
+      "name": "resposta"
+    }
+  },
+  "ok": true
+}

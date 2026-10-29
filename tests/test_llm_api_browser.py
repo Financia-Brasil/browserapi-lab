@@ -58,9 +58,11 @@ class TestLLMAPIChromium(BrowserTestCase):
                     self.assertEqual(code,200,raw)
                     value=json.loads(raw)
                     self.assertTrue(value['choices'][0]['message']['content'])
-                    # usage é zero + explicação: tokens não são inventados.
-                    self.assertEqual(value['usage']['total_tokens'],0)
-                    self.assertIn('não informa tokens',value['usage']['browserapi']['note'])
+                    # usage é estimativa rotulada (nunca zero nem inventado):
+                    # zero fazia o agente nunca compactar.
+                    self.assertGreater(value['usage']['total_tokens'],0)
+                    self.assertTrue(value['usage']['browserapi']['estimated'])
+                    self.assertIn('estimativa',value['usage']['browserapi']['note'].lower())
                     self.assertEqual(request('primeira pergunta','first')[1],raw)
                     code,sse=request('segunda pergunta','second',stream=True)
                     self.assertEqual(code,200,sse);self.assertIn('data: [DONE]',sse)
@@ -73,7 +75,7 @@ class TestLLMAPIChromium(BrowserTestCase):
                     destination.parent.mkdir(parents=True,exist_ok=True)
                     destination.write_text(json.dumps({'scope':'synthetic_http_api_real_chromium','audit':audit,
                         'idempotency_verified':True,'buffered_sse':True,'image_block_opt_in':True,
-                        'usage':'zero_plus_note'},indent=2)+'\n')
+                        'usage':'estimated_plus_note'},indent=2)+'\n')
             finally:
                 api.close();panel.close();server.stop()
 

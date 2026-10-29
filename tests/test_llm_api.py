@@ -15,6 +15,29 @@ from browserapi_lab.llm_api import (APIService, APIError, WarmBrowser, Job,
 from browserapi_lab.setup import HYPOTHESES
 
 
+class _Locator:
+    def __init__(self, count=1): self._count=count
+    def count(self): return self._count
+    def is_visible(self): return True
+    def is_editable(self): return True
+
+
+class ReadyPage:
+    """Página já carregada: campo visível e editável, conversa presente.
+
+    O worker agora espera a prontidão antes do primeiro envio; um dublê que não
+    tem campo nenhum faria o teste medir a espera, não o roteamento.
+    """
+
+    def __init__(self, url='https://one.example/thread'): self.url=url
+    def is_closed(self): return False
+    def wait_for_load_state(self,*a,**kw): pass
+    def wait_for_timeout(self, ms): pass
+    def reload(self,*a,**kw): pass
+    def goto(self, url, **kw): self.url=url
+    def locator(self, selector): return _Locator(1 if selector != '.vazio' else 0)
+
+
 class FakeWarm:
     calls=0
     prompts=[]
@@ -109,10 +132,12 @@ class TestLocalAPI(unittest.TestCase):
     def test_json_sse_idempotency_and_private_prompt_not_cached_or_logged(self):
         headers={'Idempotency-Key':'operation-1'}
         code,value=self.request(body=self.body(),headers=headers)
-        # usage não é inventado: zeros + explicação de que o site não informa.
+        # usage é ESTIMATIVA rotulada, não zero: zero fazia o agente nunca
+        # compactar (docs/CONTEXT_WINDOWS.md).
         self.assertEqual(code,200)
-        self.assertEqual(value['usage']['total_tokens'],0)
-        self.assertIn('não informa tokens',value['usage']['browserapi']['note'])
+        self.assertGreater(value['usage']['total_tokens'],0)
+        self.assertTrue(value['usage']['browserapi']['estimated'])
+        self.assertIn('estimativa',value['usage']['browserapi']['note'].lower())
         self.assertEqual(value['choices'][0]['message']['content'],'fixture-answer')
         self.assertEqual(self.request(body=self.body(),headers=headers)[1]['id'],value['id'])
         self.assertEqual(FakeWarm.calls,1)
@@ -258,13 +283,10 @@ class TestWarmRouting(unittest.TestCase):
             store=ConfigStore(tmp)
             for name,url in [('one','https://one.example'),('two','https://two.example')]:
                 store.save(ChatConfig(name,url,**HYPOTHESES['fixture']))
-            class Page:
-                url='https://one.example/thread'
-                def is_closed(self):return False
-                def wait_for_load_state(self,*args,**kwargs):pass
             class Session:
                 def __init__(self,config):
-                    self.context=SimpleNamespace(pages=[Page()]);self.context.pages[0].url='https://'+('one' if config.profile=='one' else 'two')+'.example/thread'
+                    page=ReadyPage('https://'+('one' if config.profile=='one' else 'two')+'.example/thread')
+                    self.context=SimpleNamespace(pages=[page])
                 def start(self):pass
                 def close(self):pass
             for status,state in [('timeout','confirmed'),('rate_limit','confirmed'),('send_unconfirmed','unknown')]:
@@ -273,7 +295,14 @@ class TestWarmRouting(unittest.TestCase):
                 with patch('browserapi_lab.llm_api.exchange',return_value=ChatResult(status,send_state=state)) as send:
                     browser.run(job,lambda:False)
                 self.assertEqual(send.call_count,1)
+                # Reespera depois de um envio confirmado não é reenvio: o
+                # veredito pode mudar (timeout -> page_unavailable na página
+                # falsa), mas o envio aconteceu UMA vez e fica registrado.
                 self.assertEqual(len(job.attempts),1)
+                if state=='confirmed' and status=='timeout':
+                    self.assertTrue(job.harvests, 'envio confirmado deve ser reesperado')
+                else:
+                    self.assertEqual(job.harvests,[])
                 browser.close()
 
     def test_pre_send_failure_can_fallback_to_distinct_authorized_origin(self):
@@ -284,8 +313,7 @@ class TestWarmRouting(unittest.TestCase):
                 store.save(ChatConfig(name,url,**HYPOTHESES['fixture']))
             class Session:
                 def __init__(self,config):
-                    p=SimpleNamespace(url=store.load(config.profile).url,is_closed=lambda:False,wait_for_load_state=lambda *a,**kw:None)
-                    self.context=SimpleNamespace(pages=[p])
+                    self.context=SimpleNamespace(pages=[ReadyPage(store.load(config.profile).url)])
                 def start(self):pass
                 def close(self):pass
             job=Job('prompt',['one','same','two'],{'headless':False,'lightweight':False,'fallback':True},{})
@@ -306,7 +334,8 @@ class TestWarmRouting(unittest.TestCase):
                                   personal_profile='Profile 1',**HYPOTHESES['fixture']))
             created=[]
             def tab(url):
-                return SimpleNamespace(url=url,is_closed=lambda:False,wait_for_load_state=lambda *a,**kw:None)
+                page=ReadyPage(url)
+                return page
             class Session:
                 def __init__(self,config):
                     self.other_profile=tab('https://chat.example/another-account')
@@ -417,7 +446,8 @@ class TestAgentProtocols(unittest.TestCase):
         self.assertEqual(value['role'],'assistant')
         self.assertEqual(value['content'][0]['text'],'fixture-answer')
         self.assertEqual(value['stop_reason'],'end_turn')
-        self.assertEqual(value['usage']['output_tokens'],0)
+        self.assertGreater(value['usage']['output_tokens'],0)
+        self.assertTrue(value['usage']['browserapi']['estimated'])
         # O que o navegador não tem é dito, não fingido.
         self.assertIn('temperature',value['browserapi']['ignored'])
         self.assertIn('max_tokens',value['browserapi']['ignored'])
@@ -471,9 +501,12 @@ class TestAgentProtocols(unittest.TestCase):
         self.assertIn('"stop_reason": "tool_use"',text)
 
     def test_count_tokens_embeddings_and_responses_routes(self):
-        status,value,_=self.call('/v1/messages/count_tokens',{'model':'saved','messages':[]})
-        self.assertEqual(status,200);self.assertEqual(value['input_tokens'],0)
-        self.assertIn('tokens',value['browserapi']['usage'])
+        status,value,_=self.call('/v1/messages/count_tokens',
+                                 {'model':'saved','messages':[{'role':'user','content':'x'*4000}]})
+        self.assertEqual(status,200)
+        # Estima em caracteres e diz que estimou; zero era pior que inútil.
+        self.assertEqual(value['input_tokens'],1000)
+        self.assertTrue(value['browserapi']['estimated'])
         status,value,_=self.call('/v1/embeddings',{'model':'saved','input':'x'})
         self.assertEqual(status,501)
         self.assertEqual(value['error']['code'],'not_supported')

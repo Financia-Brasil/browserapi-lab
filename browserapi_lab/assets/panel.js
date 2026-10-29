@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.12.0';
+const PANEL_VERSION = '0.13.0';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
@@ -695,6 +695,13 @@ function renderService(value){
   $('agent-snippet').textContent=a.agent_example || '';
   $('messages-url-display').textContent=(a.messages_url || '/v1/messages').replace(/^https?:\/\/[^/]+/,'');
   $('copy-endpoint').disabled=!a.chat_url; $('copy-snippet').disabled=!a.example;
+  const limits=a.limits || {};
+  if(document.activeElement!==$('api-message-chars')) $('api-message-chars').value=limits.message_chars || '';
+  if(document.activeElement!==$('api-conversation-chars')) $('api-conversation-chars').value=limits.conversation_chars || '';
+  const chats=Object.entries(a.context || {});
+  $('api-context-status').textContent=chats.length
+    ? 'Nesta sessão: ' + chats.map(([name,v])=>`${name} — ${v.turns} turno(s), ${v.characters} de ${limits.conversation_chars} caracteres`).join(' · ')
+    : 'A janela começa a contar no primeiro pedido do agente.';
   $('api-key').value=a.key || '';
   $('copy-api-url').disabled=!a.url; $('copy-api-key').disabled=!a.key; $('api-show').disabled=!a.key;
   const signature=JSON.stringify([a.enabled,a.names,a.headless,a.lightweight,a.retrieval,a.fallback,a.remember,a.personal_consent,value.chats]);
@@ -747,7 +754,9 @@ $('api-toggle').onclick=async()=>{
   const active=!!state?.api_service?.enabled;
   if(!active && !confirm('Autorizar agentes com esta chave a enviar mensagens pelos chats selecionados, sem confirmação por chamada? Mantenha login/modelo corretos. Não compartilhe a chave.')) return;
   try {
-    await api('service',{enabled:!active,names:[...$('api-models').selectedOptions].map(o=>o.value),headless:$('api-headless').checked,lightweight:$('api-lightweight').checked,retrieval:$('api-retrieval').checked,fallback:$('api-fallback').checked,personal_consent:$('api-personal').checked,remember:$('api-remember').checked});
+    const limits={message_chars:Number($('api-message-chars').value)||undefined,
+                  conversation_chars:Number($('api-conversation-chars').value)||undefined};
+    await api('service',{enabled:!active,names:[...$('api-models').selectedOptions].map(o=>o.value),headless:$('api-headless').checked,lightweight:$('api-lightweight').checked,retrieval:$('api-retrieval').checked,fallback:$('api-fallback').checked,personal_consent:$('api-personal').checked,remember:$('api-remember').checked,...limits});
     await refresh();
   } catch(err){error(err.message);}
 };

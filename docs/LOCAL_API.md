@@ -1,4 +1,4 @@
-# API local experimental — 0.12.0
+# API local experimental — 0.13.0
 
 Esta é uma interface textual **parcialmente compatível** com Chat Completions,
 não uma substituição transparente da API OpenAI. Reutiliza a automação validada
@@ -103,6 +103,44 @@ erro 400, com o nome do campo.
   (`message_start` … `message_stop` no Anthropic; `chat.completion.chunk` +
   `[DONE]` no OpenAI). O texto chega de uma vez, porque a página entrega a resposta
   inteira — é *bufferizado*, não token a token.
+
+### Prompt grande, janelas e retomada de contexto
+
+O chat do navegador tem três limites que a API oficial não tem: o **campo de
+mensagem** (uns 25–32 mil caracteres), a **janela da conversa** e o **tamanho da
+resposta**. O agente não sabe disso; a API resolve aqui.
+
+| Situação | O que a API faz |
+|---|---|
+| pedido maior que o campo | divide em **blocos numerados** (`[parte 1/3]`); as partes anteriores pedem só “recebido k/n”, a última carrega o pedido |
+| primeiro pedido de uma CLI (~46 mil caracteres) | cabe em **1–2 blocos**, porque o bloco de ferramentas vai resumido (nome + assinatura + descrição curta) em vez do esquema inteiro |
+| turnos seguintes | **só o delta** + um lembrete curto do protocolo; o histórico completo fica com o agente |
+| conversa chegando na janela | **troca de conversa** e **retomada**: system e protocolo inteiros, últimos turnos inteiros, antigos como uma linha cada, com a contagem de omitidos |
+| o agente reescreveu o histórico (compactou) | mesma retomada, porque o começo não confere mais |
+| resposta cortada (cerca de código aberta, JSON de ferramenta incompleto, teto do bloco) | pede **continuação** e une os blocos removendo a sobreposição |
+| resultado de ferramenta gigante em turno antigo | cortado em cabeça e cauda com marcador; o mais recente vai inteiro |
+| **envio confirmado, resposta que não terminou a tempo** | continua **esperando e relendo** (`harvest`), com prazos crescentes: reenviar duplicaria a pergunta |
+
+**Tetos padrão** (ajustáveis no painel, em caracteres): **20.000** por envio e
+**200.000** por conversa. O campo é o limite duro do site; a janela é quando a
+conversa é trocada e retomada. Medido com o Claude Code real: o pedido inicial
+tem ~46 mil caracteres e cabe em **2 blocos**; um arquivo de **120 KB** vira
+**9 blocos** sem recusa.
+
+A resposta diz o que aconteceu: `browserapi.window` (caracteres, teto, modo
+`bootstrap`/`delta`/`restore`/`compacted`) e `browserapi.conversation`
+(`shared`, `restarted`, `output_blocks`, `continuation`).
+
+**Tokens:** são **estimativa** (`4 caracteres ≈ 1 token`), rotulada em
+`usage.browserapi.estimated`. Zero parecia honesto e era armadilha: o medidor do
+agente nunca enchia e a sessão entrava em laço de “prompt is too long”. Se nem
+reduzindo couber, o erro vem no vocabulário do cliente
+(`prompt is too long: N tokens > M maximum` no Anthropic,
+`context_length_exceeded` no OpenAI), com a nota de que N e M são estimativas.
+
+**Falha antes de digitar** (página ainda carregando) é repetida internamente e,
+se persistir, responde **503** — retentável. **409** fica reservado para “pode ter
+sido enviado”, que nunca é repetido.
 
 ### Ferramentas (tools): emuladas, com limites claros
 

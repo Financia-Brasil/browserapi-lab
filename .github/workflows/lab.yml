@@ -249,6 +249,37 @@ jobs:
           git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
+  claude-firetest:
+    name: "Claude Code real contra a API (chat simulado)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # O CLI é proprietário e muda de versão: o teste é do CONTRATO, não da
+      # versão. Se o npm falhar, o passo avisa e não derruba o CI (código 3).
+      - name: Instalar o CLI de agente
+        run: |
+          npm install --silent --no-fund --no-audit @anthropic-ai/claude-code \
+            > /tmp/npm-claude.log 2>&1 || echo "npm indisponível; o teste usará só o chat simulado"
+          ls node_modules/.bin/claude 2>/dev/null && node_modules/.bin/claude --version || true
+      - name: Teste de fogo (binário real, sem conta real)
+        run: |
+          if [ -x node_modules/.bin/claude ]; then
+            python scripts/claude_firetest.py --claude "$PWD/node_modules/.bin/claude"
+          else
+            python scripts/claude_firetest.py --no-cli
+          fi
+      - name: Guardar a evidência
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-firetest
+          path: results/ci/claude-firetest.json
+          if-no-files-found: warn
+
   release:
     name: "Publicar atualização estável (main aprovada)"
     needs: [unit, browser]

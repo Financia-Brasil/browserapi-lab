@@ -29,6 +29,10 @@ MAX_DESCRIPTION = 600
 MAX_SCHEMA = 1200
 MAX_TOOLS = 64
 MAX_CALLS = 16
+# Orçamento do bloco de ferramentas dentro do prompt. O primeiro pedido de uma
+# CLI real medido em laboratório traz ~30 mil caracteres só em esquemas; isso não
+# cabe no campo de um chat web junto com o resto (ver docs/CONTEXT_WINDOWS.md).
+DEFAULT_TOOL_BUDGET = 9_000
 
 
 @dataclass
@@ -37,6 +41,9 @@ class Parsed:
 
     text: str = ''
     calls: List[Dict[str, Any]] = field(default_factory=list)
+    # JSON de ferramenta aberto e não fechado: a resposta foi cortada no meio.
+    # Quem chama pode pedir continuação em vez de entregar texto pela metade.
+    incomplete: bool = False
 
     @property
     def used_tool(self) -> bool:
@@ -101,12 +108,39 @@ def normalize_tools(tools: Any) -> List[Dict[str, Any]]:
     return result
 
 
-def protocol_prompt(tools: Sequence[Dict[str, Any]], tool_choice: Any = None) -> str:
+def signature_of(schema: Dict[str, Any], limit: int = 240) -> str:
+    """Assinatura curta: ``cmd:string, timeout:number?`` — sem validações fundas."""
+    properties = schema.get('properties') if isinstance(schema, dict) else None
+    if not isinstance(properties, dict) or not properties:
+        return ''
+    required = schema.get('required') if isinstance(schema.get('required'), list) else []
+    parts: List[str] = []
+    for name, spec in list(properties.items())[:24]:
+        kind = ''
+        if isinstance(spec, dict):
+            raw = spec.get('type')
+            if isinstance(raw, list):
+                raw = '|'.join(str(item) for item in raw)
+            kind = str(raw or '')
+            if not kind and isinstance(spec.get('properties'), dict):
+                kind = 'object'
+            if not kind:
+                enum = spec.get('enum')
+                kind = 'texto' if isinstance(enum, list) else 'any'
+        optional = '' if name in required else '?'
+        parts.append(f'{name}:{kind}{optional}')
+    text = ', '.join(parts)
+    return text if len(text) <= limit else text[:limit - 1] + '…'
+
+
+def protocol_prompt(tools: Sequence[Dict[str, Any]], tool_choice: Any = None, *,
+                    budget: int = DEFAULT_TOOL_BUDGET) -> str:
     """Instrução de ferramentas para o chat que só entende texto.
 
-    Curta de propósito: cada token aqui é digitado no navegador a cada turno.
-    O esquema vai resumido (nomes de campos, não validações profundas), porque o
-    agente do outro lado já conhece a própria ferramenta.
+    Passa por um orçamento de caracteres: descrição e assinatura de cada
+    ferramenta, com a descrição encurtada quando o conjunto não cabe. Se ainda
+    assim estourar, o bloco é cortado com marcador visível — o modelo sabe que
+    recebeu menos, e a resposta declara ``tools: 'emulated'``.
     """
     if not tools:
         return ''
@@ -118,23 +152,47 @@ def protocol_prompt(tools: Sequence[Dict[str, Any]], tool_choice: Any = None) ->
             forced = f' Neste turno, chame obrigatoriamente "{required}" se precisar de dados.'
     elif choice == 'any' or choice == 'required':
         forced = ' Neste turno, chame ao menos uma ferramenta.'
-    lines = [
+    header = '\n'.join([
         'FERRAMENTAS DISPONÍVEIS (protocolo local, sem função nativa):',
         'Quando precisar de uma ferramenta, responda SOMENTE com um objeto JSON, sem texto em volta:',
         '{"tool_calls":[{"name":"<nome>","arguments":{...}}]}',
         'Use apenas nomes desta lista. Se não precisar de ferramenta, responda em texto normal.'
         + forced,
         '',
-    ]
-    for tool in tools:
-        line = f'- {tool["name"]}'
-        if tool.get('description'):
-            line += ': ' + _short(tool['description'], MAX_DESCRIPTION)
-        lines.append(line)
-        schema = _short(tool.get('schema') or {}, MAX_SCHEMA)
-        if schema and schema != '{}':
-            lines.append('  argumentos: ' + schema)
-    return '\n'.join(lines)
+    ])
+    for description_limit in (MAX_DESCRIPTION, 300, 160, 80, 0):
+        lines = [header]
+        for tool in tools:
+            line = f'- {tool["name"]}'
+            if description_limit and tool.get('description'):
+                line += ': ' + _short(tool['description'], description_limit)
+            signature = signature_of(tool.get('schema') or {})
+            if signature:
+                line += f' ({signature})'
+            lines.append(line)
+        text = '\n'.join(lines)
+        if len(text) <= budget:
+            return text
+    return text[:budget - 40] + '\n[lista de ferramentas cortada pelo orçamento local]'
+
+
+def protocol_reminder(tools: Sequence[Dict[str, Any]], tool_choice: Any = None) -> str:
+    """Lembrete curto para os turnos seguintes (o protocolo inteiro já foi enviado).
+
+    Sem isso a conversa do site pode “esquecer” o formato no meio de uma sessão.
+    """
+    if not tools:
+        return ''
+    names = ', '.join(tool['name'] for tool in tools[:24])
+    forced = ''
+    if isinstance(tool_choice, dict):
+        required = tool_choice.get('name') or (tool_choice.get('function') or {}).get('name')
+        if required:
+            forced = f' Use "{required}".'
+    elif tool_choice in ('any', 'required'):
+        forced = ' Chame ao menos uma.'
+    return ('[lembrete] Ferramentas: ' + names + '. Para chamar, responda só com '
+            '{"tool_calls":[{"name":"<nome>","arguments":{...}}]}.' + forced)
 
 
 def _as_calls(value: Any, names: Sequence[str]) -> List[Tuple[str, Dict[str, Any]]]:
@@ -228,12 +286,32 @@ def parse(text: Any, tools: Sequence[Dict[str, Any]]) -> Parsed:
         if len(calls) >= MAX_CALLS:
             break
     if not calls:
-        return Parsed(text=body.strip())
+        return Parsed(text=body.strip(), incomplete=_looks_cut(body, names))
     remaining = body
     for start, end in reversed(consumed):
         remaining = remaining[:start] + remaining[end:]
     remaining = re.sub(r'\n{3,}', '\n\n', remaining).strip()
     return Parsed(text=remaining, calls=calls[:MAX_CALLS])
+
+
+def _looks_cut(text: str, names: Sequence[str]) -> bool:
+    """A resposta parece uma chamada de ferramenta interrompida?
+
+    Só é chamado quando nenhuma chamada válida foi encontrada. Cerca de código
+    aberta, ``tool_calls`` citado sem JSON válido e chaves desbalanceadas são os
+    três sinais observados em resposta cortada no meio.
+    """
+    if not text.strip():
+        return False
+    if text.count('```') % 2 == 1:
+        return True
+    lowered = text.lower()
+    if '"tool_calls"' not in lowered and "'tool_calls'" not in lowered:
+        if not any(name.lower() in lowered for name in names[:24]):
+            return False
+    if text.count('{') > text.count('}'):
+        return True
+    return False
 
 
 def _call_id(index: int) -> str:

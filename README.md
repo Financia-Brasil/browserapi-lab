@@ -1,11 +1,13 @@
 # browserapi-lab
 
 Laboratório Python/Linux para validar automação de chats por navegador real.
-**Não é um serviço homologado 24/7.** A versão 0.12.0 acrescenta uma API local
+**Não é um serviço homologado 24/7.** A versão 0.13.0 acrescenta uma API local
 experimental e opt-in que fala **Anthropic Messages** (`/v1/messages`) e **OpenAI
-Chat/Responses**, com tool calling emulado — o suficiente para rodar o **Claude
-Code** e outras CLIs de agente. Não é paridade com as APIs oficiais. Veja
-[contrato, ativação e limites](docs/LOCAL_API.md).
+Chat/Responses**, com tool calling emulado e **janelas de contexto** (prompt em
+blocos, retomada de conversa, saída em blocos) — o suficiente para rodar o
+**Claude Code** e outras CLIs de agente. Não é paridade com as APIs oficiais.
+Veja [contrato, ativação e limites](docs/LOCAL_API.md) e
+[janelas e limites medidos](docs/CONTEXT_WINDOWS.md).
 
 
 ## Baixar (sem terminal)
@@ -14,6 +16,23 @@ Code** e outras CLIs de agente. Não é paridade com as APIs oficiais. Veja
 — abra pelo gerenciador de arquivos e escolha instalar. O programa instalado se atualiza sozinho quando está ocioso.
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
+
+**Novo na 0.13.0:** a API passou a lidar com o que uma CLI manda **antes** da
+primeira pergunta: um pedido medido do Claude Code tem **~46 mil caracteres**
+(system + 12 esquemas de ferramentas) e, num arquivo grande, pode passar de
+**100 mil**. Agora esse pedido cabe em **1–2 blocos**
+(o bloco de ferramentas vai resumido, ~7 mil em vez de ~30 mil), os turnos
+seguintes enviam **só o delta** (medido: 326 caracteres no terceiro passo) e,
+quando a conversa do site chega na janela, ela é **trocada e retomada** por
+escrito — sem perder o pedido atual. Resposta cortada ganha **continuação** e os
+blocos são unidos. `usage` deixou de ser zero: é **estimativa rotulada**
+(4 caracteres ≈ 1 token), porque zero fazia o agente nunca compactar.
+`output_config`, `system` no meio de `messages` e o lembrete de sistema no fim
+(a forma real que o CLI envia) passaram a ser aceitos. Envio confirmado cuja
+resposta demora não é mais “falhou”: a API **continua esperando e relendo**, com
+prazos crescentes, em vez de reenviar a pergunta. Falha **antes de digitar**
+é repetida aqui e responde 503 (retentável), não 409 — era isso que fazia o
+agente dizer “não está funcionando” e desistir.
 
 **Novo na 0.12.0:** a API local passou a aceitar as CLIs de agente. **`POST
 /v1/messages`** (Anthropic) funciona com `x-api-key`, respostas no formato
@@ -212,6 +231,19 @@ latência de Gemini/LMArena, nem um SLA de produção.
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+Para testar o contrato com uma CLI de agente de verdade, sem conta:
+
+```bash
+npm i @anthropic-ai/claude-code
+python scripts/claude_firetest.py --claude "$PWD/node_modules/.bin/claude"
+```
+
+Ele aponta o **Claude Code real** para esta API e roda seis cenários (pergunta
+simples, ferramenta, arquivo de 120 KB, janela pequena com retomada, página lenta
+e resposta cortada) contra um chat simulado com os limites observados. Sem o
+binário, `--no-cli` exercita o mesmo caminho pela HTTP. A saída fica em
+`results/ci/claude-firetest.json` e o passo roda no CI.
 
 Sem Chromium, as classes de integração são ignoradas com motivo explícito. No job
 de navegador do GitHub Actions, o navegador é obrigatório: indisponibilidade gera

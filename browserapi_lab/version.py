@@ -1,2 +1,2 @@
 """Versão do runtime do painel/instalador (distinta da biblioteca de laboratório)."""
-APP_VERSION = '0.12.0'
+APP_VERSION = '0.13.0'
