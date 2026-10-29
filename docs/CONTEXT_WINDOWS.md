@@ -93,7 +93,7 @@ fonte de verdade do histórico.
 
 **D4 — livro-caixa + rotação + retomada.** A API guarda o que **acredita** ter
 entregue (hash de cada mensagem, caracteres, identidade da conversa). Quando
-(a) o total passaria de `conversation_chars` (padrão 60.000), ou (b) o cliente
+(a) o total passaria de `conversation_chars` (padrão 200.000), ou (b) o cliente
 reescreveu o histórico (compactação do próprio CLI), a conversa é **trocada por
 uma nova** e o contexto é **retomado** de forma determinística: system e
 protocolo inteiros, turnos recentes inteiros, turnos antigos como uma linha cada
@@ -157,9 +157,10 @@ nunca enche e ele nunca compacta. Honestidade aqui é **rotular a estimativa**.
 
 Teste de fogo: **Claude Code 2.1.312 de verdade** (`scripts/claude_firetest.py`,
 execução de 75 s) apontado para esta API, com um chat simulado que recusa o que um
-chat real recusa (campo de 20.000 caracteres, janela de 60.000) e que **falha
-duas vezes “antes de digitar”** para simular a página carregando. Seis cenários,
-todos `exit 0` e nenhuma recusa do site:
+chat real recusa (campo de 20.000 caracteres por envio; janela de 200.000, e de
+**24.000** no cenário que força a rotação) e que **falha “antes de digitar”** para
+simular a página carregando. Seis cenários, todos `exit 0` e nenhuma recusa do
+site:
 
 | Cenário | O que prova | Envios ao site |
 |---|---|---|

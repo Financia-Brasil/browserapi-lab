@@ -232,6 +232,19 @@ latência de Gemini/LMArena, nem um SLA de produção.
 python -m unittest discover -s tests -v
 ```
 
+Para testar o contrato com uma CLI de agente de verdade, sem conta:
+
+```bash
+npm i @anthropic-ai/claude-code
+python scripts/claude_firetest.py --claude "$PWD/node_modules/.bin/claude"
+```
+
+Ele aponta o **Claude Code real** para esta API e roda seis cenários (pergunta
+simples, ferramenta, arquivo de 120 KB, janela pequena com retomada, página lenta
+e resposta cortada) contra um chat simulado com os limites observados. Sem o
+binário, `--no-cli` exercita o mesmo caminho pela HTTP. A saída fica em
+`results/ci/claude-firetest.json` e o passo roda no CI.
+
 Sem Chromium, as classes de integração são ignoradas com motivo explícito. No job
 de navegador do GitHub Actions, o navegador é obrigatório: indisponibilidade gera
 falha. O CI executa testes reais e testa o pacote instalado fora do checkout,
