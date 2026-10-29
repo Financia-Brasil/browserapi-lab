@@ -1,0 +1,11 @@
+{
+  "scope": "synthetic_http_api_real_chromium",
+  "route": "/v1/messages",
+  "x_api_key": true,
+  "stream_events": true,
+  "tools": "emulated_prompt_only",
+  "ignored_params": [
+    "max_tokens",
+    "temperature"
+  ]
+}

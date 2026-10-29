@@ -21,6 +21,7 @@ Códigos de saída: 0 sucesso, 1 falha de verdade, 3 binário ausente.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -105,12 +106,15 @@ class SimulatedSite:
     — o defeito do relato (“manda antes de carregar e diz que não funciona”).
     """
 
-    def __init__(self, limits, not_ready=0, tool=True, long_answer=False):
+    def __init__(self, limits, not_ready=0, tool=True, long_answer=False,
+                 late_answer=False):
         self.limits = limits
         self.remaining_not_ready = not_ready
         self.tool = tool
         self.long_answer = long_answer
+        self.late_answer = late_answer
         self.continued = 0
+        self.late_pending = 0
         self.received = []
         self.refused = []
         self.not_ready_hits = 0
@@ -134,6 +138,11 @@ class SimulatedSite:
             return ChatResult('send_unconfirmed', send_state='confirmed')
         self.received.append(text)
         self.conversation.append(text)
+        if self.late_answer:
+            # A mensagem FOI para o chat; o texto só pinta depois. É o caso do
+            # relato: "aparece rápido, ele diz que não está funcionando".
+            self.late_pending += 1
+            return ChatResult('timeout', send_state='confirmed')
         return ChatResult('success', True, answer=self.answer(text), send_state='confirmed')
 
     def answer(self, text):
@@ -226,10 +235,14 @@ SCENARIOS = {
     'simples': ('responda apenas OK', (), {}),
     'ferramenta': ('use a ferramenta para ver o sistema', ('--allowedTools', 'Bash'), {}),
     'arquivo': (None, (), {'file_chars': 120_000}),
-    'janela': ('responda apenas OK', (), {'limits': {'conversation_chars': 24_000},
-                                        'runs': 2}),
+    # Janela apertada de propósito: o 1º turno cabe, o 2º não — é o que força
+    # a troca de conversa com retomada.
+    'janela': ('responda apenas OK', (), {'limits': {'conversation_chars': 22_000},
+                                        'runs': 2,
+                                        'second': 'resuma em uma linha ' + 'detalhe ' * 400}),
     'lenta': ('responda apenas OK', (), {'not_ready': 4}),
     'resposta': ('escreva o relatório longo', (), {'long_answer': True}),
+    'demorada': ('responda apenas OK', (), {'late_answer': True}),
 }
 
 
@@ -238,7 +251,18 @@ def exercise(root, args, scenario, name=''):
     limits = windows.Limits(**({'message_chars': 20_000, 'conversation_chars': 200_000,
                                 'block_chars': 8_000} | options.get('limits', {})))
     site = SimulatedSite(limits, not_ready=options.get('not_ready', 0),
-                         long_answer=bool(options.get('long_answer')))
+                         long_answer=bool(options.get('long_answer')),
+                         late_answer=bool(options.get('late_answer')))
+    waiting = []
+
+    def late_harvest(page, config, *, cancelled=None, timeout_ms=None):
+        """O que o worker faz quando o envio já foi confirmado: espera e relê."""
+        waiting.append(timeout_ms)
+        return ChatResult('success', True, answer='resposta que demorou para aparecer',
+                          send_state='confirmed')
+    patches = [patch('browserapi_lab.llm_api.exchange', side_effect=site)]
+    if options.get('late_answer'):
+        patches.append(patch('browserapi_lab.llm_api.harvest', side_effect=late_harvest))
     store = ConfigStore(root / 'config')
     config = ChatConfig('meu-agente', 'https://chat.example/', **HYPOTHESES['fixture'])
     store.save(config)
@@ -262,11 +286,13 @@ def exercise(root, args, scenario, name=''):
             body = ''.join(f'linha {i:06d} do arquivo grande\n'
                            for i in range(options['file_chars'] // 25))
             prompt = ('resuma o arquivo abaixo em uma frase\n\n' + body)
-        with patch('browserapi_lab.llm_api.exchange', side_effect=site):
+        with contextlib.ExitStack() as stack:
+            for item in patches:
+                stack.enter_context(item)
             for run in range(int(options.get('runs', 1))):
                 before = len(site.received)
                 used = prompt if run == 0 or options.get('file_chars') else (
-                    'e agora resuma em uma linha')
+                    options.get('second') or 'e agora resuma em uma linha')
                 flags = list(extra) + (['--continue'] if run else [])
                 out = run_cli(args.claude, port, key, used, root / 'home', tuple(flags))
                 sends = site.received[before:]
@@ -290,6 +316,7 @@ def exercise(root, args, scenario, name=''):
         api.close()
         panel.close()
     return {'steps': steps, 'ok': not site.refused, 'site_refused': site.refused,
+            'late_answers_waited': site.late_pending, 'late_waits': waiting,
             'site_sends': len(site.received),
             'largest_send': max((len(item) for item in site.received), default=0),
             'site_conversation_characters': sum(map(len, site.conversation)),

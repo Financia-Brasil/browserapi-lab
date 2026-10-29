@@ -651,9 +651,10 @@ trocar a URL não.
 **Provas deste ambiente:** `discover -s tests` **428 testes** (18 ignorados);
 `node scripts/panel_jsdom_check.js` **19 checagens**; e o **teste de fogo**
 `python scripts/claude_firetest.py` com o binário real do Claude Code contra um
-chat simulado — **6 cenários verdes** (simples, ferramenta, arquivo de 120 KB em
-9 blocos, janela pequena com retomada, página lenta e resposta cortada),
-`site_refused: []`, 4 falhas de prontidão absorvidas. Evidência em `results/ci/claude-firetest.json`, e o passo roda no CI
+chat simulado — **7 cenários verdes** (simples, ferramenta, arquivo de 120 KB em
+9 blocos, janela apertada com compactação e retomada, página lenta, resposta
+cortada e mensagem que demora a pintar), `site_refused: []`, falhas de prontidão
+e um `timeout` pós-envio absorvidos sem o CLI ver erro. Evidência em `results/ci/claude-firetest.json`, e o passo roda no CI
 (`Claude Code real contra a API (chat simulado)`).
 **Implementado ≠ testado local/CI ≠ homologado**: o chat simulado tem os limites
 observados, não é um site real; a conta real continua sendo a sua sessão.
