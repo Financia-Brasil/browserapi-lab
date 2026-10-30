@@ -122,15 +122,15 @@ BUILTIN_SITES = {
     "fixture": SiteConfig(
         name="fixture",
         url="file:///home/tork/browserapi-lab/fixtures/fake_chat.html",
-        input_selector='textarea[data-testid="prompt-textarea"]',
-        send_button_selector='[data-testid="send-button"]',
-        container_selector='[role="log"]',
-        assistant_selector='[data-testid*="assistant"]',
-        stop_button_selector='[data-testid="stop-button"]',
-        copy_button_selector='[data-testid="copy-button"]',
-        busy_indicator_selector='[data-testid="busy-indicator"]',
+        input_selector="#composer",
+        send_button_selector="#send",
+        container_selector="#conversation",
+        assistant_selector='[data-role="assistant"]',
+        stop_button_selector="#stop",
+        copy_button_selector=None,
+        busy_indicator_selector=None,
         requires_login=False,
-        test_mode_js="setTestMode(true)",
+        test_mode_js=None,
     ),
     "lmarena": SiteConfig(
         name="lmarena",
@@ -248,7 +248,9 @@ class APIServer:
             await self._initialize_session(session, site_config)
             return session
 
-    async def _initialize_session(self, session: ActiveSession, site_config: SiteConfig) -> None:
+    async def _initialize_session(
+        self, session: ActiveSession, site_config: SiteConfig
+    ) -> None:
         """Initialize session page with site configuration."""
         if session.initialized and session.site_name == site_config.name:
             return
@@ -259,9 +261,12 @@ class APIServer:
             await session.page.wait_for_load_state("networkidle")
             session.site_url = site_config.url
 
-            # Enable test mode if available
+            # Enable test mode if available (ignora se a função não existir na página)
             if site_config.test_mode_js:
-                await session.page.evaluate(site_config.test_mode_js)
+                try:
+                    await session.page.evaluate(site_config.test_mode_js)
+                except Exception:
+                    pass
 
             session.site_name = site_config.name
             session.initialized = True
@@ -270,7 +275,9 @@ class APIServer:
                 500, f"Failed to initialize session for {site_config.name}: {str(e)}"
             )
 
-    async def _reinitialize_session(self, session: ActiveSession, site_config: SiteConfig) -> None:
+    async def _reinitialize_session(
+        self, session: ActiveSession, site_config: SiteConfig
+    ) -> None:
         """Reinitialize session for a different site."""
         session.initialized = False
         await self._initialize_session(session, site_config)
@@ -293,7 +300,9 @@ class APIServer:
         async with self._lock:
             now = time.time()
             to_remove = [
-                name for name, sess in self.sessions.items() if now - sess.last_used > max_age
+                name
+                for name, sess in self.sessions.items()
+                if now - sess.last_used > max_age
             ]
             for name in to_remove:
                 await self.close_session(name)
@@ -372,9 +381,15 @@ async def list_models():
     """List available models (OpenAI-compatible)."""
     return ModelsResponse(
         data=[
-            ModelInfo(id="browserapi-default", created=int(time.time()), owned_by="browserapi-lab"),
             ModelInfo(
-                id="browserapi-fixtured", created=int(time.time()), owned_by="browserapi-lab"
+                id="browserapi-default",
+                created=int(time.time()),
+                owned_by="browserapi-lab",
+            ),
+            ModelInfo(
+                id="browserapi-fixtured",
+                created=int(time.time()),
+                owned_by="browserapi-lab",
             ),
         ]
     )
@@ -492,7 +507,9 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
     system_prompt = system_messages[0].content if system_messages else ""
 
     # Combine system + user message
-    full_message = f"{system_prompt}\n\n{user_message}".strip() if system_prompt else user_message
+    full_message = (
+        f"{system_prompt}\n\n{user_message}".strip() if system_prompt else user_message
+    )
 
     try:
         # Send message using site-specific selectors
@@ -553,7 +570,12 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
         if request.stream:
             return EventSourceResponse(
                 stream_response(
-                    completion_id, created, request.model, response_text, session, site_config
+                    completion_id,
+                    created,
+                    request.model,
+                    response_text,
+                    session,
+                    site_config,
                 ),
                 media_type="text/event-stream",
             )
@@ -597,7 +619,9 @@ async def stream_response(
         created=created,
         model=model,
         choices=[
-            ChatCompletionChunkChoice(index=0, delta={"role": "assistant"}, finish_reason=None)
+            ChatCompletionChunkChoice(
+                index=0, delta={"role": "assistant"}, finish_reason=None
+            )
         ],
     )
     yield chunk.model_dump_json()
@@ -621,7 +645,9 @@ async def stream_response(
         async for chunk_text in _watch_streaming(session.page, site_config, observer):
             if chunk_text and chunk_text != last_text:
                 new_text = (
-                    chunk_text[len(last_text) :] if chunk_text.startswith(last_text) else chunk_text
+                    chunk_text[len(last_text) :]
+                    if chunk_text.startswith(last_text)
+                    else chunk_text
                 )
                 if new_text:
                     chunk = ChatCompletionChunk(
@@ -642,7 +668,9 @@ async def stream_response(
             id=completion_id,
             created=created,
             model=model,
-            choices=[ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")],
+            choices=[
+                ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")
+            ],
         )
         yield chunk.model_dump_json()
         yield "[DONE]"
@@ -669,7 +697,9 @@ async def stream_response(
             id=completion_id,
             created=created,
             model=model,
-            choices=[ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")],
+            choices=[
+                ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")
+            ],
         )
         yield chunk.model_dump_json()
         yield "[DONE]"
@@ -875,7 +905,9 @@ async def extract_response(request: ExtractRequest):
         results = await extractor.extract_all_methods(ass_sel, cont_sel)
         return {k: asdict(v) for k, v in results.items()}
     else:
-        result = await extractor.extract_last_assistant(ass_sel, request.format, cont_sel)
+        result = await extractor.extract_last_assistant(
+            ass_sel, request.format, cont_sel
+        )
         return asdict(result)
 
 

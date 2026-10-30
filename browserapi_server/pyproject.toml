@@ -1,0 +1,29 @@
+[project]
+name = "browserapi-server"
+version = "0.2.0"
+description = "OpenAI-compatible API server for browserapi-lab"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "sse-starlette>=1.6.0",
+    "playwright>=1.40.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.uvicorn]
+host = "0.0.0.0"
+port = 8000
+reload = false
