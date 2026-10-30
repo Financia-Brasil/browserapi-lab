@@ -54,6 +54,11 @@ class ChatCompletionRequest(BaseModel):
     frequency_penalty: Optional[float] = 0.0
     user: Optional[str] = None
     site: Optional[str] = None
+    input_selector: Optional[str] = None
+    send_button_selector: Optional[str] = None
+    container_selector: Optional[str] = None
+    assistant_selector: Optional[str] = None
+    stop_button_selector: Optional[str] = None
 
 
 class ChatCompletionChoice(BaseModel):
@@ -511,11 +516,15 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
         f"{system_prompt}\n\n{user_message}".strip() if system_prompt else user_message
     )
 
+    # Seletores: sobrescreve com os da requisição quando fornecidos
+    input_sel = request.input_selector or site_config.input_selector
+    btn_sel = request.send_button_selector or site_config.send_button_selector
+    assistant_sel = request.assistant_selector or site_config.assistant_selector
+    container_sel = request.container_selector or site_config.container_selector
+
     try:
         # Send message using site-specific selectors
         sender = MessageSender(page)
-        input_sel = site_config.input_selector
-        btn_sel = site_config.send_button_selector
 
         # Use best method for textarea: fill
         result = await sender.send_textarea_fill(full_message, input_sel, btn_sel)
@@ -534,8 +543,6 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
             raise HTTPException(504, "Streaming timeout")
 
         # Aguarda estabilidade do texto antes de extrair (evita resposta cortada)
-        assistant_sel = site_config.assistant_selector
-        container_sel = site_config.container_selector
         stable_text = await wait_for_stable_text(
             page,
             assistant_selector=assistant_sel,
