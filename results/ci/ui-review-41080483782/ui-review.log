@@ -1,0 +1,23 @@
+test_api_controls_explicit_opt_in_key_and_disable (test_gui_browser.TestGraphicalJourney.test_api_controls_explicit_opt_in_key_and_disable) ... ok
+test_ask_shows_the_new_answer_in_the_panel_conversation (test_gui_browser.TestGraphicalJourney.test_ask_shows_the_new_answer_in_the_panel_conversation) ... ok
+test_buttons_voice_send_and_switch_saved_session_are_visible (test_gui_browser.TestGraphicalJourney.test_buttons_voice_send_and_switch_saved_session_are_visible) ... ok
+test_conversation_text_is_not_executable_and_clear_keeps_the_site (test_gui_browser.TestGraphicalJourney.test_conversation_text_is_not_executable_and_clear_keeps_the_site) ... ok
+test_delete_saved_connection_cancel_then_confirm (test_gui_browser.TestGraphicalJourney.test_delete_saved_connection_cancel_then_confirm) ... ok
+test_denial_and_cancel_do_not_run_exchange (test_gui_browser.TestGraphicalJourney.test_denial_and_cancel_do_not_run_exchange) ... ok
+test_dom_text_is_not_executable_and_repair_remedy_visible (test_gui_browser.TestGraphicalJourney.test_dom_text_is_not_executable_and_repair_remedy_visible) ... ok
+test_full_form_configure_then_health_check (test_gui_browser.TestGraphicalJourney.test_full_form_configure_then_health_check) ... ok
+test_managed_update_reloads_interface_without_reinstall_or_new_token (test_gui_browser.TestGraphicalJourney.test_managed_update_reloads_interface_without_reinstall_or_new_token) ... ok
+test_pattern_and_console_have_no_invalid_regex_or_favicon_error (test_gui_browser.TestGraphicalJourney.test_pattern_and_console_have_no_invalid_regex_or_favicon_error) ... ok
+test_preflight_receipt_explains_no_send_instead_of_zero_model_latency (test_gui_browser.TestGraphicalJourney.test_preflight_receipt_explains_no_send_instead_of_zero_model_latency) ... ok
+test_quick_flow_points_to_the_next_step_and_the_address_checker (test_gui_browser.TestGraphicalJourney.test_quick_flow_points_to_the_next_step_and_the_address_checker)
+Caminho curto: o painel diz o próximo passo e o endereço errado é explicado. ... ok
+test_receipt_shows_the_folder_chrome_confirmed_without_claiming_the_account (test_gui_browser.TestGraphicalJourney.test_receipt_shows_the_folder_chrome_confirmed_without_claiming_the_account) ... ok
+test_redesign_profile_opening_navigation_and_responsive_evidence (test_gui_browser.TestGraphicalJourney.test_redesign_profile_opening_navigation_and_responsive_evidence) ... ok
+test_repair_always_asks_voice_presence_then_type_and_send (test_gui_browser.TestGraphicalJourney.test_repair_always_asks_voice_presence_then_type_and_send) ... ok
+test_runtime_mismatch_blocks_actions_instead_of_old_task_400 (test_gui_browser.TestGraphicalJourney.test_runtime_mismatch_blocks_actions_instead_of_old_task_400) ... ok
+test_visual_picker_graphical_preview_and_responsive_evidence (test_gui_browser.TestGraphicalJourney.test_visual_picker_graphical_preview_and_responsive_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 47.595s
+
+OK
