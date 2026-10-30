@@ -1,0 +1,39 @@
+test_api_controls_explicit_opt_in_key_and_disable (test_gui_browser.TestGraphicalJourney.test_api_controls_explicit_opt_in_key_and_disable) ... ok
+test_ask_shows_the_new_answer_in_the_panel_conversation (test_gui_browser.TestGraphicalJourney.test_ask_shows_the_new_answer_in_the_panel_conversation) ... FAIL
+test_buttons_voice_send_and_switch_saved_session_are_visible (test_gui_browser.TestGraphicalJourney.test_buttons_voice_send_and_switch_saved_session_are_visible) ... ok
+test_conversation_text_is_not_executable_and_clear_keeps_the_site (test_gui_browser.TestGraphicalJourney.test_conversation_text_is_not_executable_and_clear_keeps_the_site) ... ok
+test_delete_saved_connection_cancel_then_confirm (test_gui_browser.TestGraphicalJourney.test_delete_saved_connection_cancel_then_confirm) ... ok
+test_denial_and_cancel_do_not_run_exchange (test_gui_browser.TestGraphicalJourney.test_denial_and_cancel_do_not_run_exchange) ... ok
+test_dom_text_is_not_executable_and_repair_remedy_visible (test_gui_browser.TestGraphicalJourney.test_dom_text_is_not_executable_and_repair_remedy_visible) ... ok
+test_full_form_configure_then_health_check (test_gui_browser.TestGraphicalJourney.test_full_form_configure_then_health_check) ... FAIL
+test_managed_update_reloads_interface_without_reinstall_or_new_token (test_gui_browser.TestGraphicalJourney.test_managed_update_reloads_interface_without_reinstall_or_new_token) ... ok
+test_pattern_and_console_have_no_invalid_regex_or_favicon_error (test_gui_browser.TestGraphicalJourney.test_pattern_and_console_have_no_invalid_regex_or_favicon_error) ... ok
+test_preflight_receipt_explains_no_send_instead_of_zero_model_latency (test_gui_browser.TestGraphicalJourney.test_preflight_receipt_explains_no_send_instead_of_zero_model_latency) ... ok
+test_quick_flow_points_to_the_next_step_and_the_address_checker (test_gui_browser.TestGraphicalJourney.test_quick_flow_points_to_the_next_step_and_the_address_checker)
+Caminho curto: o painel diz o próximo passo e o endereço errado é explicado. ... ok
+test_receipt_shows_the_folder_chrome_confirmed_without_claiming_the_account (test_gui_browser.TestGraphicalJourney.test_receipt_shows_the_folder_chrome_confirmed_without_claiming_the_account) ... ok
+test_redesign_profile_opening_navigation_and_responsive_evidence (test_gui_browser.TestGraphicalJourney.test_redesign_profile_opening_navigation_and_responsive_evidence) ... ok
+test_repair_always_asks_voice_presence_then_type_and_send (test_gui_browser.TestGraphicalJourney.test_repair_always_asks_voice_presence_then_type_and_send) ... ok
+test_runtime_mismatch_blocks_actions_instead_of_old_task_400 (test_gui_browser.TestGraphicalJourney.test_runtime_mismatch_blocks_actions_instead_of_old_task_400) ... ok
+test_visual_picker_graphical_preview_and_responsive_evidence (test_gui_browser.TestGraphicalJourney.test_visual_picker_graphical_preview_and_responsive_evidence) ... ok
+
+======================================================================
+FAIL: test_ask_shows_the_new_answer_in_the_panel_conversation (test_gui_browser.TestGraphicalJourney.test_ask_shows_the_new_answer_in_the_panel_conversation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/browserapi-lab/browserapi-lab/tests/test_gui_browser.py", line 474, in test_ask_shows_the_new_answer_in_the_panel_conversation
+    self.assertEqual(len(snapshot['messages']), 2,
+AssertionError: 0 != 2 : ('', ['O campo não aceitou a mensagem inteira', 'Nada foi enviado: o texto foi colocado no campo, conferido, e faltava parte. Acontece com campo que corta texto grande ou editor que ignora colagem. Reduza o texto (ou deixe a API fatiar) e tente de novo; se repetir, use Corrigir campos.'])
+
+======================================================================
+FAIL: test_full_form_configure_then_health_check (test_gui_browser.TestGraphicalJourney.test_full_form_configure_then_health_check)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/browserapi-lab/browserapi-lab/tests/test_gui_browser.py", line 410, in test_full_form_configure_then_health_check
+    self.assertTrue(receipt['compatible_in_this_run'], receipt)
+AssertionError: False is not true : {'schema_version': 1, 'name': 'graphical', 'provider': 'custom', 'browser': 'chromium', 'browser_version': None, 'checked_at': '2026-10-30T15:01:12Z', 'config_fingerprint': '61a36dff03140ec3cc9fa3adee8d62a09f9cc292157c41db5cb89491cd3e96a2', 'status': 'composer_incomplete', 'send_state': 'not_sent', 'stage': 'send_pipeline', 'diagnostics': {'expected_chars': 246, 'filled_chars': 0, 'strategies': ['fill+click_send', 'paste+click_send', 'exec_insert+click_send', 'js_set+click_send', 'type+click_send'], 'send_evidence': 'o campo recebeu 0 de 246 caracteres com type; envio cancelado'}, 'compatible_in_this_run': False, 'message': 'O campo não aceitou a mensagem inteira', 'action': 'Nada foi enviado: o texto foi colocado no campo, conferido, e faltava parte. Acontece com campo que corta texto grande ou editor que ignora colagem. Reduza o texto (ou deixe a API fatiar) e tente de novo; se repetir, use Corrigir campos.', 'timings': {'preflight_ms': 49.768, 'fill_ms': 0.0, 'send_ms': 0.0, 'filled_chars': 0, 'expected_chars': 246, 'send_pipeline_ms': 15544.155, 'total_ms': 15593.926, 'browser_start_ms': 768.752, 'page_open_ms': 89.722}, 'performance': {'capture_budget_ms': 900, 'within_capture_budget': None, 'api_equivalence': 'not_measured'}, 'scope': 'Uma execução; não garante disponibilidade futura ou funcionamento 24/7.'}
+
+----------------------------------------------------------------------
+Ran 17 tests in 69.119s
+
+FAILED (failures=2)
