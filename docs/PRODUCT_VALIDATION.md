@@ -699,3 +699,47 @@ publicado com o **mesmo tamanho** do texto enviado.
 **Implementado ≠ testado local/CI ≠ homologado**: a prova em navegador roda no
 CI; neste ambiente não há Chromium. Site que reescreve o texto no campo
 (autocorreção, menções) pode ser recusado pela conferência — é de propósito.
+
+## 0.13.7 — o rascunho que não existe e a depuração configurada uma vez (2026-10-30)
+
+Relato: *“depois que mapear tudo, quando vai mandar a mensagem aquela de ‘o
+Chrome está sendo controlado…’ ele dá erro ‘Há um rascunho no campo …’ mesmo sem
+nenhum rascunho”*, e *“queria melhorar esse negócio de tá manualmente permitindo
+a depuração do navegador toda vez, tem como só configurar uma vez que funciona
+pra sempre?”*.
+
+**O falso rascunho.** O campo era lido com `innerText` cru. Editor rico devolve
+`"\n"` para `<p><br></p>`, e um nó de *placeholder* devolve o texto do próprio
+aviso — os dois passavam por “tem texto”. Resultado: o programa se recusava a
+enviar (`draft_present`) num campo vazio, logo depois do mapeamento.
+
+| Antes | Agora |
+|---|---|
+| qualquer string não vazia = rascunho | ignora `data-placeholder`, `aria-hidden="true"`, classes `placeholder`/`is-empty`/`ProseMirror-trailingBreak`, `SCRIPT`/`STYLE` e trata `<br>` como quebra |
+| falha de leitura virava “tem rascunho” | leitura que falha devolve `None`, e sem texto **não há rascunho** |
+| rascunho igual ao que ia ser enviado bloqueava | texto **igual** ao pendente (ou **prefixo** dele) não bloqueia: o envio reaproveita/limpa o campo |
+
+**Depuração uma vez.** `chrome://inspect/#remote-debugging` vale para a sessão:
+fechou o Chrome, o passo manual voltou. Agora a conexão guarda `debug_port` e
+`auto_launch` e existe o atalho **Chrome com depuração**
+(`~/.local/bin/browserapi-chrome-debug` + entrada `.desktop`), criado pelo botão
+**Configurar uma vez** (aba Configurações) ou por `browserapi-lab chrome-debug`.
+Sem porta configurada, nada muda: a conexão usa a sessão atual
+(`DevToolsActivePort`).
+
+Segurança: a porta escuta só em `127.0.0.1`, o atalho aponta para o **mesmo**
+Chrome e a **mesma** pasta de dados (nada de perfil copiado), `install` recusa
+symlink e grava de forma atômica, e `ensure` **só abre** o navegador quando a
+conexão autorizou (`auto_launch`) — sem isso, explica o próximo passo e não abre
+nada. Porta e abertura automática ficam fora do *fingerprint* que invalida
+recibos: mudá-las não derruba um mapeamento já feito.
+
+**Provas deste ambiente:** 471 testes (19 ignorados por falta de Chromium), com
+`tests/test_persistent_chrome.py` (20 casos: `probe` contra um DevTools falso,
+atalho, instalação atômica, `start`/`ensure`) e o endpoint `/api/chrome-debug`
+coberto em `tests/test_gui.py`; `scripts/panel_jsdom_check.js` passa a verificar
+que o painel manda porta/`auto_launch` e mostra “Configurada” depois. O teste com
+**navegador real** roda no CI.
+**Implementado ≠ testado local/CI ≠ homologado**: aqui não há Chrome instalado,
+então o atalho não foi aberto de verdade; o `chrome://version` continua sendo a
+prova de qual perfil o Chrome entregou.
