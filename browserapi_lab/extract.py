@@ -112,6 +112,28 @@ class ResponseExtractor:
         # Parse HTML using regex (no external deps)
         text = html
 
+        # Remove elementos com style="display:none" ou style="visibility:hidden" ANTES do processamento
+        text = re.sub(
+            r'<[^>]+style\s*=\s*["\'][^"\']*\bdisplay\s*:\s*none[^"\']*["\'][^>]*>.*?</[^>]+>',
+            "",
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        text = re.sub(
+            r'<[^>]+style\s*=\s*["\'][^"\']*\bvisibility\s*:\s*hidden[^"\']*["\'][^>]*>.*?</[^>]+>',
+            "",
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        # Remove blocos de feedback completos
+        text = re.sub(
+            r'<div[^>]*class\s*=\s*["\'][^"\']*feedback[^"\']*["\'][^>]*>.*?</div>',
+            "",
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
         # Remove script/style
         text = re.sub(
             r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE

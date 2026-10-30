@@ -130,7 +130,7 @@ BUILTIN_SITES = {
         input_selector="#composer",
         send_button_selector="#send",
         container_selector="#conversation",
-        assistant_selector='[data-role="assistant"]',
+        assistant_selector='[data-role="assistant"] .body',
         stop_button_selector="#stop",
         copy_button_selector=None,
         busy_indicator_selector=None,
@@ -558,9 +558,10 @@ async def chat_completions(request: ChatCompletionRequest, http_request: Request
             assistant_sel, "markdown_like", container_sel
         )
 
-        # Usa o texto estável se a extração retornar vazio ou menor
-        response_text = extract_result.text or stable_text
-        if stable_text and len(stable_text) > len(response_text):
+        # Sempre prioriza o texto extraído e limpo (sem elementos escondidos, feedback, labels de papel)
+        response_text = extract_result.text or ""
+        # Só usa stable_text como fallback se a extração estiver vazia
+        if not response_text and stable_text:
             response_text = stable_text
 
         # Handle stop sequences
@@ -633,83 +634,33 @@ async def stream_response(
     )
     yield chunk.model_dump_json()
 
-    # If we have a session and site config, do actual streaming observation
-    if session and site_config and session.page:
-        # Set up stream observer
-        observer = StreamObserver(
-            session.page,
-            site_config.container_selector,
-            site_config.assistant_selector,
-            site_config.stop_button_selector,
-            site_config.copy_button_selector,
-            site_config.busy_indicator_selector,
-        )
-
-        await observer._inject_observer()
-
-        # Stream tokens as they arrive
-        last_text = ""
-        async for chunk_text in _watch_streaming(session.page, site_config, observer):
-            if chunk_text and chunk_text != last_text:
-                new_text = (
-                    chunk_text[len(last_text) :]
-                    if chunk_text.startswith(last_text)
-                    else chunk_text
+    # O texto já foi extraído e limpo (sem elementos escondidos, feedback, labels de papel)
+    # antes desta função ser chamada. Apenas enviamos em chunks para simular streaming.
+    words = text.split()
+    for i, word in enumerate(words):
+        chunk_text = word + (" " if i < len(words) - 1 else "")
+        chunk = ChatCompletionChunk(
+            id=completion_id,
+            created=created,
+            model=model,
+            choices=[
+                ChatCompletionChunkChoice(
+                    index=0, delta={"content": chunk_text}, finish_reason=None
                 )
-                if new_text:
-                    chunk = ChatCompletionChunk(
-                        id=completion_id,
-                        created=created,
-                        model=model,
-                        choices=[
-                            ChatCompletionChunkChoice(
-                                index=0, delta={"content": new_text}, finish_reason=None
-                            )
-                        ],
-                    )
-                    yield chunk.model_dump_json()
-                last_text = chunk_text
-
-        # Final chunk
-        chunk = ChatCompletionChunk(
-            id=completion_id,
-            created=created,
-            model=model,
-            choices=[
-                ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")
             ],
         )
         yield chunk.model_dump_json()
-        yield "[DONE]"
-    else:
-        # Fallback: simulate streaming by splitting words
-        words = text.split()
-        for i, word in enumerate(words):
-            chunk_text = word + (" " if i < len(words) - 1 else "")
-            chunk = ChatCompletionChunk(
-                id=completion_id,
-                created=created,
-                model=model,
-                choices=[
-                    ChatCompletionChunkChoice(
-                        index=0, delta={"content": chunk_text}, finish_reason=None
-                    )
-                ],
-            )
-            yield chunk.model_dump_json()
-            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.01)
 
-        # Final chunk
-        chunk = ChatCompletionChunk(
-            id=completion_id,
-            created=created,
-            model=model,
-            choices=[
-                ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")
-            ],
-        )
-        yield chunk.model_dump_json()
-        yield "[DONE]"
+    # Final chunk
+    chunk = ChatCompletionChunk(
+        id=completion_id,
+        created=created,
+        model=model,
+        choices=[ChatCompletionChunkChoice(index=0, delta={}, finish_reason="stop")],
+    )
+    yield chunk.model_dump_json()
+    yield "[DONE]"
 
 
 async def _watch_streaming(
