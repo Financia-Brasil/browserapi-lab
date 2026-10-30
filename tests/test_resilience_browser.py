@@ -142,5 +142,9 @@ class TestColagemRapida(BrowserTestCase):
                 self.assertEqual(resultado.filled_chars, resultado.expected_chars)
                 publicado = self.page.evaluate(
                     "() => document.querySelector('[data-role=\"user\"] .body').textContent")
-                self.assertEqual(len(publicado.strip()), len(texto.strip()),
+                # Comparação sem espaços: editor rico transforma quebra de linha
+                # em parágrafo e o textContent cola os blocos. O que não pode
+                # faltar é CARACTERE — era assim que a mensagem ia pela metade.
+                sem_espaco = lambda value: ''.join(value.split())
+                self.assertEqual(sem_espaco(publicado), sem_espaco(texto),
                                  'a mensagem publicada pelo site ficou incompleta')

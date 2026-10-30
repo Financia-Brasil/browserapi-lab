@@ -357,7 +357,11 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         sent_ms = summary.get('sent_ms')
         metrics.update({
             'ttft_dom_ms': round(max(0, first - sent_ms), 1) if first is not None and sent_ms is not None else None,
-            'capture_overhead_ms': summary.get('since_last_mutation_ms'),
+            # Custo da captura medido no instante da decisão de término; a janela
+            # de confirmação (espera de propósito) não entra nesta conta.
+            'capture_overhead_ms': (observation.settle_overhead_ms
+                                    if observation.settle_overhead_ms is not None
+                                    else summary.get('since_last_mutation_ms')),
         })
         outcome('success', True, answer=answer, request_id=request_id)
         result.stage = 'completed'

@@ -339,6 +339,12 @@ def wait_for_completion(
             on_poll(state, ui, decisao)
 
         if decisao.done:
+            # Medido AQUI, antes da janela de confirmação: o custo da captura não
+            # pode incluir a espera deliberada (senão o orçamento de 900 ms do
+            # produto aparece estourado por causa do próprio seguro).
+            if state.last_mutation_ms is not None:
+                observacao.settle_overhead_ms = round(
+                    max(0.0, state.since_installed_ms - state.last_mutation_ms), 1)
             if (decisao.status == "success" and config.confirm_window_ms > 0
                     and state.since_installed_ms + config.confirm_window_ms < config.timeout_ms):
                 # Relê depois de uma pausa curta: pausa do modelo não é o fim.
@@ -380,9 +386,10 @@ def wait_for_completion(
     observacao.ttft_ms = final.first_token_ms
     if final.first_token_ms is not None and final.last_mutation_ms is not None:
         observacao.stream_ms = round(final.last_mutation_ms - final.first_token_ms, 1)
-        observacao.settle_overhead_ms = round(
-            max(0.0, final.since_installed_ms - final.last_mutation_ms), 1
-        )
+        if observacao.settle_overhead_ms is None:
+            observacao.settle_overhead_ms = round(
+                max(0.0, final.since_installed_ms - final.last_mutation_ms), 1
+            )
     observacao.mutation_count = final.mutation_count
     observacao.text_len = final.text_len
     return observacao
