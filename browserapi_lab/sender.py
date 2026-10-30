@@ -477,7 +477,7 @@ def send_message(
     user_selector: Optional[str] = None,
     before_activate: Any = None,
     nonce: Optional[str] = None,
-    composer_timeout_ms: float = 1_200.0,
+    composer_timeout_ms: float = 3_000.0,
     max_type_chars: int = MAX_TYPE_CHARS,
 ) -> SendResult:
     """Tenta enviar ``text`` combinando preenchimento e ativação até haver evidência.
@@ -574,6 +574,9 @@ def send_message(
 
     if incompletes:
         best = max(incompletes, key=lambda item: item.filled_chars)
+        # Não deixar pedaço de texto no campo: um Enter depois disso enviaria a
+        # mensagem pela metade sem ninguém pedir.
+        _clear(locator, kind)
         return SendResult(
             success=False,
             text=text,
