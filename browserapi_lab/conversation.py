@@ -487,9 +487,14 @@ def merge_blocks(blocks):
 # --- falhas antes de digitar ---------------------------------------------
 
 TRANSIENT = {'page_unavailable': 503, 'composer_missing': 503,
-             'output_invalid': 503, 'browser_unavailable': 503}
+             'output_invalid': 503, 'browser_unavailable': 503,
+             # O campo não aceitou o texto inteiro: NADA foi clicado, então
+             # repetir é seguro (e a repetição pode achar outro caminho de colar).
+             'composer_incomplete': 503}
 ACTIONABLE = {'not_configured', 'wrong_origin', 'draft_present', 'send_is_microphone',
-              'google_login_blocked', 'captcha', 'login_required'}
+              'google_login_blocked', 'captcha', 'login_required',
+              # Enviou pela metade: olhar a página antes de repetir.
+              'send_truncated'}
 
 
 def retryable_status(status, send_state):

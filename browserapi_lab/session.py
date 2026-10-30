@@ -201,9 +201,7 @@ def sanitize_storage_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "cookie_count": len(cookies),
         "origins": origin_summary,
         "has_credentials": "credentials" in state,
-        "opfs_present": bool(
-            state.get("origins") and any("opfs" in o for o in state.get("origins", []))
-        ),
+        "opfs_present": bool(state.get("origins") and any("opfs" in o for o in state.get("origins", []))),
     }
 
 
@@ -220,9 +218,9 @@ def assert_no_private_values(payload: Any, path: str = "$") -> None:
     if isinstance(payload, dict):
         for key, value in payload.items():
             lowered = str(key).lower()
-            sensivel = any(
-                hint in lowered for hint in _SENSITIVE_KEY_HINTS
-            ) and not lowered.endswith(_SAFE_SUFFIXES)
+            sensivel = any(hint in lowered for hint in _SENSITIVE_KEY_HINTS) and not lowered.endswith(
+                _SAFE_SUFFIXES
+            )
             if sensivel and isinstance(value, str) and value.strip():
                 raise ValueError(f"valor potencialmente privado em {path}.{key}")
             assert_no_private_values(value, f"{path}.{key}")
@@ -238,16 +236,12 @@ def supports_indexeddb_export() -> bool:
 
         from playwright.sync_api import BrowserContext  # import tardio
 
-        return (
-            "indexed_db" in inspect.signature(BrowserContext.storage_state).parameters
-        )
+        return "indexed_db" in inspect.signature(BrowserContext.storage_state).parameters
     except Exception:
         return False
 
 
-def export_state(
-    context: Any, path: Optional[Path] = None, indexed_db: bool = True
-) -> Dict[str, Any]:
+def export_state(context: Any, path: Optional[Path] = None, indexed_db: bool = True) -> Dict[str, Any]:
     """Exporta o estado bruto (para o perfil, **nunca** versionado) e devolve o resumo.
 
     O arquivo bruto vai para ``profiles/<nome>/state.json`` — diretório ignorado
@@ -329,93 +323,3 @@ def read_marker_indexeddb(page: Any) -> Optional[str]:
     }""",
         "browserapi-lab",
     )
-
-
-# --------------------------------------------------------------------------
-# SessionManager (compat com browserapi_server.main)
-# --------------------------------------------------------------------------
-
-
-@dataclass
-class ProfileInfo:
-    name: str
-    path: str
-    exists: bool
-
-
-class SessionManager:
-    """Gerenciador leve de perfis de sessão."""
-
-    def __init__(self, profiles_root: Path | str = PROFILES_ROOT):
-        self.profiles_root = Path(profiles_root)
-
-    def list_profiles(self) -> List[ProfileInfo]:
-        """Lista perfis existentes."""
-        result: List[ProfileInfo] = []
-        if self.profiles_root.exists():
-            for entry in sorted(self.profiles_root.iterdir()):
-                if entry.is_dir():
-                    result.append(
-                        ProfileInfo(
-                            name=entry.name,
-                            path=str(entry),
-                            exists=True,
-                        )
-                    )
-        return result
-
-    def get_profile_info(self, name: str) -> Optional[ProfileInfo]:
-        """Retorna informações de um perfil."""
-        path = profile_path(name, self.profiles_root)
-        if path.exists():
-            return ProfileInfo(name=name, path=str(path), exists=True)
-        return None
-
-    def export_storage_state(
-        self, context: Any, profile: str, output_path: Optional[Path] = None
-    ) -> Path:
-        """Exporta o estado de armazenamento de um contexto."""
-        out = output_path or (self.profiles_root / profile / "state.json")
-        out = Path(out)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        from .session import export_state
-
-        export_state(context, path=out)
-        return out
-
-    def import_storage_state(
-        self, context: Any, profile: str, input_path: Path
-    ) -> bool:
-        """Importa o estado de armazenamento para um contexto."""
-        try:
-            context.storage_state(path=str(input_path))
-            return True
-        except Exception:
-            return False
-
-    def clear_profile(self, name: str) -> bool:
-        """Remove um perfil do diretório."""
-        import shutil
-
-        path = profile_path(name, self.profiles_root)
-        if path.exists():
-            shutil.rmtree(path)
-            return True
-        return False
-
-    def delete_profile(self, name: str) -> bool:
-        """Alias para clear_profile."""
-        return self.clear_profile(name)
-
-    def check_session_validity(
-        self, page: Any, expected_url_contains: str = ""
-    ) -> Dict[str, Any]:
-        """Verifica se a sessão está válida."""
-        try:
-            url = page.url
-            ok = True
-            if expected_url_contains and expected_url_contains not in url:
-                ok = False
-            return {"valid": ok, "url": url}
-        except Exception as exc:  # noqa: BLE001
-            return {"valid": False, "error": str(exc)}

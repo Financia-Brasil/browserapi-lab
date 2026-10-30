@@ -247,3 +247,41 @@ class TestAmostrasEstaveis(unittest.TestCase):
         decisao = decide(estado(instavel_há=JANELA + 50), ui(stop=False),
                          WatchConfig(policy='stability_only', stability_window_ms=JANELA))
         self.assertTrue(decisao.done)
+
+
+class TestJanelaDeConfirmacao(unittest.TestCase):
+    """Uma pausa do modelo não pode virar "resposta terminou"."""
+
+    def test_texto_que_volta_a_crescer_continua_a_espera(self):
+        from unittest.mock import patch
+        from browserapi_lab.observer import wait_for_completion
+
+        # Três leituras estáveis, então o texto cresce uma vez, então estabiliza.
+        roteiro = [100, 100, 100, 100, 150, 150, 150, 150, 150, 150, 150, 150]
+        leituras = {'i': 0}
+
+        def estado_falso(page):
+            i = min(leituras['i'], len(roteiro) - 1)
+            leituras['i'] += 1
+            return StreamState(mutation_count=len(roteiro) + 10,
+                               first_token_ms=10.0, last_mutation_ms=1000.0,
+                               since_last_mutation_ms=JANELA + 100,
+                               since_installed_ms=1000.0 + i * 100,
+                               text_len=roteiro[i], text_tail='...')
+
+        class Pagina:
+            def wait_for_timeout(self, ms):
+                pass
+
+        with patch('browserapi_lab.observer.read_state', side_effect=estado_falso), \
+             patch('browserapi_lab.observer.read_ui', return_value=ui(stop=False, copy=True)):
+            observacao = wait_for_completion(
+                Pagina(), WatchConfig(stability_window_ms=JANELA, timeout_ms=60_000,
+                                      min_stable_samples=3, confirm_window_ms=1),
+                '#conversa')
+        self.assertEqual(observacao.status, 'success')
+        # Terminou com o texto MAIOR: a pausa não cortou a resposta.
+        self.assertEqual(observacao.text_len, 150)
+
+    def test_sem_janela_de_confirmacao_o_comportamento_antigo_continua(self):
+        self.assertEqual(WatchConfig().confirm_window_ms, 0.0)

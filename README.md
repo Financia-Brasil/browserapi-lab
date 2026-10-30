@@ -17,6 +17,14 @@ Veja [contrato, ativação e limites](docs/LOCAL_API.md) e
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
+**Novo na 0.13.1:** o envio passou a **colar** o texto de uma vez em qualquer
+chat, em vez de digitar caractere por caractere (era lento e o site recebia a
+mensagem pela metade). Antes de clicar em Enviar, o campo é lido e conferido:
+texto faltando não é enviado, e um balão publicado pela metade é reportado como
+corte, não como sucesso. A resposta ganhou uma **janela de confirmação** para
+não terminar numa pausa do modelo. Detalhes em
+[colar e completude](docs/PASTE_AND_COMPLETENESS.md).
+
 **Novo na 0.13.0:** a API passou a lidar com o que uma CLI manda **antes** da
 primeira pergunta: um pedido medido do Claude Code tem **~46 mil caracteres**
 (system + 12 esquemas de ferramentas) e, num arquivo grande, pode passar de

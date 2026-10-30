@@ -13,7 +13,8 @@ from .config import origin
 from .discovery import ScoredCandidate, install_probe
 from .extractor import html_to_markdown, html_to_text
 from .observer import WatchConfig, install, mark_sent, read_ui, wait_for_completion
-from .sender import SendControlUnavailable, VoiceControlUnavailable, is_voice_control, is_recorded_voice, read_composer, send_message
+from .sender import (MAX_TYPE_CHARS, SendControlUnavailable, VoiceControlUnavailable,
+                     is_voice_control, is_recorded_voice, read_composer, send_message)
 from .validation import response_instruction, select_output
 
 REMEDIES = {
@@ -25,6 +26,8 @@ REMEDIES = {
     'send_is_microphone': ('O controle selecionado ainda é de voz/microfone', 'Nenhum clique foi feito. Use Corrigir campos e autorize o rascunho temporário para apontar o botão no estado Enviar. Confira o rascunho deixado antes de outra tentativa.'),
     'google_login_blocked': ('Google recusou o login neste navegador controlado', 'Não continue o apontamento nem repita o login pelo programa. Não há correção garantida aqui; a proteção do Google não será contornada.'),
     'output_invalid': ('Saída configurada não pôde ser lida', 'Execute repair e aponte uma resposta inteira do assistente.'),
+    'composer_incomplete': ('O campo não aceitou a mensagem inteira', 'Nada foi enviado: o texto foi colocado no campo, conferido, e faltava parte. Acontece com campo que corta texto grande ou editor que ignora colagem. Reduza o texto (ou deixe a API fatiar) e tente de novo; se repetir, use Corrigir campos.'),
+    'send_truncated': ('A mensagem foi enviada pela metade', 'O site publicou só parte do texto. Olhe a conversa antes de repetir: a pergunta que está lá pode estar incompleta. Não reenviamos automaticamente para não duplicar.'),
     'send_unconfirmed': ('Enviamos, mas o site não confirmou a mensagem', 'Olhe a conversa: se a sua mensagem apareceu, o envio funcionou e não é preciso repetir. Se não apareceu, confira login, modelo e o campo apontado. Não reenviamos automaticamente para não duplicar.'),
     'timeout': ('Resposta não confirmada no prazo', 'Confira a página, conexão e modelo. Se respondeu, repare a seleção de saída; não reenviar automaticamente.'),
     'captcha': ('Verificação humana encontrada', 'Resolva a verificação no navegador, sem automatizá-la, e confirme quando terminar.'),
@@ -68,6 +71,9 @@ class ChatResult:
             },
             'scope': 'Uma execução; não garante disponibilidade futura ou funcionamento 24/7.',
         }
+
+# Tempo de silêncio extra depois da estabilidade: uma pausa do modelo não é o fim.
+CONFIRM_WINDOW_MS = 900.0
 
 
 def config_fingerprint(config):
@@ -266,18 +272,38 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         # Mesmo input/fill pode disparar handlers do site. Após editar o
         # composer não garantimos ausência de envio, mesmo sem clicar.
         send_state = 'unknown'
+        # Colar em vez de digitar: um evento de entrada para o texto inteiro.
+        # ``send_message`` escolhe o caminho por tipo de campo, confere que o
+        # campo recebeu TUDO e só então clica — texto parcial nunca é enviado.
         sent = send_message(page, composer, button, prompt,
-                            strategies=('type_contenteditable',) if data.get('contenteditable') in ('true', '') else ('fill',),
                             activation=('click_send',), user_selector=config.user,
                             # Sites reais podem demorar a pintar o balão novo; 5 s
                             # gerava falso "sem confirmação" com o envio feito.
                             verify_timeout_ms=min(9000, config.timeout_ms), before_activate=ready_to_activate,
-                            nonce=request_id)
-        metrics.update(fill_ms=round(sent.fill_ms, 3), send_ms=round(sent.send_ms, 3))
+                            nonce=request_id, max_type_chars=MAX_TYPE_CHARS)
+        metrics.update(fill_ms=round(sent.fill_ms, 3), send_ms=round(sent.send_ms, 3),
+                       filled_chars=sent.filled_chars, expected_chars=sent.expected_chars)
         if sent.attempts:
             send_evidence = sent.attempts[-1].evidence or None
             confirmation_layer = sent.attempts[-1].layer or None
         if not sent.success:
+            if sent.truncated:
+                # O site publicou parte do texto: não é sucesso e não pode reenviar.
+                send_state = 'confirmed'
+                return outcome('send_truncated', diagnostics={
+                    'expected_chars': sent.expected_chars,
+                    'filled_chars': sent.filled_chars,
+                    'evidence': sent.attempts[-1].evidence if sent.attempts else '',
+                })
+            if any((attempt.error or '').startswith('ComposerIncomplete')
+                   for attempt in sent.attempts):
+                # Nada foi clicado: pode tentar de novo sem duplicar.
+                send_state = 'not_sent'
+                return outcome('composer_incomplete', diagnostics={
+                    'expected_chars': sent.expected_chars,
+                    'filled_chars': sent.filled_chars,
+                    'strategies': [attempt.strategy for attempt in sent.attempts],
+                })
             if any(attempt.error == 'VoiceControlUnavailable' for attempt in sent.attempts):
                 return outcome('send_is_microphone')
             if any(attempt.error == 'SendControlUnavailable' for attempt in sent.attempts):
@@ -289,9 +315,14 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
                 raise EOFError('Operação interrompida')
         check_cancel()
         stage('response_wait_ms')
+        # A janela de confirmação é o seguro contra "parou de escrever por 1 s e
+        # já era": se o texto voltar a crescer (ou o botão Stop reaparecer) logo
+        # depois da estabilidade, a espera continua em vez de entregar resposta
+        # pela metade.
         observation = wait_for_completion(page, WatchConfig(stability_window_ms=config.stability_ms,
                                                            timeout_ms=config.timeout_ms,
-                                                           min_stable_samples=3),
+                                                           min_stable_samples=3,
+                                                           confirm_window_ms=CONFIRM_WINDOW_MS),
                                           config.root, on_poll=check_cancel)
         if observation.status != 'success':
             block = read_ui(page, config.root).blocking
@@ -326,7 +357,11 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         sent_ms = summary.get('sent_ms')
         metrics.update({
             'ttft_dom_ms': round(max(0, first - sent_ms), 1) if first is not None and sent_ms is not None else None,
-            'capture_overhead_ms': summary.get('since_last_mutation_ms'),
+            # Custo da captura medido no instante da decisão de término; a janela
+            # de confirmação (espera de propósito) não entra nesta conta.
+            'capture_overhead_ms': (observation.settle_overhead_ms
+                                    if observation.settle_overhead_ms is not None
+                                    else summary.get('since_last_mutation_ms')),
         })
         outcome('success', True, answer=answer, request_id=request_id)
         result.stage = 'completed'
