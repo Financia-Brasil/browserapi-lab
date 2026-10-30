@@ -371,6 +371,19 @@ class TestRascunhoFalso(unittest.TestCase):
         self.assertIn(r"out += '\n'", COMPOSER_TEXT_JS)
         self.assertNotIn("out += '\n'", COMPOSER_TEXT_JS)
 
+    def test_o_campo_pode_carregar_data_placeholder_e_ainda_ter_texto(self):
+        r"""Quill e outros editores põem ``data-placeholder`` no PRÓPRIO campo.
+
+        Tratar isso como "é um nó de placeholder" fazia o texto real sumir e o
+        envio virar ``composer_incomplete`` (3 testes de contenteditable no CI).
+        A dica só é descartada quando o texto é exatamente a dica.
+        """
+        from browserapi_lab.sender import COMPOSER_TEXT_JS
+        # O campo não é descartado por ter a dica; a comparação fica no fim.
+        self.assertNotIn("if (skipped(el)) return", COMPOSER_TEXT_JS)
+        self.assertIn("aria-hidden') === 'true') return ''", COMPOSER_TEXT_JS)
+        self.assertIn("out.trim() === hint", COMPOSER_TEXT_JS)
+
     def test_js_de_leitura_e_javascript_valido(self):
         r"""O JS de leitura roda no navegador: se ele não compila, o campo é lido
         como vazio e todo envio vira ``composer_incomplete`` (foi o que

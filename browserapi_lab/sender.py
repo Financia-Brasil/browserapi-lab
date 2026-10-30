@@ -292,8 +292,14 @@ COMPOSER_TEXT_JS = r"""(el) => {
     return !!(cls && (cls.contains('placeholder') || cls.contains('is-empty') ||
                       cls.contains('ProseMirror-trailingBreak')));
   };
-  // O próprio campo pode ser o nó de placeholder (``is-empty``/``data-placeholder``).
-  if (skipped(el)) return '';
+  // O campo em si costuma ser justamente quem carrega ``data-placeholder``
+  // (Quill, editores de chat). Isso NÃO o torna um placeholder: quando ele tem
+  // texto de verdade, o texto é rascunho. Só ``aria-hidden`` invalida o campo,
+  // e a dica de placeholder é comparada com o texto no fim.
+  if (el.getAttribute('aria-hidden') === 'true') return '';
+  const hint = ['data-placeholder', 'aria-placeholder', 'placeholder']
+    .map((name) => (el.getAttribute(name) || '').trim())
+    .find((value) => value.length > 0) || '';
   const block = /^(P|DIV|LI|PRE|BLOCKQUOTE)$/;
   let out = '';
   const walk = (node) => {
@@ -307,6 +313,9 @@ COMPOSER_TEXT_JS = r"""(el) => {
     for (const child of node.childNodes) walk(child);
   };
   for (const child of el.childNodes) walk(child);
+  // Texto que é só a dica do próprio campo (placeholder renderizado como
+  // nó de texto) não conta como rascunho.
+  if (hint && out.trim() === hint) return '';
   return out;
 }"""
 
