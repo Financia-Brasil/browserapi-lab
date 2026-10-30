@@ -86,6 +86,10 @@ class ChatConfig:
     voice_signature: str = ''
     personal_installation: str = 'chrome'
     personal_profile: str = ''
+    # Depuração do Chrome configurada UMA vez: porta fixa do atalho e permissão
+    # para abrir o Chrome sozinho quando a porta não estiver de pé.
+    debug_port: int = 0
+    auto_launch: bool = False
 
     def validate(self):
         from .profiles import CHROME_INSTALLATIONS, profile_name
@@ -107,6 +111,13 @@ class ChatConfig:
             raise ValueError('Modo de sessão inválido.')
         if self.session_mode == 'existing_chrome' and self.browser != 'chrome':
             raise ValueError('Sessão existente exige Google Chrome.')
+        if type(self.debug_port) is not int or not (self.debug_port == 0
+                                                    or 1024 <= self.debug_port <= 65535):
+            raise ValueError('Porta de depuração inválida (deixe 0 para automática).')
+        if type(self.auto_launch) is not bool:
+            raise ValueError('Opção de abrir o Chrome sozinho inválida.')
+        if self.session_mode != 'existing_chrome' and (self.debug_port or self.auto_launch):
+            raise ValueError('Depuração só existe na conexão ao Chrome já aberto.')
         if self.schema_version != 1 or type(self.schema_version) is not int:
             raise ValueError('Versão da configuração incompatível.')
         if self.browser == 'custom':

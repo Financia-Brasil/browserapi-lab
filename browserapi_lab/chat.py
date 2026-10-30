@@ -14,14 +14,15 @@ from .discovery import ScoredCandidate, install_probe
 from .extractor import html_to_markdown, html_to_text
 from .observer import WatchConfig, install, mark_sent, read_ui, wait_for_completion
 from .sender import (MAX_TYPE_CHARS, SendControlUnavailable, VoiceControlUnavailable,
-                     is_voice_control, is_recorded_voice, read_composer, send_message)
+                     composer_has_text, is_voice_control, is_recorded_voice,
+                     normalize_text, read_composer, send_message)
 from .validation import response_instruction, select_output
 
 REMEDIES = {
     'not_configured': ('Configuração incompleta', 'Execute configure ou repair e aponte os campos na página.'),
     'wrong_origin': ('Página diferente da configurada', 'O endereço aberto não é o salvo. Volte à aba do chat. Se a Arena mudou de lmarena.ai para arena.ai, conecte de novo e confirme a migração: os campos já apontados são mantidos.'),
     'composer_missing': ('Campo de mensagem não encontrado ou ambíguo', 'Execute repair e clique no campo de mensagem correto.'),
-    'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo.'),
+    'draft_present': ('Há um rascunho no campo', 'Envie ou remova o rascunho manualmente antes de tentar de novo. Se o campo parece vazio, o site deixou um placeholder ou um espaço invisível: use Corrigir campos para reapontar o campo.'),
     'send_missing': ('Botão Enviar não ficou disponível com segurança', 'Após preencher, o botão precisa estar visível, habilitado e ser único. Pode ter ficado um rascunho: confira a página antes de tentar de novo. Se necessário, use Corrigir campos.'),
     'send_is_microphone': ('O controle selecionado ainda é de voz/microfone', 'Nenhum clique foi feito. Use Corrigir campos e autorize o rascunho temporário para apontar o botão no estado Enviar. Confira o rascunho deixado antes de outra tentativa.'),
     'google_login_blocked': ('Google recusou o login neste navegador controlado', 'Não continue o apontamento nem repita o login pelo programa. Não há correção garantida aqui; a proteção do Google não será contornada.'),
@@ -83,6 +84,10 @@ def config_fingerprint(config):
         value.pop('personal_installation',None)
     if not value.get('personal_profile'):
         value.pop('personal_profile',None)
+    # Porta e abertura automática são ajustes de conexão, não do mapeamento:
+    # mudá-los não pode invalidar um recibo já feito.
+    value.pop('debug_port', None)
+    value.pop('auto_launch', None)
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
@@ -93,6 +98,8 @@ def browser_config(config, root, headless=False):
                          attach_existing_chrome=config.session_mode == 'existing_chrome',
                          existing_installation=config.personal_installation,
                          existing_profile=config.personal_profile,
+                         existing_debug_port=config.debug_port,
+                         existing_auto_launch=config.auto_launch,
                          executable_path=config.executable if config.browser == 'custom' else None)
 
 
@@ -111,7 +118,13 @@ def google_login_blocked(page):
     return any(notice.nth(i).is_visible() for i in range(min(notice.count(), 10)))
 
 
-def preflight(page, config):
+def preflight(page, config, pending=None):
+    """Checagens antes de digitar. ``pending`` é o texto que se pretende enviar.
+
+    Rascunho **igual** ao texto pedido não é problema: é o que sobrou de uma
+    tentativa anterior (envio ambíguo, recarga no meio). Nesse caso seguimos e o
+    envio reaproveita/limpa o campo, em vez de parar numa mensagem sem saída.
+    """
     if google_login_blocked(page):
         return 'google_login_blocked'
     if not config.ready:
@@ -132,8 +145,11 @@ def preflight(page, config):
     # A validação rigorosa do botão ocorre após preencher, antes de clicar.
     if not page.locator(config.composer).is_editable():
         return 'composer_missing'
-    if read_composer(page.locator(config.composer)):
-        return 'draft_present'
+    if composer_has_text(page.locator(config.composer)):
+        current = normalize_text(read_composer(page.locator(config.composer)) or '')
+        wanted = normalize_text(pending or '')
+        if not (wanted and current in (wanted, wanted[:len(current)]) and len(current) > 0):
+            return 'draft_present'
     try:
         if page.locator(config.root).count() != 1:
             return 'output_invalid'
@@ -225,7 +241,7 @@ def exchange(page, config, text=None, *, authorized=False, health_check=False, c
         if cancelled and cancelled():
             raise EOFError('Operação interrompida')
         config.validate()
-        problem = preflight(page, config)
+        problem = preflight(page, config, pending=text)
         if problem:
             diagnostics = {}
             if problem == 'wrong_origin':

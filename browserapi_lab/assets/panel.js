@@ -66,6 +66,7 @@ function controls() {
   $('cancel').disabled = !busy();
   for (const button of $('chats').querySelectorAll('button,input')) button.disabled = busy() || incompatible();
   conversationControls();
+  renderDebug();
 }
 function conversationSummary() {
   return (state?.chats || []).find(chat => chat.name === selected)?.conversation || null;
@@ -276,7 +277,7 @@ function renderChats(chats) {
     const label = document.createElement('label');
     const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'saved-chat';
     radio.value = chat.name; radio.checked = chat.name === selected;
-    radio.onchange = () => { selected = chat.name; $('conversation-feedback').textContent = ''; controls(); loadConversation(); };
+    radio.onchange = () => { selected = chat.name; debugEdited = false; $('conversation-feedback').textContent = ''; controls(); loadConversation(); };
     label.append(radio, document.createTextNode(chat.name)); box.append(label);
     const info = document.createElement('small');
     info.textContent = chat.invalid ? 'Configuração inválida. Crie outra com um nome diferente.' :
@@ -673,7 +674,7 @@ async function openProfile(destination){
   pending=true;controls();profileFeedback('Pedindo ao Chrome para abrir o perfil…');
   try{
     await api('profile',{profile:$('personal-profile').value,destination,provider:$('provider').value,url:$('url').value});
-    profileFeedback(destination==='permission'?'No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e conecte.':'Chrome solicitado. Confira sua conta e clique em Conectar.');
+    profileFeedback(destination==='permission'?'No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Isso vale só para esta sessão: para não repetir, use “Configurar uma vez”.':'Chrome solicitado. Confira sua conta e clique em Conectar.');
   }catch(err){profileFeedback(err.message,true);}
   finally{pending=false;controls();}
 }
@@ -681,6 +682,58 @@ $('personal-profile').onchange=()=>{profileFeedback('');profileNote();};
 $('scan-profiles').onclick=scanProfiles;
 $('open-profile').onclick=()=>openProfile('chat');
 $('open-permission').onclick=()=>openProfile('permission');
+
+/* Depuração do Chrome configurada UMA VEZ.
+ * Relato: era preciso reabrir chrome://inspect/#remote-debugging a cada sessão.
+ * Com porta fixa, o atalho "Chrome com depuração" deixa o navegador pronto e a
+ * conexão só se conecta. O campo vazio volta ao modo manual (sessão atual). */
+let debugEdited = false;
+function selectedChat() { return (state?.chats || []).find(chat => chat.name === selected) || null; }
+function debugFeedback(text, failed = false) {
+  $('debug-feedback').textContent = text;
+  $('debug-feedback').hidden = !text;
+  $('debug-feedback').dataset.error = String(failed);
+}
+function renderDebug() {
+  const chat = selectedChat();
+  const personal = !!chat && chat.session_mode === 'existing_chrome' && !chat.invalid;
+  const port = personal && chat.debug_port ? chat.debug_port : 0;
+  if (!debugEdited) {
+    if (document.activeElement !== $('debug-port')) $('debug-port').value = port ? String(port) : '';
+    $('debug-auto').checked = personal && !!chat.auto_launch;
+  }
+  $('debug-badge').textContent = port ? 'Configurada' : 'Manual';
+  $('debug-status').textContent = !chat ? 'Selecione um chat em Conexões para aplicar aqui.' :
+    !personal ? `${chat.name} usa um perfil separado do BrowserAPI: a depuração do seu Chrome não se aplica.` :
+    port ? `${chat.name}: porta ${port}${chat.auto_launch ? ' · o Chrome é aberto sozinho quando estiver fechado' : ''}. Sem permissão manual a cada sessão.` :
+    `${chat.name}: modo manual — cada sessão usa a conexão temporária do Chrome.`;
+  $('debug-target').textContent = personal
+    ? 'O atalho “Chrome com depuração” abre o mesmo Chrome e o mesmo perfil de sempre. Nada é copiado.'
+    : '';
+  $('debug-install').disabled = busy() || incompatible() || !personal;
+  $('debug-port').disabled = busy() || incompatible() || !personal;
+  $('debug-auto').disabled = busy() || incompatible() || !personal || !$('debug-port').value.trim();
+}
+$('debug-port').addEventListener('input', () => { debugEdited = true; renderDebug(); });
+$('debug-auto').addEventListener('change', () => { debugEdited = true; });
+$('debug-install').onclick = async () => {
+  const chat = selectedChat();
+  if (!chat || busy() || incompatible()) return;
+  pending = true; controls(); debugFeedback('Configurando…');
+  try {
+    const data = await api('chrome-debug', {name: chat.name, port: $('debug-port').value.trim(),
+      auto_launch: $('debug-auto').checked, install: true});
+    debugEdited = false;
+    debugFeedback(data.message || 'Depuração configurada nesta conexão.');
+    await refresh();
+  } catch (err) { debugFeedback(err.message, true); }
+  finally { pending = false; controls(); }
+};
+$('open-debug-once').onclick = () => {
+  navigate('settings');
+  $('debug-card').scrollIntoView({block: 'center'});
+  $('debug-port').focus({preventScroll: true});
+};
 let serviceSignature='';
 function renderService(value){
   const a=value.api_service || {};

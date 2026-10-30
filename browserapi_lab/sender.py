@@ -271,18 +271,65 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
 # Preenchimento e ativação
 # --------------------------------------------------------------------------
 
-def read_composer(locator: Any) -> Optional[str]:
-    """Texto que está no campo agora.
+# Leitura do campo sem contar o que NÃO é rascunho.
+#
+# Editores ricos deixam lixo no campo vazio: ProseMirror/Quill põem
+# ``<p><br></p>``, outros põem um nó de placeholder com texto. Ler
+# ``innerText``/``textContent`` cru devolvia ``"\n"`` (ou o texto do
+# placeholder) — e o programa concluía "Há um rascunho no campo" com o campo
+# vazio, parando antes de enviar. Percorrer a árvore ignorando placeholders,
+# ``<br>`` e nós escondidos resolve, e ainda preserva as quebras de linha.
+COMPOSER_TEXT_JS = """(el) => {
+  if (!el) return null;
+  if (!el.isContentEditable) return el.value ?? '';
+  const skipped = (node) => {
+    if (node.nodeType !== 1) return false;
+    if (node.getAttribute('aria-hidden') === 'true') return true;
+    if (node.hasAttribute('data-placeholder')) return true;
+    const cls = node.classList;
+    return !!(cls && (cls.contains('placeholder') || cls.contains('is-empty') ||
+                      cls.contains('ProseMirror-trailingBreak')));
+  };
+  const block = /^(P|DIV|LI|PRE|BLOCKQUOTE)$/;
+  let out = '';
+  const walk = (node) => {
+    if (node.nodeType === 3) { out += node.nodeValue; return; }
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName;
+    if (tag === 'BR') { out += '\n'; return; }
+    if (tag === 'SCRIPT' || tag === 'STYLE' || skipped(node)) return;
+    const isBlock = block.test(tag);
+    if (isBlock && out && !out.endsWith('\n')) out += '\n';
+    for (const child of node.childNodes) walk(child);
+  };
+  for (const child of el.childNodes) walk(child);
+  return out;
+}"""
 
-    ``innerText`` (e não ``textContent``) em ``contenteditable``: editores ricos
-    representam a quebra de linha com ``<div>``/``<br>``, e o ``textContent``
-    colaria tudo numa linha só, fazendo a conferência do texto falhar.
+
+def read_composer(locator: Any) -> Optional[str]:
+    """Texto que está no campo agora — sem placeholder e sem nós invisíveis.
+
+    ``None`` significa "não consegui ler" (página trocando, seletor errado), o
+    que é diferente de campo vazio. Quem decide se há rascunho usa
+    :func:`composer_has_text`, que normaliza.
     """
     try:
-        return locator.evaluate(
-            "el => el.isContentEditable ? (el.innerText ?? el.textContent) : el.value")
+        value = locator.evaluate(COMPOSER_TEXT_JS)
     except Exception:
         return None
+    return value if isinstance(value, str) else None
+
+
+def composer_has_text(locator: Any) -> bool:
+    """Há texto de verdade no campo?
+
+    Campo de editor rico "vazio" costuma conter ``<p><br></p>`` ou um nó de
+    placeholder; isso NÃO é rascunho. Era esta a causa do falso "Há um rascunho
+    no campo" que travava o envio logo depois do mapeamento.
+    """
+    current = read_composer(locator)
+    return bool(normalize_text(current or ''))
 
 
 def composer_matches(locator: Any, text: str) -> Tuple[bool, int]:

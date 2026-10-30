@@ -51,6 +51,8 @@ class TestProfiles(unittest.TestCase):
         from dataclasses import asdict
         config=ChatConfig('saved','https://example.com')
         old=asdict(config);old.pop('personal_installation');old.pop('personal_profile')
+        # Ajustes de conexão não fazem parte do recibo antigo.
+        old.pop('debug_port');old.pop('auto_launch')
         self.assertEqual(config_fingerprint(config),hashlib.sha256(json.dumps(old,sort_keys=True).encode()).hexdigest())
         config.personal_profile='Profile 1'
         self.assertNotEqual(config_fingerprint(config),hashlib.sha256(json.dumps(old,sort_keys=True).encode()).hexdigest())

@@ -1,5 +1,5 @@
 import unittest
-from browserapi_lab.sender import evidence_of_send, control_kind, normalize_text
+from browserapi_lab.sender import evidence_of_send, control_kind, normalize_text, read_composer
 
 class TestEvidence(unittest.TestCase):
     def test_no_message_is_failure(self):
@@ -103,7 +103,7 @@ if __name__ == '__main__':
 from unittest.mock import patch
 from browserapi_lab.discovery import ScoredCandidate
 from browserapi_lab.sender import (send_message, looks_truncated, composer_matches,
-                                   STRATEGIES_BY_KIND, MAX_TYPE_CHARS)
+                                   composer_has_text, STRATEGIES_BY_KIND, MAX_TYPE_CHARS)
 
 
 class FakeKeyboard:
@@ -320,3 +320,40 @@ class TestCorte(unittest.TestCase):
                                       'a' * 1000, composer_cleared=True)
         self.assertFalse(ok)
         self.assertIn('CORTADA', motivo)
+
+
+class TestRascunhoFalso(unittest.TestCase):
+    """O relato: "Há um rascunho no campo" com o campo vazio, logo após mapear.
+
+    Editores ricos deixam ``<p><br></p>`` ou um nó de placeholder dentro do
+    campo. Ler ``innerText`` cru devolvia ``"\\n"`` (ou o texto do placeholder),
+    que é verdadeiro em Python — e o envio parava antes de digitar.
+    """
+
+    class Campo:
+        def __init__(self, value):
+            self.value = value
+
+        def evaluate(self, script, arg=None):
+            return self.value
+
+    def test_campo_com_quebra_de_linha_sobrando_nao_e_rascunho(self):
+        for vazio in ('\n', '   ', '\u200b', '\u00a0\n\u200b', ''):
+            self.assertFalse(composer_has_text(self.Campo(vazio)), repr(vazio))
+
+    def test_texto_de_verdade_continua_sendo_rascunho(self):
+        self.assertTrue(composer_has_text(self.Campo('rascunho que a pessoa digitou')))
+
+    def test_leitura_impossivel_nao_vira_rascunho(self):
+        class Quebrado:
+            def evaluate(self, script, arg=None):
+                raise RuntimeError('página trocando')
+        self.assertIsNone(read_composer(Quebrado()))
+        self.assertFalse(composer_has_text(Quebrado()))
+
+    def test_leitura_ignora_placeholder_e_br(self):
+        # O JS de leitura é o que roda de verdade no navegador; aqui garantimos
+        # que ele menciona as regras que evitam o falso rascunho.
+        from browserapi_lab.sender import COMPOSER_TEXT_JS
+        for marcador in ('data-placeholder', 'aria-hidden', 'is-empty', 'BR'):
+            self.assertIn(marcador, COMPOSER_TEXT_JS)
