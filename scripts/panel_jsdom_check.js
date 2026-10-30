@@ -74,6 +74,9 @@ async function main() {
     let data = {ok: true};
     if (url === '/api/state') data = current;
     if (url === '/api/profiles') data = {profiles: []};
+    if (url === '/api/chrome-debug') data = {ok: true, port: 9222, auto_launch: true,
+      installed: true, listening: false, saved: body.name,
+      message: 'Atalho criado para a porta 9222.'};
     if (url === '/api/url-check') {
       const text = String(body.url || '');
       const good = text.endsWith('/v1/chat/completions');
@@ -182,6 +185,46 @@ async function main() {
   await settle();
   check('com a API ligada, o passo é copiar o endereço',
     q('quick-action').textContent === 'Copiar endereço', q('quick-action').textContent);
+
+  // Depuração do Chrome: configurar UMA vez em vez de reabrir chrome://inspect.
+  current = state({chats: [{name: 'meu-gemini', provider: 'gemini', browser: 'chrome',
+    session_mode: 'existing_chrome', compatible: true, debug_port: 0, auto_launch: false,
+    conversation: {turns: 0, revision: 0}}]});
+  win.__harness.refresh();
+  await settle();
+  check('depuração: começa no modo manual', q('debug-badge').textContent === 'Manual'
+    && q('debug-port').value === '' && q('debug-install').disabled === false,
+    [q('debug-badge').textContent, q('debug-port').value]);
+  q('debug-port').value = '9222';
+  q('debug-port').dispatchEvent(new win.Event('input'));
+  q('debug-auto').checked = true;
+  q('debug-install').click();
+  await settle();
+  const debugRequest = requests.filter(item => item.url === '/api/chrome-debug').at(-1);
+  check('configurar uma vez manda porta, atalho e conexão',
+    !!debugRequest && debugRequest.body.port === '9222'
+    && debugRequest.body.auto_launch === true && debugRequest.body.name === 'meu-gemini'
+    && debugRequest.body.install === true, debugRequest && debugRequest.body);
+  check('resposta da depuração aparece na tela',
+    q('debug-feedback').textContent.includes('porta 9222'),
+    q('debug-feedback').textContent);
+  // Conexão já configurada: o painel confirma em vez de pedir o passo manual.
+  current = state({chats: [{name: 'meu-gemini', provider: 'gemini', browser: 'chrome',
+    session_mode: 'existing_chrome', compatible: true, debug_port: 9222, auto_launch: true,
+    conversation: {turns: 0, revision: 0}}]});
+  win.__harness.refresh();
+  await settle();
+  check('depuração configurada é mostrada e não pede nada',
+    q('debug-badge').textContent === 'Configurada' && q('debug-port').value === '9222'
+    && q('debug-auto').checked && q('debug-status').textContent.includes('Sem permissão manual'),
+    [q('debug-badge').textContent, q('debug-port').value, q('debug-status').textContent]);
+  current = state({chats: [{name: 'outro', provider: 'gemini', browser: 'chromium',
+    session_mode: 'dedicated', conversation: {turns: 0, revision: 0}}]});
+  win.__harness.refresh();
+  await settle();
+  check('conexão de perfil separado não oferece depuração do Chrome',
+    q('debug-install').disabled && q('debug-status').textContent.includes('perfil separado'),
+    [q('debug-install').disabled, q('debug-status').textContent]);
 
   console.log(failures.length ? '\n' + failures.length + ' falha(s)' : '\ntodas as checagens do painel passaram');
   process.exit(failures.length ? 1 : 0);

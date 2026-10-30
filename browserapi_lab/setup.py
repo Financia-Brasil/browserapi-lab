@@ -366,11 +366,12 @@ def repair_fields(page, config, ask=input, tell=print, picker=pick, draft_previe
             if key == 'send' and draft_preview and confirmed(ask,
                     'Autoriza um rascunho temporário SEM enviar, para o microfone virar Enviar?'):
                 from .sender import read_composer
+                from .sender import composer_has_text
                 composer = page.locator(config.composer)
                 if composer.count() != 1 or not composer.is_editable():
                     tell('Primeiro aponte um campo de mensagem editável. Nenhum rascunho foi escrito.')
                     return
-                if read_composer(composer):
+                if composer_has_text(composer):
                     tell('Seu rascunho será preservado. Aponte o botão Enviar, não o microfone.')
                 else:
                     temporary = True
@@ -516,6 +517,23 @@ def authorize_session(config, ask, tell):
     tell('Vamos reaproveitar o chat aberto ou abrir uma aba para você. Confira a conta no Chrome antes de continuar.')
     if not confirmed(ask, 'Conectar ao seu Chrome?' + profile + ' A permissão permite acesso às abas e contas desse navegador. Nada será enviado sem sua autorização.'):
         return False
+    # Porta de depuração configurada uma vez: nada de reabrir chrome://inspect.
+    if config.debug_port:
+        from . import persistent_chrome
+        from .browser import chrome_executable
+        from .existing_chrome import ExistingChromeError
+        from .profiles import installation_root
+        try:
+            found = persistent_chrome.ensure(
+                config.debug_port,
+                executable=chrome_executable(),
+                user_data_dir=installation_root(config.personal_installation),
+                auto_launch=bool(config.auto_launch),
+                installation=config.personal_installation)
+        except persistent_chrome.PersistentChromeError as problem:
+            raise ExistingChromeError(str(problem)) from None
+        tell(f'Depuração já configurada ({found["source"]}). Não é preciso reabrir nenhuma permissão.')
+        return True
     if config.personal_profile:
         from .existing_chrome import endpoint, ExistingChromeError
         try:
@@ -527,7 +545,7 @@ def authorize_session(config, ask, tell):
             if selected is None:
                 raise ExistingChromeError('O perfil escolhido não está disponível. Atualize a lista e escolha seu perfil novamente.')
             open_profile(selected['id'], 'chrome://inspect/#remote-debugging')
-            ask('No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e clique em Continuar. Essa permissão é configurada uma vez; use Chrome 144 ou mais recente. ')
+            ask('No Chrome que abriu, digite chrome://inspect/#remote-debugging na barra de endereço (o Chrome não deixa programas abrirem essa página) e ative a Depuração remota. Depois volte e clique em Continuar. Para não repetir isso a cada sessão, use a opção de configurar a depuração uma vez no painel. ')
             endpoint(installation=config.personal_installation)
     return True
 

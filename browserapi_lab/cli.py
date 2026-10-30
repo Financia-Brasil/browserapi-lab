@@ -49,6 +49,14 @@ def build_parser() -> argparse.ArgumentParser:
         command = sub.add_parser(name, help=help_text)
         command.add_argument("name", help="nome salvo do chat, por exemplo meu-gemini")
     sub.add_parser("chats", help="listar chats configurados, sem abrir navegador")
+    debug = sub.add_parser("chrome-debug",
+                           help="configura a depuração do Chrome UMA vez (atalho com porta fixa)")
+    debug.add_argument("--port", type=int, default=9222,
+                       help="porta local de depuração (padrão 9222, só 127.0.0.1)")
+    debug.add_argument("--open", action="store_true",
+                       help="abre o Chrome agora, já com a porta ligada")
+    debug.add_argument("--print", dest="show", action="store_true",
+                       help="só mostra o atalho que seria criado; não grava nada")
     return parser
 
 
@@ -63,6 +71,44 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         path.write_text(json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"relatorio JSON gravado em: {path}")
     # Nao e falha: o doctor apenas diagnostica.
+    return 0
+
+
+def cmd_chrome_debug(args: argparse.Namespace) -> int:
+    from . import persistent_chrome
+    from .browser import chrome_executable
+    from .profiles import installation_root
+
+    executable = chrome_executable()
+    user_data_dir = installation_root("chrome")
+    if not executable:
+        print("Chrome não encontrado. Instale o Google Chrome e tente de novo.")
+        return 1
+    script = persistent_chrome.launcher_script(executable, user_data_dir, args.port)
+    if args.show:
+        print(script)
+        return 0
+    try:
+        paths = persistent_chrome.install(executable, user_data_dir, port=args.port)
+    except persistent_chrome.PersistentChromeError as problem:
+        print(f"Não foi possível criar o atalho: {problem}")
+        return 1
+    print("Depuração configurada uma vez:")
+    print(f"  atalho de terminal : {paths['launcher']}")
+    print(f"  atalho de aplicativo: {paths['desktop']}")
+    print(f"  porta local         : 127.0.0.1:{args.port}")
+    print(f"  perfil do Chrome    : {user_data_dir}")
+    print()
+    print("Abra o Chrome por esse atalho e faça login uma vez. Nas próximas vezes,")
+    print("o programa só se conecta — sem reabrir chrome://inspect.")
+    print("Feche as outras janelas desse Chrome antes de usar o atalho.")
+    if args.open:
+        try:
+            address = persistent_chrome.start(executable, user_data_dir, args.port)
+        except persistent_chrome.PersistentChromeError as problem:
+            print(f"O Chrome não abriu com a porta: {problem}")
+            return 1
+        print(f"Chrome aberto e respondendo em {address}")
     return 0
 
 
@@ -87,6 +133,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 2
         print(json.dumps(summary, indent=2, ensure_ascii=False))
         return 0 if summary["passed"] else 1
+    if args.command == "chrome-debug":
+        return cmd_chrome_debug(args)
     if args.command in ("configure", "repair", "check", "status", "ask", "chats"):
         from .config import ConfigStore, DEFAULT_CONFIG_DIR
         from .setup import configure, check, status

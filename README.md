@@ -17,6 +17,14 @@ Veja [contrato, ativação e limites](docs/LOCAL_API.md) e
 Todas as versões ficam em [Releases](https://github.com/Financia-Brasil/browserapi-lab/releases). A pasta `downloads/`
 deste código é histórica (0.3.1): não use os arquivos dela.
 
+**Novo na 0.13.7:** o falso **“Há um rascunho no campo”** acabou — o campo é lido
+ignorando placeholder e lixo de editor rico, então campo vazio envia. E a
+**depuração do Chrome** passou a ser configurada **uma vez**: em Configurações →
+*Depuração do Chrome, uma vez*, informe a porta (9222) e clique em *Configurar
+uma vez*; o atalho **Chrome com depuração** abre seu Chrome já pronto (mesmo
+perfil, nada copiado, porta só em 127.0.0.1) e a conexão pode até abrir o
+navegador sozinha. Sem isso, tudo continua como antes.
+
 **Novo na 0.13.1:** o envio passou a **colar** o texto de uma vez em qualquer
 chat, em vez de digitar caractere por caractere (era lento e o site recebia a
 mensagem pela metade). Antes de clicar em Enviar, o campo é lido e conferido:

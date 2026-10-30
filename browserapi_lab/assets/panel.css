@@ -48,6 +48,11 @@
 .chat button.danger{color:#8d3a2c}
 .chat button.danger:hover:not(:disabled){background:#f7ece9}
 .switch{display:flex;align-items:center;gap:8px;font-size:13px;max-width:320px}
+.debug-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:8px 16px;align-items:end}
+.debug-fields label{margin:16px 0 8px}
+#debug-port{max-width:140px}
+#debug-card .actions{margin-top:16px}
+@media(max-width:640px){.debug-fields{grid-template-columns:1fr}}
 .settings-note{margin-top:16px}
 .settings-note summary{font-size:12px;color:var(--muted);cursor:pointer}
 .settings-note small{display:block;margin-top:8px;color:var(--muted);line-height:1.5}

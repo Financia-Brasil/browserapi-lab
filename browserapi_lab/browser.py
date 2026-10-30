@@ -51,10 +51,47 @@ class BrowserConfig:
     attach_existing_chrome: bool = False
     existing_installation: str = "chrome"
     existing_profile: str = ""
+    # Depuração configurada uma vez: porta fixa e permissão de abrir o Chrome.
+    existing_debug_port: int = 0
+    existing_auto_launch: bool = False
 
     @property
     def profile_dir(self) -> Path:
         return ensure_profile(self.profile, self.profiles_root)
+
+
+CHROME_CANDIDATES = ('google-chrome', 'google-chrome-stable', 'google-chrome-beta',
+                     'chromium', 'chromium-browser')
+CHROME_PATHS = ('/opt/google/chrome/chrome', '/usr/bin/google-chrome',
+                '/usr/bin/google-chrome-stable', '/usr/bin/chromium',
+                '/snap/bin/chromium', '/usr/bin/chromium-browser')
+
+
+def chrome_executable(config: Any = None) -> str:
+    """Caminho do Chrome do sistema, para abrir com a porta de depuração.
+
+    Sem isso, o atalho "configurar uma vez" não tem o que executar. Ordem:
+    caminho configurado, binário no PATH, caminhos conhecidos do Linux.
+    """
+    # ChatConfig guarda o caminho em ``executable``; o BrowserConfig em
+    # ``executable_path``. Aceitar os dois evita um atalho sem executável.
+    explicit = None
+    if config is not None:
+        explicit = (getattr(config, "executable_path", None)
+                    or getattr(config, "executable", None))
+    if explicit:
+        path = Path(str(explicit)).expanduser()
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    for name in CHROME_CANDIDATES:
+        found = shutil.which(name)
+        if found:
+            return found
+    for candidate in CHROME_PATHS:
+        path = Path(candidate)
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return ''
 
 
 def chromium_available(channel: Optional[str] = None) -> bool:
@@ -179,7 +216,7 @@ class BrowserSession:
             raise ExistingChromeError('Escolha um perfil na lista antes de conectar. Não assumimos que o Chrome concedeu a conta desejada.')
         directory = profile_name(self.config.existing_profile)
         # Falhar aqui não deixa nenhuma aba aberta no navegador pessoal.
-        address = endpoint() if installation == 'chrome' else endpoint(installation=installation)
+        address = self._debug_endpoint(installation, directory)
         self._attached_browser = self._pw.chromium.connect_over_cdp(address, timeout=60000)
         contexts = self._attached_browser.contexts
         if len(contexts) != 1:
@@ -209,6 +246,32 @@ class BrowserSession:
         self._context = ctx
         self._context.set_default_timeout(self.config.timeout_ms)
         self._cold_start_ms = (time.perf_counter() - started) * 1000
+
+    def _debug_endpoint(self, installation: str, directory: str) -> str:
+        """Endereço de depuração: porta configurada primeiro, sessão depois.
+
+        Com a porta fixa (atalho criado uma vez), não é preciso reabrir
+        ``chrome://inspect`` a cada sessão. Se a conexão autorizou abrir o Chrome
+        sozinho, ele é aberto aqui — no perfil dedicado, nunca no pessoal.
+        """
+        from . import persistent_chrome
+        from .existing_chrome import ExistingChromeError
+        from .profiles import installation_root
+        port = self.config.existing_debug_port
+        executable = chrome_executable(self.config)
+        try:
+            found = persistent_chrome.ensure(
+                port or persistent_chrome.DEFAULT_PORT,
+                executable=executable,
+                # A MESMA pasta de dados do Chrome escolhido: é o que a prova em
+                # chrome://version compara. Nada de copiar ou duplicar perfil.
+                user_data_dir=installation_root(installation),
+                auto_launch=bool(self.config.existing_auto_launch),
+                installation=installation)
+        except persistent_chrome.PersistentChromeError as problem:
+            raise ExistingChromeError(str(problem)) from None
+        self._debug_source = found.get('source', '')
+        return found['address']
 
     def _open_chat_natively(self, ctx: Any, url: str) -> Any:
         """Abrir o chat no perfil escolhido pelo próprio Chrome, não por createTarget.

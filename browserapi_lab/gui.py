@@ -255,6 +255,88 @@ class Panel:
             self.cancelled.set()
             self.condition.notify_all()
 
+    def chrome_debug(self, payload):
+        """Depuração do Chrome configurada **uma vez** (atalho + porta fixa).
+
+        Relato: *"melhorar esse negócio de tá manualmente permitindo a depuração
+        do navegador toda vez"*. Aqui a decisão fica salva na conexão
+        (``debug_port``/``auto_launch``) e o atalho é gravado no disco — abrir o
+        Chrome por ele não pede mais ``chrome://inspect`` a cada sessão.
+
+        Não abre navegador, não altera perfil e não envia mensagem.
+        """
+        from dataclasses import replace
+        from . import persistent_chrome
+        from .browser import chrome_executable
+        from .profiles import installation_root
+
+        port = payload.get('port', '')
+        if isinstance(port, str):
+            port = port.strip()
+            # Vazio = modo automático (sessão atual do Chrome), não um padrão
+            # escondido: quem apaga a porta está pedindo o comportamento antigo.
+            port = 0 if not port else port
+        if isinstance(port, str) and port.isdigit():
+            port = int(port)
+        if type(port) is not int or not (0 <= port <= 65535) or (0 < port < 1024):
+            raise PanelInputError('A porta de depuração precisa estar entre 1024 e 65535 '
+                                  '(ou vazia, para usar a sessão atual do Chrome).')
+        auto_launch = payload.get('auto_launch', False)
+        if type(auto_launch) is not bool:
+            raise PanelInputError('A opção de abrir o Chrome sozinho precisa ser sim ou não.')
+        install = payload.get('install', True)
+        if type(install) is not bool:
+            raise PanelInputError('Ação de depuração inválida.')
+        name = payload.get('name') or ''
+        if name and not isinstance(name, str):
+            raise PanelInputError('Conexão inválida. Atualize o painel.')
+        config = None
+        if name:
+            try:
+                config = self.store.load(name)
+            except (OSError, ValueError, TypeError):
+                raise PanelInputError('Conexão não encontrada. Atualize o painel e '
+                                      'selecione o chat de novo.') from None
+            if config.session_mode != 'existing_chrome':
+                raise PanelInputError('Esta conexão usa um perfil separado do BrowserAPI. '
+                                      'A depuração do seu Chrome vale para “Meu perfil do Chrome”.')
+        result = {'ok': True, 'port': port, 'auto_launch': auto_launch,
+                  'installed': False, 'launcher': '', 'desktop': '', 'saved': '',
+                  'listening': bool(port) and bool(persistent_chrome.probe(port))}
+        with self.lock:
+            if self.closed or self.phase in ('running', 'waiting', 'updating'):
+                raise PanelInputError('Termine a operação atual antes de configurar a '
+                                      'depuração do Chrome.')
+            if install and port:
+                installation = (config.personal_installation if config else '') or 'chrome'
+                executable = chrome_executable(config)
+                try:
+                    created = persistent_chrome.install(
+                        executable, installation_root(installation), port=port,
+                        root=getattr(self, 'debug_root', None))
+                except (persistent_chrome.PersistentChromeError, ValueError, OSError) as problem:
+                    raise PanelInputError(str(problem)) from None
+                result.update(installed=True, launcher=str(created['launcher']),
+                              desktop=str(created['desktop']))
+            if config is not None:
+                updated = replace(config, debug_port=port, auto_launch=auto_launch).validate()
+                self.store.save(updated)
+                result['saved'] = config.name
+        if not port:
+            result['message'] = ('Modo automático: a conexão usa a sessão atual do Chrome. '
+                                 'Para não repetir a permissão, informe uma porta (9222) e '
+                                 'clique em Configurar uma vez.')
+        elif result['listening']:
+            result['message'] = (f'A porta {port} já responde: o Chrome está aberto com a '
+                                 'depuração ligada. Não precisa fazer mais nada.')
+        elif result['installed']:
+            result['message'] = (f'Atalho criado. Feche as janelas deste Chrome e abra pelo '
+                                 f'atalho “Chrome com depuração” (porta {port}), ou marque '
+                                 '“abrir o Chrome sozinho”. Da próxima vez não há passo manual.')
+        else:
+            result['message'] = f'Porta {port} salva nesta conexão.'
+        return result
+
     def submit(self, payload):
         allowed = ('configure', 'check', 'repair', 'ask', 'doctor', 'prepare', 'point_voice', 'point_send', 'use_existing')
         if payload.get('operation') not in allowed:
@@ -338,6 +420,7 @@ class Panel:
                     chats.append({'name': name, 'provider': config.provider, 'browser': config.browser, 'session_mode': config.session_mode,
                                   'compatible': previous.get('compatible_in_this_run', False),
                                   'checked_at': previous.get('checked_at'), 'personal_installation':config.personal_installation,'personal_profile':config.personal_profile,
+                                  'debug_port':config.debug_port,'auto_launch':config.auto_launch,
                                   'conversation': self.transcript.summary(name)})
                 except (OSError, ValueError, TypeError):
                     chats.append({'name': name, 'compatible': False, 'invalid': True,
@@ -599,6 +682,10 @@ class Handler(BaseHTTPRequestHandler):
                         open_profile(payload.get('profile'),target)
                     except ValueError as error:
                         raise PanelInputError(str(error)) from None
+            elif self.path == '/api/chrome-debug':
+                # Configurar uma vez a depuração do Chrome: grava o atalho e a
+                # decisão na conexão. Não abre navegador nem envia mensagem.
+                return self.send(200, self.server.panel.chrome_debug(payload))
             elif self.path == '/api/reply':
                 self.server.panel.reply(payload.get('id'), payload.get('value'))
             elif self.path == '/api/service':

@@ -301,6 +301,69 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(self.request('/api/task', method='POST', body={'operation':'configure','name':'x','provider':'gemini','browser':'custom'})[0], 400)
         self.assertEqual(self.request('/api/task', method='POST', body={'operation':'configure','name':'x','provider':'custom','browser':'chromium','url':'https://user:password@example.com'})[0], 400)
 
+    def test_chrome_debug_is_configured_once_and_reversible(self):
+        """Relato: era preciso permitir a depuração do Chrome a cada sessão.
+
+        O painel grava o atalho uma vez e guarda porta/abertura na conexão; ao
+        apagar a porta, volta ao modo automático sem apagar nada do Chrome.
+        """
+        self.store.save(ChatConfig('saved', 'https://example.com', browser='chrome',
+                                   session_mode='existing_chrome',
+                                   personal_installation='chrome',
+                                   personal_profile='Default'))
+        self.panel.debug_root = Path(self.tmp.name) / 'dotlocal'
+        with patch.dict(os.environ, {'XDG_CONFIG_HOME': str(Path(self.tmp.name) / 'cfg')}), \
+                patch('browserapi_lab.browser.chrome_executable', return_value='/usr/bin/google-chrome'), \
+                patch('browserapi_lab.persistent_chrome.probe', return_value=None), \
+                patch('subprocess.Popen') as launch:
+            code, _, body = self.request('/api/chrome-debug', method='POST',
+                                         body={'name': 'saved', 'port': '9222', 'auto_launch': True})
+            self.assertEqual(code, 200, body)
+            value = json.loads(body)
+            self.assertTrue(value['installed'])
+            self.assertFalse(value['listening'])
+            launcher = Path(value['launcher'])
+            self.assertTrue(launcher.is_file())
+            self.assertIn('--remote-debugging-port=9222', launcher.read_text())
+            self.assertIn('--user-data-dir=', launcher.read_text())
+            self.assertTrue(Path(value['desktop']).is_file())
+            saved = self.store.load('saved')
+            self.assertEqual((saved.debug_port, saved.auto_launch), (9222, True))
+            # Configurar não abre o Chrome nem inicia navegador.
+            launch.assert_not_called()
+
+            # Deixar a porta vazia volta ao modo automático (sem passo novo).
+            code, _, body = self.request('/api/chrome-debug', method='POST',
+                                         body={'name': 'saved', 'port': '', 'auto_launch': False})
+            self.assertEqual(code, 200, body)
+            self.assertFalse(json.loads(body)['installed'])
+            saved = self.store.load('saved')
+            self.assertEqual((saved.debug_port, saved.auto_launch), (0, False))
+
+            # Entradas inválidas explicam o que corrigir, sem gravar nada.
+            for payload, expected in [
+                    ({'name': 'saved', 'port': '22'}, 'entre 1024 e 65535'),
+                    ({'name': 'saved', 'port': 'abc'}, 'entre 1024 e 65535'),
+                    ({'name': 'saved', 'port': '9222', 'auto_launch': 'sim'}, 'sim ou não'),
+                    ({'name': 'missing', 'port': '9222'}, 'Conexão não encontrada')]:
+                code, _, body = self.request('/api/chrome-debug', method='POST', body=payload)
+                self.assertEqual(code, 400, body)
+                self.assertIn(expected, json.loads(body)['error'])
+            self.assertEqual(self.store.load('saved').debug_port, 0)
+            # Perfil separado do BrowserAPI não usa a depuração do Chrome pessoal.
+            self.store.save(ChatConfig('own', 'https://example.com', browser='chromium',
+                                       session_mode='dedicated'))
+            code, _, body = self.request('/api/chrome-debug', method='POST',
+                                         body={'name': 'own', 'port': '9222'})
+            self.assertEqual(code, 400)
+            self.assertIn('perfil separado', json.loads(body)['error'])
+            # Durante outra operação nada é gravado.
+            self.panel.phase = 'running'
+            code, _, body = self.request('/api/chrome-debug', method='POST',
+                                         body={'name': 'saved', 'port': '9222'})
+            self.assertEqual(code, 400)
+            self.assertIn('Termine a operação atual', json.loads(body)['error'])
+
     def test_metrics_finish_with_task_not_stale_receipt_or_duplicate_send(self):
         self.store.save(ChatConfig('saved','https://example.com'))
         def check_once(*args, **kwargs):

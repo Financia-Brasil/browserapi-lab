@@ -140,6 +140,32 @@ sem copiar cookies e sem lançar outra instância sobre seu diretório de perfil
    Chrome. Só aceite se confiar no programa. A autorização de conexão é distinta
    da autorização para enviar uma mensagem.
 
+### Depurar uma vez, não a cada sessão
+
+A tela `chrome://inspect/#remote-debugging` vale só para **aquela** sessão do
+Chrome: fechou o navegador, a permissão acabou e o passo manual voltou. Para não
+repetir: em **Configurações → Depuração do Chrome, uma vez**, escolha a conexão,
+informe uma porta (padrão `9222`) e clique em **Configurar uma vez**. O programa:
+
+1. grava o atalho `~/.local/bin/browserapi-chrome-debug` e a entrada
+   `~/.local/share/applications/browserapi-chrome-debug.desktop` (menu de
+   aplicativos: **Chrome com depuração**);
+2. guarda a porta e a opção **abrir o Chrome sozinho** na conexão escolhida.
+
+Da próxima vez, abra o Chrome pelo atalho — ou deixe o BrowserAPI abrir, se a
+opção estiver marcada — e conecte. O navegador é o **seu** Chrome, no **seu**
+perfil: o atalho só acrescenta `--remote-debugging-port` e
+`--remote-debugging-address=127.0.0.1`. Nada de perfil copiado e nada exposto na
+rede. O Chrome aceita **um processo por pasta de dados**: feche as janelas desse
+Chrome antes de abrir pelo atalho; se o sistema pedir autorização na primeira
+vez, autorize. Deixar a porta vazia volta ao modo antigo (sessão atual) sem
+apagar nada.
+
+Também dá para fazer pelo terminal, uma vez: `browserapi-lab chrome-debug` cria
+o atalho; `--print` mostra o script sem gravar; `--open` abre o Chrome agora com
+a porta ligada. A porta de depuração dá controle total do navegador — use só na
+sua máquina e feche o Chrome quando não quiser mais permitir.
+
 **Acesso sensível:** a permissão CDP pode acessar todas as abas e contas desse
 navegador, não apenas Gemini. O código do BrowserAPI opera apenas a aba do chat
 selecionado; isso não é uma barreira de isolamento imposta pelo Chrome. Não

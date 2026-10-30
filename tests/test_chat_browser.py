@@ -75,6 +75,23 @@ class TestChatWorkflow(BrowserTestCase):
         self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'),0)
 
 
+    def test_rascunho_igual_ao_texto_pedido_nao_bloqueia_o_envio(self):
+        """O que sobrou de uma tentativa anterior é o próprio texto: segue e envia.
+
+        Relato: depois do mapeamento o envio parava em “Há um rascunho no campo”
+        sem haver rascunho de outra pessoa no campo.
+        """
+        config = self.prepare()
+        self.page.locator('#composer').fill('resposta pendente de envio')
+        self.assertIsNone(preflight(self.page, config, pending='resposta pendente de envio'))
+        # Prefixo do que vai ser enviado também não é rascunho alheio.
+        self.assertIsNone(preflight(self.page, config, pending='resposta pendente de envio, com mais texto'))
+        self.assertEqual(preflight(self.page, config, pending='outro texto'), 'draft_present')
+        result = exchange(self.page, config, 'resposta pendente de envio',
+                          authorized=True, health_check=True)
+        self.assertEqual(result.status, 'success')
+        self.assertEqual(self.page.evaluate('FakeChat.state().user_messages'), 1)
+
     def test_send_hidden_until_composer_input(self):
         config = self.prepare()
         self.page.evaluate("""() => {
