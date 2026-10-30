@@ -47,7 +47,8 @@ compara **normalizado** (espaços, NBSP, invisíveis) com o que deveria estar l�
 - igual (ou com até 8 caracteres a mais, tipo quebra no fim) → **clica em Enviar**;
 - faltando texto → **não clica**, limpa, tenta o próximo caminho;
 - nenhum caminho aceitou tudo → `composer_incomplete`, com *“o campo recebeu X de
-  Y caracteres”*. Nada foi enviado, então repetir é seguro (HTTP 503).
+  Y caracteres”*. Nada foi enviado, então repetir é seguro (HTTP 503); o campo é
+  **limpo** antes de sair, para um Enter depois não mandar o pedaço que sobrou.
 
 **Confirmação honesta.** A regra antiga “mensagem nova + campo esvaziado” agora
 recusa um balão que seja só um **prefixo** do texto enviado (corte evidente). O
