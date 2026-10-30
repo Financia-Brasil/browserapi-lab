@@ -138,6 +138,13 @@ reduzindo couber, o erro vem no vocabulário do cliente
 (`prompt is too long: N tokens > M maximum` no Anthropic,
 `context_length_exceeded` no OpenAI), com a nota de que N e M são estimativas.
 
+**Mensagem que não coube no campo** é recusada *antes* de clicar em Enviar: se
+nem colando o texto entra inteiro, o agente recebe **503** com
+`composer_incomplete` e a contagem (“recebeu X de Y caracteres”) — nada foi
+enviado, então repetir é seguro. Se o site **publicar** só um pedaço, a resposta
+é `send_truncated` com **409**: não reenviamos para não duplicar, e a conversa
+precisa ser conferida.
+
 **Falha antes de digitar** (página ainda carregando) é repetida internamente e,
 se persistir, responde **503** — retentável. **409** fica reservado para “pode ter
 sido enviado”, que nunca é repetido.

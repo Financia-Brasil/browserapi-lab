@@ -5,12 +5,22 @@ Regra do briefing: **uma tentativa só é sucesso se houver evidência observáv
 
 Estratégias comparadas:
 
-* ``fill``              — ``locator.fill()`` (textarea/input);
-* ``type``              — teclado real do Playwright (pressiona tecla por tecla);
-* ``type_contenteditable`` — digitação em ``contenteditable``;
+* ``fill``              — ``locator.fill()`` (textarea/input), instantâneo;
+* ``paste``             — ``keyboard.insert_text()``: um único evento de entrada,
+  como colar — é o caminho padrão de editores ricos (ProseMirror, Lexical,
+  Slate) e o que evita digitar caractere por caractere;
+* ``paste_event``       — ``ClipboardEvent('paste')`` com ``DataTransfer``;
+* ``exec_insert``       — ``document.execCommand('insertText')``;
+* ``type``              — teclado real, **tecla por tecla**: lento e propenso a
+  perder caracteres em textos grandes, por isso fica por último;
+* ``type_contenteditable`` — o mesmo, para ``contenteditable``;
 * ``click_send``        — clique real no botão Enviar;
 * ``press_enter``       — Enter como alternativa (ou Ctrl+Enter, conforme o controle);
-* ``js_set``            — último recurso: define o valor e dispara ``input``.
+* ``js_set``            — define o valor e dispara ``input`` (sites teimosos).
+
+Regra de ouro: **só se ativa o envio quando o campo contém o texto inteiro**.
+Texto parcial no campo é o que produzia "mensagem enviada pela metade" — o site
+recebia um pedaço e o programa achava que tinha dado certo.
 
 O Playwright é importado tardiamente; os tempos e o resultado são puros dados.
 """
@@ -28,12 +38,28 @@ from .validation import composer_evidence
 
 ALL_STRATEGIES: Tuple[str, ...] = (
     "fill",
+    "paste",
+    "paste_event",
+    "exec_insert",
     "type",
     "type_contenteditable",
     "click_send",
     "press_enter",
     "js_set",
 )
+
+# Caminho rápido para cada tipo de campo. Colar primeiro, digitar por último.
+STRATEGIES_BY_KIND: Dict[str, Tuple[str, ...]] = {
+    "textarea": ("fill", "paste", "exec_insert", "js_set", "type"),
+    "input": ("fill", "paste", "exec_insert", "js_set", "type"),
+    "contenteditable": ("paste", "paste_event", "exec_insert", "fill", "js_set",
+                        "type_contenteditable"),
+}
+
+# Digitar tecla por tecla é O(n) idas ao navegador: 20 mil caracteres viram
+# dezenas de segundos e o editor perde pedaços. Acima deste tamanho, digitação
+# não é tentada — melhor falhar dizendo quanto entrou do que mandar pela metade.
+MAX_TYPE_CHARS = 4_000
 
 
 @dataclass
@@ -47,6 +73,9 @@ class SendAttempt:
     error: Optional[str] = None
     composer_confirmed: bool = False
     layer: str = ""
+    expected_chars: int = 0
+    filled_chars: int = 0
+    truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -58,6 +87,9 @@ class SendAttempt:
             "evidence": self.evidence,
             "composer_confirmed": self.composer_confirmed,
             "layer": self.layer,
+            "expected_chars": self.expected_chars,
+            "filled_chars": self.filled_chars,
+            "truncated": self.truncated,
             "error": self.error,
         }
 
@@ -72,11 +104,17 @@ class SendResult:
     send_ms: float = 0.0
     total_ms: float = 0.0
     error: Optional[str] = None
+    expected_chars: int = 0
+    filled_chars: int = 0
+    truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "success": self.success,
             "text_chars": len(self.text),
+            "expected_chars": self.expected_chars,
+            "filled_chars": self.filled_chars,
+            "truncated": self.truncated,
             "strategy": self.strategy,
             "fill_ms": round(self.fill_ms, 2),
             "send_ms": round(self.send_ms, 2),
@@ -185,6 +223,11 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
     3. mensagem nova **e** campo de digitação esvaziado — o site consumiu o
        rascunho e publicou um balão novo, mesmo que tenha reescrito o texto.
 
+    A regra (3) ganhou uma exceção: se o balão publicado é um **prefixo** curto do
+    que mandamos, é mensagem cortada — não confirmação. Antes, o site publicar
+    metade do texto contava como sucesso, e o agente recebia uma resposta sobre
+    um pedaço de prompt.
+
     Sem (1), (2) ou (3) o resultado é não confirmado. Texto divergente com o campo
     ainda preenchido continua sendo ambiguidade, não sucesso.
     """
@@ -203,6 +246,12 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
     if nonce and new_node and nonce in last:
         detail = " e o texto também confere" if matches else " (o site reescreveu o texto)"
         return True, "nonce do pedido visível no balão novo (envio confirmado)" + detail
+    # Antes da regra "campo esvaziado": texto que é só um PEDAÇO do que mandamos
+    # é a mensagem incompleta do relato, não um site que reescreveu o texto.
+    cut, shown, wanted = looks_truncated(expected, str(after.get("last") or ""))
+    if new_node and cut:
+        return False, (f"mensagem publicada parece CORTADA: {shown} de {wanted} "
+                       "caracteres apareceram no site")
     if matches:
         if new_node:
             return True, "nova mensagem do usuário com o texto esperado"
@@ -223,10 +272,53 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
 # --------------------------------------------------------------------------
 
 def read_composer(locator: Any) -> Optional[str]:
+    """Texto que está no campo agora.
+
+    ``innerText`` (e não ``textContent``) em ``contenteditable``: editores ricos
+    representam a quebra de linha com ``<div>``/``<br>``, e o ``textContent``
+    colaria tudo numa linha só, fazendo a conferência do texto falhar.
+    """
     try:
-        return locator.evaluate("el => el.isContentEditable ? el.textContent : el.value")
+        return locator.evaluate(
+            "el => el.isContentEditable ? (el.innerText ?? el.textContent) : el.value")
     except Exception:
         return None
+
+
+def composer_matches(locator: Any, text: str) -> Tuple[bool, int]:
+    """O campo tem **o texto inteiro**? Devolve (igual, caracteres presentes).
+
+    Comparação normalizada (espaços/NBSP/invisíveis), porque o editor reescreve
+    o que colou. O que não se tolera é **faltar** texto: era assim que a mensagem
+    ia incompleta para o site.
+    """
+    current = read_composer(locator)
+    if current is None:
+        return False, 0
+    wanted = normalize_text(text)
+    got = normalize_text(current)
+    if not wanted:
+        return False, len(got)
+    if got == wanted:
+        return True, len(got)
+    # Sites que embrulham o texto (ex.: acrescentam uma quebra no fim) são
+    # aceitos; texto A MAIS de verdade (limpeza que falhou) não, para não
+    # enviar a mensagem duplicada.
+    if wanted in got and len(got) - len(wanted) <= 8:
+        return True, len(got)
+    return False, len(got)
+
+
+def _select_all(locator: Any, page: Any, kind: str) -> None:
+    modifier = "Meta" if _is_mac(page) else "Control"
+    try:
+        locator.click()
+    except Exception:
+        pass
+    try:
+        page.keyboard.press(f"{modifier}+a")
+    except Exception:
+        pass
 
 
 def _clear(locator: Any, kind: str) -> None:
@@ -241,7 +333,38 @@ def _clear(locator: Any, kind: str) -> None:
         pass  # limpeza é best-effort: o que importa é a evidência depois
 
 
-def _fill(locator: Any, kind: str, text: str, strategy: str, delay_ms: int) -> None:
+PASTE_EVENT_JS = """(el, text) => {
+  el.focus();
+  const data = new DataTransfer();
+  data.setData('text/plain', text);
+  const event = new ClipboardEvent('paste', {clipboardData: data, bubbles: true,
+                                             cancelable: true, composed: true});
+  el.dispatchEvent(event);
+}"""
+
+EXEC_INSERT_JS = """(el, text) => {
+  el.focus();
+  if (el.isContentEditable) {
+    document.execCommand('insertText', false, text);
+    return;
+  }
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  if (typeof el.setRangeText === 'function') {
+    el.setRangeText(text, start, end, 'end');
+  } else {
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+  }
+  el.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText',
+                                            data: text}));
+  el.dispatchEvent(new Event('change', {bubbles: true}));
+}"""
+
+
+def _fill(locator: Any, kind: str, text: str, strategy: str, delay_ms: int,
+          page: Any = None) -> None:
+    """Coloca ``text`` no campo do jeito mais rápido que o site aceitar."""
+    page = page if page is not None else getattr(locator, "page", None)
     if strategy == "fill":
         if kind == "contenteditable":
             # fill() funciona em contenteditable, mas não exercita o teclado:
@@ -249,6 +372,17 @@ def _fill(locator: Any, kind: str, text: str, strategy: str, delay_ms: int) -> N
             locator.fill(text)
         else:
             locator.fill(text)
+    elif strategy == "paste":
+        # Um único Input.insertText — o mesmo evento que um Ctrl+V produz. Não há
+        # tecla por tecla: 20 mil caracteres entram numa chamada.
+        _select_all(locator, page, kind)
+        page.keyboard.insert_text(text)
+    elif strategy == "paste_event":
+        _select_all(locator, page, kind)
+        locator.evaluate(PASTE_EVENT_JS, text)
+    elif strategy == "exec_insert":
+        _select_all(locator, page, kind)
+        locator.evaluate(EXEC_INSERT_JS, text)
     elif strategy == "type":
         locator.click()
         locator.press_sequentially(text, delay=delay_ms)
@@ -335,7 +469,7 @@ def send_message(
     composer: ScoredCandidate,
     send_button: Optional[ScoredCandidate],
     text: str,
-    strategies: Sequence[str] = ("fill", "type", "type_contenteditable", "js_set"),
+    strategies: Optional[Sequence[str]] = None,
     activation: Sequence[str] = ("click_send", "press_enter"),
     delay_ms: int = 0,
     verify_timeout_ms: float = 5_000.0,
@@ -343,33 +477,54 @@ def send_message(
     user_selector: Optional[str] = None,
     before_activate: Any = None,
     nonce: Optional[str] = None,
+    composer_timeout_ms: float = 1_200.0,
+    max_type_chars: int = MAX_TYPE_CHARS,
 ) -> SendResult:
     """Tenta enviar ``text`` combinando preenchimento e ativação até haver evidência.
 
-    Cada tentativa é independente: limpa o composer, preenche, ativa e verifica.
-    Se nenhuma combinação produzir evidência, o resultado é falha **com as
-    tentativas registradas** — nunca um falso sucesso.
+    Cada tentativa é independente: limpa o campo, coloca o texto, **confere que
+    entrou inteiro** e só então ativa. Texto parcial nunca é enviado: se o campo
+    não aceitar tudo, a tentativa é descartada sem clicar em Enviar, e a próxima
+    estratégia é testada. Sem nenhuma que caiba, o resultado é
+    ``composer_incomplete`` — nunca um falso sucesso nem uma mensagem pela metade.
     """
     started = time.perf_counter()
     locator = locator_for(page, composer)
     kind = control_kind(composer)
+    strategies = tuple(strategies or STRATEGIES_BY_KIND.get(kind, ("fill", "paste")))
     before = user_message_state(page, user_selector)
     attempts: List[SendAttempt] = []
+    incompletes: List[SendAttempt] = []
+    expected_chars = len(text)
 
     for fill_strategy in strategies:
         if kind != "contenteditable" and fill_strategy == "type_contenteditable":
             continue
         if kind == "contenteditable" and fill_strategy == "fill":
             continue
+        if fill_strategy in ("type", "type_contenteditable") and len(text) > max_type_chars:
+            # Tecla por tecla em texto grande: lento e perde pedaços.
+            continue
         for activation_strategy in activation:
-            attempt = SendAttempt(strategy=f"{fill_strategy}+{activation_strategy}", success=False)
+            attempt = SendAttempt(strategy=f"{fill_strategy}+{activation_strategy}", success=False,
+                                  expected_chars=expected_chars)
             activated = False
             try:
                 _clear(locator, kind)
                 t0 = time.perf_counter()
-                _fill(locator, kind, text, fill_strategy, delay_ms)
+                _fill(locator, kind, text, fill_strategy, delay_ms, page=page)
                 attempt.fill_ms = (time.perf_counter() - t0) * 1000.0
-
+                # O editor às vezes aplica o texto de forma assíncrona.
+                full, present = _wait_composer(locator, text, composer_timeout_ms)
+                attempt.filled_chars = present
+                if not full:
+                    attempt.error = "ComposerIncomplete"
+                    attempt.evidence = (f"o campo recebeu {present} de {expected_chars} "
+                                        f"caracteres com {fill_strategy}; envio cancelado")
+                    attempts.append(attempt)
+                    incompletes.append(attempt)
+                    # Nada clicado: pode tentar outra forma de colar sem duplicar.
+                    break
                 filled_value = read_composer(locator)
                 t1 = time.perf_counter()
                 if before_activate is not None:
@@ -380,12 +535,14 @@ def send_message(
                 attempt.send_ms = (time.perf_counter() - t1) * 1000.0
 
                 t2 = time.perf_counter()
-                ok, evidence, layer = _wait_evidence(page, before, text, verify_timeout_ms, settle_poll_ms,
-                                                     user_selector, composer_getter=lambda: read_composer(locator),
-                                                     filled=filled_value, nonce=nonce)
+                ok, evidence, layer, truncated = _wait_evidence(
+                    page, before, text, verify_timeout_ms, settle_poll_ms,
+                    user_selector, composer_getter=lambda: read_composer(locator),
+                    filled=filled_value, nonce=nonce)
                 attempt.verify_ms = (time.perf_counter() - t2) * 1000.0
                 attempt.evidence = evidence
                 attempt.layer = layer
+                attempt.truncated = truncated
                 attempt.composer_confirmed = composer_evidence(
                     text, filled_value or "", read_composer(locator), ok).confirmed
                 if ok:
@@ -410,21 +567,78 @@ def send_message(
                 # Ausência de confirmação NÃO prova que o site recusou o envio.
                 return SendResult(False, text, attempts=attempts,
                                   error="envio sem confirmação; repetição automática bloqueada",
+                                  expected_chars=expected_chars,
+                                  truncated=attempt.truncated,
+                                  filled_chars=attempt.filled_chars,
                                   total_ms=(time.perf_counter() - started) * 1000.0)
 
+    if incompletes:
+        best = max(incompletes, key=lambda item: item.filled_chars)
+        return SendResult(
+            success=False,
+            text=text,
+            attempts=attempts,
+            error=(f"composer_incomplete: o campo não aceitou a mensagem inteira "
+                   f"({best.filled_chars} de {expected_chars} caracteres)"),
+            expected_chars=expected_chars,
+            filled_chars=best.filled_chars,
+            total_ms=(time.perf_counter() - started) * 1000.0,
+        )
     return SendResult(
         success=False,
         text=text,
         attempts=attempts,
         error="nenhuma estratégia produziu evidência de envio",
+        expected_chars=expected_chars,
         total_ms=(time.perf_counter() - started) * 1000.0,
     )
+
+
+def _wait_composer(locator: Any, text: str, timeout_ms: float,
+                   poll_ms: float = 40.0) -> Tuple[bool, int]:
+    """Espera o campo refletir o texto inteiro (editores aplicam async).
+
+    Devolve ``(completo, caracteres_presentes)``. Se não completar, quem chamou
+    **não envia**: mensagem parcial no site é pior do que erro visível.
+    """
+    deadline = time.perf_counter() + (timeout_ms / 1000.0)
+    present = 0
+    while True:
+        full, present = composer_matches(locator, text)
+        if full:
+            return True, present
+        if time.perf_counter() >= deadline:
+            return False, present
+        try:
+            locator.page.wait_for_timeout(poll_ms)
+        except Exception:
+            time.sleep(poll_ms / 1000.0)
+
+
+def looks_truncated(sent: str, shown: str) -> Tuple[bool, int, int]:
+    """O balão publicado parece **corte** do texto que mandamos?
+
+    Compara normalizado: se o que apareceu é prefixo do esperado e falta pelo
+    menos 10% (e 80 caracteres), é mensagem pela metade — não sucesso.
+    """
+    wanted = normalize_text(sent)
+    got = normalize_text(shown)
+    if not wanted or not got:
+        return False, len(got), len(wanted)
+    if len(got) >= len(wanted):
+        return False, len(got), len(wanted)
+    if wanted.startswith(got) and len(got) >= max(80, int(len(wanted) * 0.9)):
+        # Quase tudo: o site encurtou por conta própria (ex.: "mostrar mais").
+        return False, len(got), len(wanted)
+    if wanted.startswith(got) and len(got) < len(wanted):
+        return True, len(got), len(wanted)
+    return False, len(got), len(wanted)
 
 
 def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
                    timeout_ms: float, poll_ms: float, user_selector: Optional[str] = None,
                    composer_getter: Any = None, filled: Optional[str] = None,
-                   nonce: Optional[str] = None) -> Tuple[bool, str, str]:
+                   nonce: Optional[str] = None) -> Tuple[bool, str, str, bool]:
     deadline = time.perf_counter() + (timeout_ms / 1000.0)
     last_reason = "sem evidência"
     layer = ""
@@ -440,7 +654,11 @@ def _wait_evidence(page: Any, before: Dict[str, Any], text: str,
                 cleared = False
         ok, reason = evidence_of_send(before, after, text, composer_cleared=cleared, nonce=nonce)
         if ok:
-            return True, reason, layer
+            return True, reason, layer, False
+        cut, shown, wanted = looks_truncated(text, str(after.get("last") or ""))
+        if cut and (after.get("count", 0) or 0) > (before.get("count", 0) or 0):
+            return False, (f"mensagem publicada parece CORTADA: {shown} de {wanted} "
+                           "caracteres apareceram no site"), layer, True
         last_reason = reason
         page.wait_for_timeout(poll_ms)
-    return False, last_reason, layer
+    return False, last_reason, layer, False

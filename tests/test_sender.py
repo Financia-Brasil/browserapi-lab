@@ -94,3 +94,229 @@ class TestEvidenceSpeaksBothLanguages(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Colar em vez de digitar (o relato: "escreve caractere por caractere")
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch
+from browserapi_lab.discovery import ScoredCandidate
+from browserapi_lab.sender import (send_message, looks_truncated, composer_matches,
+                                   STRATEGIES_BY_KIND, MAX_TYPE_CHARS)
+
+
+class FakeKeyboard:
+    """Só o que o envio usa: inserir texto (colar) e pressionar teclas."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def insert_text(self, text):
+        self.page.insert(text, 'paste')
+
+    def press(self, key):
+        if key.lower().endswith('a'):
+            self.page.selected = True
+
+
+class FakeLocator:
+    def __init__(self, page, selector):
+        self.page = page
+        self.selector = selector
+
+    # --- o que o envio chama ------------------------------------------------
+    def evaluate(self, script, arg=None):
+        page = self.page
+        if 'navigator.platform' in script:
+            return 'Linux'
+        # Escrita primeiro: os scripts de inserção também mencionam o campo.
+        if 'ClipboardEvent' in script:
+            page.insert(arg, 'paste_event')
+            return None
+        if 'execCommand' in script:
+            page.insert(arg, 'exec_insert')
+            return None
+        if 'isContentEditable' in script:
+            return page.text
+        return None
+
+    def fill(self, text):
+        self.page.insert(text, 'fill')
+
+    def click(self):
+        if self.selector == '#send':
+            self.page.publish()
+        else:
+            self.page.focused = True
+
+    def press(self, key):
+        pass
+
+    def press_sequentially(self, text, delay=0):
+        self.page.keystrokes += len(text)
+        self.page.insert(text, 'type')
+
+    def count(self):
+        return 1
+
+    def is_visible(self):
+        return True
+
+    def is_enabled(self):
+        return True
+
+
+class FakeComposerPage:
+    """Chat de mentira com o comportamento que importa: quanto texto cada
+    caminho consegue colocar no campo, e o que aparece publicado."""
+
+    def __init__(self, kind='contenteditable', caps=None, publish_cap=None):
+        self.kind = kind
+        self.caps = caps or {}          # estratégia -> quantos caracteres aceita
+        self.publish_cap = publish_cap  # o site publica só este tanto
+        self.text = ''
+        self.selected = False
+        self.focused = False
+        self.clicks = 0
+        self.keystrokes = 0
+        self.published = []
+        self.keyboard = FakeKeyboard(self)
+
+    def locator(self, selector):
+        return FakeLocator(self, selector)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, script, arg=None):
+        if 'navigator.platform' in script:
+            return 'Linux'
+        return None
+
+    def insert(self, text, strategy):
+        cap = self.caps.get(strategy)
+        value = text if cap is None else text[:cap]
+        self.text = value if self.selected else self.text + value
+        self.selected = False
+
+    def publish(self):
+        self.clicks += 1
+        value = self.text
+        if self.publish_cap is not None:
+            value = value[:self.publish_cap]
+        self.published.append(value)
+        self.text = ''
+
+
+def state_of(page, before_count):
+    """Estado das mensagens do usuário, no formato que o sender consome."""
+    return {'count': before_count + len(page.published),
+            'last': page.published[-1] if page.published else None,
+            'layer': 'fake'}
+
+
+class TestColaEmVezDeDigitar(unittest.TestCase):
+    def run_send(self, page, text, strategies=None, **kwargs):
+        before = 0
+        kwargs.setdefault('composer_timeout_ms', 40)
+        with patch('browserapi_lab.sender.user_message_state',
+                   side_effect=lambda _page, _selector=None: state_of(page, before)):
+            return send_message(page, ScoredCandidate({'tag': 'div',
+                                                       'contenteditable': 'true',
+                                                       'selector': '#composer'}, 0),
+                                ScoredCandidate({'selector': '#send'}, 0), text,
+                                strategies=strategies,
+                                activation=('click_send',), user_selector='#user',
+                                **kwargs)
+
+    def test_texto_grande_entra_de_uma_vez_sem_tecla_por_tecla(self):
+        page = FakeComposerPage()
+        text = 'linha de prompt ' * 1_500           # ~24 mil caracteres
+        result = self.run_send(page, text)
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(page.published, [text])
+        self.assertEqual(page.keystrokes, 0, 'não pode digitar tecla por tecla')
+        self.assertEqual(result.strategy, 'paste+click_send')
+        self.assertLess(result.fill_ms, 500, 'colar precisa ser rápido')
+        self.assertEqual(result.filled_chars, result.expected_chars)
+
+    def test_campo_que_corta_a_colagem_nao_envia_pela_metade(self):
+        # Os dois caminhos de colar só aceitam 400 caracteres; o insertText
+        # nativo (exec_insert) aceita tudo — é para ele que o envio deve ir.
+        page = FakeComposerPage(caps={'paste': 400, 'paste_event': 400})
+        text = 'pedido completo ' * 300
+        result = self.run_send(page, text)
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(page.published, [text])
+        self.assertEqual(result.strategy, 'exec_insert+click_send')
+
+    def test_quando_nenhum_caminho_aceita_tudo_nada_e_enviado(self):
+        page = FakeComposerPage(caps={'paste': 50, 'paste_event': 50,
+                                      'exec_insert': 50, 'fill': 50, 'js_set': 50})
+        text = 'mensagem que não cabe ' * 400      # acima do limite de digitação
+        result = self.run_send(page, text, composer_timeout_ms=10)
+        self.assertFalse(result.success)
+        self.assertIn('composer_incomplete', result.error)
+        self.assertEqual(page.clicks, 0, 'sem texto inteiro, não se clica em Enviar')
+        self.assertEqual(page.published, [])
+        self.assertEqual(result.filled_chars, 50)
+
+    def test_texto_grande_nunca_cai_na_digitacao_lenta(self):
+        page = FakeComposerPage(caps={'paste': 0, 'paste_event': 0,
+                                      'exec_insert': 0, 'fill': 0, 'js_set': 0})
+        text = 'x' * (MAX_TYPE_CHARS + 1)
+        result = self.run_send(page, text, composer_timeout_ms=10)
+        self.assertFalse(result.success)
+        self.assertEqual(page.keystrokes, 0)
+        self.assertIn('composer_incomplete', result.error)
+
+    def test_ordem_padrao_coloca_colar_na_frente_de_digitar(self):
+        order = STRATEGIES_BY_KIND['contenteditable']
+        self.assertEqual(order[0], 'paste')
+        self.assertGreater(order.index('type_contenteditable'), order.index('exec_insert'))
+        self.assertEqual(STRATEGIES_BY_KIND['textarea'][0], 'fill')
+
+    def test_site_que_publica_metade_e_reportado_como_corte(self):
+        page = FakeComposerPage(publish_cap=500)
+        text = 'pedido bem grande ' * 400
+        result = self.run_send(page, text)
+        self.assertFalse(result.success)
+        self.assertTrue(result.truncated, result.error)
+        self.assertIn('CORTADA', result.attempts[-1].evidence)
+
+
+class TestConferenciaDoCampo(unittest.TestCase):
+    def test_quebra_a_mais_no_fim_nao_invalida(self):
+        page = FakeComposerPage()
+        page.text = 'texto colado\n'
+        self.assertTrue(composer_matches(page.locator('#c'), 'texto colado')[0])
+
+    def test_texto_anterior_que_nao_foi_limpo_invalida(self):
+        page = FakeComposerPage()
+        page.text = 'rascunho velho texto colado'
+        self.assertFalse(composer_matches(page.locator('#c'), 'texto colado')[0])
+
+    def test_texto_cortado_invalida(self):
+        page = FakeComposerPage()
+        page.text = 'texto'
+        self.assertFalse(composer_matches(page.locator('#c'), 'texto colado')[0])
+
+
+class TestCorte(unittest.TestCase):
+    def test_prefixo_curto_e_corte(self):
+        cut, shown, wanted = looks_truncated('a' * 1000, 'a' * 500)
+        self.assertTrue(cut)
+        self.assertEqual((shown, wanted), (500, 1000))
+
+    def test_texto_quase_inteiro_nao_e_corte(self):
+        self.assertFalse(looks_truncated('a' * 1000, 'a' * 960)[0])
+
+    def test_texto_diferente_nao_e_corte(self):
+        self.assertFalse(looks_truncated('a' * 1000, 'b' * 500)[0])
+
+    def test_evidencia_nao_aceita_balão_cortado_com_campo_esvaziado(self):
+        ok, motivo = evidence_of_send({'count': 1}, {'count': 2, 'last': 'a' * 400},
+                                      'a' * 1000, composer_cleared=True)
+        self.assertFalse(ok)
+        self.assertIn('CORTADA', motivo)

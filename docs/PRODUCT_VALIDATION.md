@@ -658,3 +658,44 @@ e um `timeout` pós-envio absorvidos sem o CLI ver erro. Evidência em `results/
 (`Claude Code real contra a API (chat simulado)`).
 **Implementado ≠ testado local/CI ≠ homologado**: o chat simulado tem os limites
 observados, não é um site real; a conta real continua sendo a sua sessão.
+
+## 0.13.1 — colar em vez de digitar e nunca enviar pela metade (2026-10-29)
+
+Relato: *“tem uns commits errados de um agente burro… quero que reverta”*, *“ele
+fica escrevendo caractere por caractere em vez de colar como ele fez no do Arena”*,
+*“pra ele ser rápido em qualquer chat”*, *“ele manda a mensagem incompleta, e eu
+não sei se é porque ele demora pra colar a resposta completa”*.
+
+**Reversão.** Quatro commits de um agente paralelo (`5626d1b`, `d38ec7a`,
+`ec8b075`, `6a21934`) criaram um produto paralelo — `browserapi_server/` com
+FastAPI e caminho fixo `/home/tork/...` —, duplicaram módulos que já existiam
+(`send.py` × `sender.py`, `extract.py` × `extractor.py`, `observe.py` ×
+`observer.py`, `discover.py` × `discovery.py`) e reformataram arquivos alheios.
+Foram revertidos; a árvore voltou a ser idêntica ao merge da 0.13.0 (428 testes
+verdes na hora da reversão), e só então o envio foi corrigido.
+
+**O defeito do envio.** Em campo `contenteditable` a estratégia era
+`type_contenteditable` → `press_sequentially`: **uma tecla por vez**. Medido em
+teste: um pedido de ~20 mil caracteres custava dezenas de segundos e o editor
+perdia pedaços; a confirmação aceitava “mensagem nova + campo esvaziado”, então a
+mensagem **cortada** contava como sucesso.
+
+| Antes | Agora |
+|---|---|
+| digita caractere por caractere em campo rico | **cola** com um único evento (`keyboard.insert_text`), com `paste_event` e `exec_insert` de reserva |
+| digitação usada mesmo em 20 mil caracteres | digitação **recusada acima de 4.000** caracteres |
+| envia com o que estiver no campo | **lê e confere** o campo; faltando texto, **não clica** e tenta outro caminho |
+| não distingue corte de reescrita | balão que é prefixo curto do enviado vira `send_truncated` (409), não sucesso |
+| termina a resposta na primeira pausa | **janela de confirmação** de 900 ms: se o texto voltar a crescer, continua esperando |
+
+**Status novos, com instrução em português:** `composer_incomplete` (nada foi
+enviado; HTTP 503, repetível, com “recebeu X de Y caracteres”) e `send_truncated`
+(publicou parte; HTTP 409, sem reenvio automático).
+
+**Provas deste ambiente:** 446 testes (19 ignorados por falta de Chromium); no
+CI, `TestColagemRapida` envia ~19 mil caracteres em `contenteditable` e em
+`textarea` no **Chromium real**, exige `fill_ms` abaixo de 1,5 s e o balão
+publicado com o **mesmo tamanho** do texto enviado.
+**Implementado ≠ testado local/CI ≠ homologado**: a prova em navegador roda no
+CI; neste ambiente não há Chromium. Site que reescreve o texto no campo
+(autocorreção, menções) pode ser recusado pela conferência — é de propósito.

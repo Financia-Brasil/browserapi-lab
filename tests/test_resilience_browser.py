@@ -117,3 +117,30 @@ class TestResilience(BrowserTestCase):
         buttons = rank_candidates(collect(self.page, 'send_button')['candidates'], 'send_button')
         self.assertEqual(composers[0].selector, '#composer')
         self.assertEqual(buttons[0].selector, '#send')
+
+
+class TestColagemRapida(BrowserTestCase):
+    """O relato: "escreve caractere por caractere" e "manda a mensagem incompleta"."""
+
+    def setup_chat(self, query=''):
+        self.page.goto(self.server.url(query='?delay=1' + query), wait_until='load')
+        return (rank_candidates(collect(self.page, 'composer')['candidates'], 'composer')[0],
+                rank_candidates(collect(self.page, 'send_button')['candidates'], 'send_button')[0])
+
+    def test_texto_longo_entra_colado_e_chega_inteiro(self):
+        texto = ''.join(f'linha {i:04d} do pedido sintético\n' for i in range(600))  # ~19 mil
+        for kind in ('contenteditable', 'textarea'):
+            with self.subTest(kind=kind):
+                composer, button = self.setup_chat('&composer=' + kind)
+                resultado = send_message(self.page, composer, button, texto,
+                                         verify_timeout_ms=4000)
+                self.assertTrue(resultado.success, resultado.error)
+                self.assertEqual(resultado.strategy.split('+')[0], 'paste'
+                                 if kind == 'contenteditable' else 'fill')
+                # Colar é uma chamada só: não pode custar segundos como digitar.
+                self.assertLess(resultado.fill_ms, 1500, resultado.to_dict())
+                self.assertEqual(resultado.filled_chars, resultado.expected_chars)
+                publicado = self.page.evaluate(
+                    "() => document.querySelector('[data-role=\"user\"] .body').textContent")
+                self.assertEqual(len(publicado.strip()), len(texto.strip()),
+                                 'a mensagem publicada pelo site ficou incompleta')

@@ -41,6 +41,10 @@ class WatchConfig:
     # N amostras estáveis seguidas ("três leituras iguais") reduz o falso
     # término sem alongar a espera além de N × poll_interval.
     min_stable_samples: int = 1
+    # Depois de decidir que terminou, espera mais este tempo e relê. Se o texto
+    # voltar a crescer (ou o botão Stop reaparecer), a espera continua: é o
+    # seguro contra entregar resposta pela metade numa pausa do modelo.
+    confirm_window_ms: float = 0.0
 
 
 @dataclass
@@ -335,6 +339,31 @@ def wait_for_completion(
             on_poll(state, ui, decisao)
 
         if decisao.done:
+            if (decisao.status == "success" and config.confirm_window_ms > 0
+                    and state.since_installed_ms + config.confirm_window_ms < config.timeout_ms):
+                # Relê depois de uma pausa curta: pausa do modelo não é o fim.
+                page.wait_for_timeout(config.confirm_window_ms)
+                try:
+                    again = read_state(page)
+                    again_ui = read_ui(page, root_selector)
+                except Exception:
+                    again, again_ui = None, None
+                grew = again is not None and again.text_len > state.text_len
+                resumed = bool(again_ui is not None and (again_ui.stop_visible or again_ui.aria_busy == "true"))
+                if grew or resumed:
+                    observacao.timeline.append({
+                        "t_ms": round((time.perf_counter() - started) * 1000.0, 1),
+                        "since_last_mutation_ms": getattr(again, "since_last_mutation_ms", None),
+                        "text_len": getattr(again, "text_len", None),
+                        "stop": getattr(again_ui, "stop_visible", None),
+                        "copy": getattr(again_ui, "copy_visible", None),
+                        "aria_busy": getattr(again_ui, "aria_busy", None),
+                        "decision": "texto voltou a crescer (ou Stop reapareceu): continuar",
+                    })
+                    stable_samples = 0
+                    previous_text_len = None
+                    page.wait_for_timeout(config.poll_interval_ms)
+                    continue
             observacao.status = decisao.status
             observacao.reason = decisao.reason
             break

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "browserapi-lab"
-version = "0.13.0"
+version = "0.13.1"
 description = "Laboratorio Linux leve para pesquisar, testar e medir automacao, streaming e extracao de respostas em interfaces web de chats de IA."
 readme = "README.md"
 requires-python = ">=3.11"

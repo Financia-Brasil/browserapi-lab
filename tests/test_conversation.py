@@ -428,3 +428,21 @@ class TestWorkerWithSimulatedSite(unittest.TestCase):
         self.assertEqual(job.result.status, 'success')
         self.assertIn('resposta que chegou depois', job.result.answer)
         self.assertEqual(len(job.harvests), 1)
+
+    def test_envio_pela_metade_e_erro_acionavel_e_nao_reenvio(self):
+        # Mensagem publicada pela metade: houve envio, então NÃO pode repetir
+        # (duplicaria); e não pode ser reportada como sucesso.
+        self.assertEqual(windows.http_for_status('send_truncated', 'confirmed'), 409)
+        self.assertFalse(windows.retryable_status('send_truncated', 'confirmed'))
+
+    def test_campo_que_nao_aceita_o_texto_inteiro_e_retentavel(self):
+        # Nada foi clicado: repetir é seguro e o agente recebe 503 (retentável).
+        self.assertEqual(windows.http_for_status('composer_incomplete', 'not_sent'), 503)
+        self.assertTrue(windows.retryable_status('composer_incomplete', 'not_sent'))
+
+    def test_os_dois_status_novos_tem_instrucao_para_a_pessoa(self):
+        from browserapi_lab.chat import REMEDIES
+        for status in ('composer_incomplete', 'send_truncated'):
+            self.assertIn(status, REMEDIES)
+            titulo, acao = REMEDIES[status]
+            self.assertTrue(titulo and acao, status)
