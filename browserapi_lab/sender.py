@@ -279,7 +279,9 @@ def evidence_of_send(before: Dict[str, Any], after: Dict[str, Any], expected: st
 # placeholder) — e o programa concluía "Há um rascunho no campo" com o campo
 # vazio, parando antes de enviar. Percorrer a árvore ignorando placeholders,
 # ``<br>`` e nós escondidos resolve, e ainda preserva as quebras de linha.
-COMPOSER_TEXT_JS = """(el) => {
+# String crua: o JS precisa ver ``\n``, não uma quebra de linha dentro de aspas
+# (isso virava SyntaxError no navegador e o campo era lido como vazio).
+COMPOSER_TEXT_JS = r"""(el) => {
   if (!el) return null;
   if (!el.isContentEditable) return el.value ?? '';
   const skipped = (node) => {
@@ -290,6 +292,8 @@ COMPOSER_TEXT_JS = """(el) => {
     return !!(cls && (cls.contains('placeholder') || cls.contains('is-empty') ||
                       cls.contains('ProseMirror-trailingBreak')));
   };
+  // O próprio campo pode ser o nó de placeholder (``is-empty``/``data-placeholder``).
+  if (skipped(el)) return '';
   const block = /^(P|DIV|LI|PRE|BLOCKQUOTE)$/;
   let out = '';
   const walk = (node) => {

@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from browserapi_lab.sender import evidence_of_send, control_kind, normalize_text, read_composer
 
 class TestEvidence(unittest.TestCase):
@@ -354,6 +356,35 @@ class TestRascunhoFalso(unittest.TestCase):
                 raise RuntimeError('página trocando')
         self.assertIsNone(read_composer(Quebrado()))
         self.assertFalse(composer_has_text(Quebrado()))
+
+    def test_js_de_leitura_nao_quebra_string_com_escape(self):
+        r"""Regressão real: ``'\n'`` escrito no Python virava uma QUEBRA DE LINHA
+        dentro da string JS. O navegador recusava o script inteiro, a leitura
+        devolvia ``None`` e o envio era recusado como ``composer_incomplete``
+        em 57 testes do CI. Toda string do JS é de uma linha: aspas ímpares
+        numa linha significam escape cru.
+        """
+        from browserapi_lab.sender import COMPOSER_TEXT_JS
+        for line in COMPOSER_TEXT_JS.splitlines():
+            self.assertEqual(line.count("'") % 2, 0, line)
+        # A quebra de linha do JS precisa ser a sequência \n, não o caractere.
+        self.assertIn(r"out += '\n'", COMPOSER_TEXT_JS)
+        self.assertNotIn("out += '\n'", COMPOSER_TEXT_JS)
+
+    def test_js_de_leitura_e_javascript_valido(self):
+        r"""O JS de leitura roda no navegador: se ele não compila, o campo é lido
+        como vazio e todo envio vira ``composer_incomplete`` (foi o que
+        aconteceu no CI antes de ``\n`` virar ``\\n`` de verdade)."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node indisponível para checar a sintaxe')
+        from browserapi_lab.sender import COMPOSER_TEXT_JS
+        path = Path(tempfile.mkdtemp()) / 'composer.js'
+        path.write_text('module.exports = ' + COMPOSER_TEXT_JS + ';\n', encoding='utf-8')
+        checked = subprocess.run([node, '--check', str(path)], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
 
     def test_leitura_ignora_placeholder_e_br(self):
         # O JS de leitura é o que roda de verdade no navegador; aqui garantimos
