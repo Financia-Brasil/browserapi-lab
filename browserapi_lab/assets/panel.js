@@ -1,5 +1,5 @@
 'use strict';
-const PANEL_VERSION = '0.13.1';
+const PANEL_VERSION = '0.13.6';
 const $ = id => document.getElementById(id);
 const fragment = location.hash.slice(1);
 const token = /^[A-Za-z0-9_-]{32,128}$/.test(fragment) ? fragment : sessionStorage.getItem('browserapi-token') || '';
