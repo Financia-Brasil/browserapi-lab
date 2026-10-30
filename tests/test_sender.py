@@ -118,6 +118,9 @@ class FakeKeyboard:
     def press(self, key):
         if key.lower().endswith('a'):
             self.page.selected = True
+        elif key in ('Delete', 'Backspace') and self.page.selected:
+            self.page.text = ''
+            self.page.selected = False
 
 
 class FakeLocator:
@@ -261,6 +264,7 @@ class TestColaEmVezDeDigitar(unittest.TestCase):
         self.assertEqual(page.clicks, 0, 'sem texto inteiro, não se clica em Enviar')
         self.assertEqual(page.published, [])
         self.assertEqual(result.filled_chars, 50)
+        self.assertEqual(page.text, '', 'nada de rascunho parcial sobrando no campo')
 
     def test_texto_grande_nunca_cai_na_digitacao_lenta(self):
         page = FakeComposerPage(caps={'paste': 0, 'paste_event': 0,
