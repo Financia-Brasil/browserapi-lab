@@ -236,7 +236,7 @@ class FarolSession(private val ctx: Context) : VoiceInteractionSession(ctx) {
         out.touchableInsets=Insets.TOUCHABLE_INSETS_REGION
         out.touchableRegion.set(at[0],at[1],at[0]+panel.width,at[1]+panel.height)
     }
-    override fun onTouchOutside() { hide() }
+    override fun onCloseSystemDialogs() { hide() }
     override fun onHide() {
         active=false;generation++;structure=null;recognizer?.cancel();recognizer?.destroy();recognizer=null;tts?.stop()
         if(::highlight.isInitialized)highlight.target=null
