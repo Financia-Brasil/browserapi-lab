@@ -1,6 +1,6 @@
+/artifacts/
+/.secrets/
+**/.env
 **/__pycache__/
-**/node_modules/
-**/build/
-**/.gradle/
 *.keystore
 *.jks

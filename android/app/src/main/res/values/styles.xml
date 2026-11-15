@@ -20,4 +20,19 @@
     <item name="settings_test" type="id"/><item name="settings_delete" type="id"/>
     <item name="home_button" type="id"/><item name="save_flow" type="id"/>
     <item name="settings_envelope" type="id"/>
+<item name="open_assistant_setup" type="id"/>
+<item name="assistant_set_default" type="id"/>
+<item name="assistant_voice_permission" type="id"/>
+<item name="assistant_setup_close" type="id"/>
+<item name="assistant_panel" type="id"/>
+<item name="assistant_close" type="id"/>
+<item name="assistant_state" type="id"/>
+<item name="assistant_message" type="id"/>
+<item name="assistant_question" type="id"/>
+<item name="assistant_explain" type="id"/>
+<item name="assistant_speak" type="id"/>
+<item name="assistant_repeat" type="id"/>
+<item name="assistant_local" type="id"/>
+<item name="assistant_consent" type="id"/>
+<item name="assistant_allow_cloud" type="id"/>
 </resources>

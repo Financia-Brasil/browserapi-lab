@@ -1,0 +1,5 @@
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.ifpa.iassistente.assistant.FarolSessionService"
+    android:recognitionService="com.ifpa.iassistente.assistant.FarolRecognitionService"
+    android:settingsActivity="com.ifpa.iassistente.assistant.AssistantSetupActivity"
+    android:supportsAssist="true" android:supportsLaunchVoiceAssistFromKeyguard="false" android:supportsLocalInteraction="false" />

@@ -5,7 +5,7 @@ import java.net.URI
 object Privacy {
     private val email = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
     private val digits = Regex("\\b\\d[\\d.() /+\\-]{5,}\\d\\b")
-    fun clean(text: String): String = digits.replace(email.replace(text, "[texto]"), "[texto]").take(180)
+    fun clean(text: String, limit: Int = 180): String = digits.replace(email.replace(text, "[texto]"), "[texto]").take(limit)
     fun origin(raw: String): String? = try {
         val uri = URI(raw)
         if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.rawUserInfo != null || uri.port !in listOf(-1, 443)) null

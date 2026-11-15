@@ -137,9 +137,9 @@ class MainActivity : Activity() {
         screen="consent"
         val body=base("Você no comando",false)
         addText(body,"O Farol explica a página, marca um campo e pode ler a orientação. Você toca, preenche e decide.")
-        addText(body,"Esta versão beta usa um guia básico no aparelho. Não há IA em nuvem nem uso do microfone.")
+        addText(body,"O treino usa um guia local. A ajuda com IA sobre outros aplicativos pede autorização separada.")
         addText(body,"Ao navegar em um site real, o próprio site recebe os dados que você enviar para ele.")
-        addText(body,"O Farol não envia a captura para nenhum servidor. A captura do guia exclui os valores dos campos.")
+        addText(body,"O treino não envia informações. Na ajuda com IA, só sua pergunta e rótulos saneados dos controles são enviados. Valores dos campos do outro aplicativo e senhas ficam fora.")
         body.addView(button("Ver exemplo da captura",secondary=true) {
             showInfo("Exemplo sem valores","""{"origin":"https://portal.exemplo","nodes":[{"role":"textbox","label":"CPF","filled":true}]}""")
         })
@@ -157,7 +157,8 @@ class MainActivity : Activity() {
         screen="home"
         val body=base("Vamos por partes",false)
         addText(body,"Escolha onde você quer ajuda. O Farol mostra o caminho; cada ação é sua.")
-        addText(body,"Beta 0.1 · guia local · sem IA em nuvem",16f)
+        addText(body,"Treino local · assistente com IA opcional",16f)
+        body.addView(button("Preparar assistente",R.id.open_assistant_setup) { startActivity(android.content.Intent(this,com.ifpa.iassistente.assistant.AssistantSetupActivity::class.java)) })
         body.addView(button("Começar treino offline",R.id.start_practice) { browser(practiceUrl) })
         addText(body,"Pratique com um formulário fictício, sem usar dados pessoais.",16f)
         body.addView(button("Abrir um site",R.id.open_browser,true) { browser("https://www.gov.br/") })
@@ -205,12 +206,15 @@ class MainActivity : Activity() {
             else showInfo("Voz em português","Não encontrei uma voz pt-BR instalada. Nas configurações do Android, procure Saída de texto para voz e instale uma voz em português.")
         })
         addText(body,"Privacidade",24f,true)
-        addText(body,"Guia e fluxos ficam neste aparelho. Sem telemetria, microfone ou API de IA. Os sites abertos têm suas próprias políticas.",16f)
+        addText(body,"O treino e seus fluxos ficam no aparelho. O assistente com IA exige autorização separada. Sem telemetria. Os sites e serviços de voz têm suas próprias políticas.",16f)
         body.addView(button("Ver última captura",R.id.settings_envelope,true) { showInfo("Captura local, sem envio",lastEnvelope) })
         body.addView(button("Apagar dados e revogar",R.id.settings_delete,true) {
             AlertDialog.Builder(this).setTitle("Apagar os dados do Farol?")
                 .setMessage("Apaga seus fluxos, preferências e os dados dos sites abertos pelo Farol. O guia volta à tela de consentimento.")
                 .setNegativeButton("Cancelar",null).setPositiveButton("Apagar") { _,_ ->
+                    java.io.File(filesDir,"ai-connection.json").delete()
+                    java.io.File(filesDir,"last-assist-snapshot.json").delete()
+                    java.io.File(filesDir,"last-ai-result.json").delete()
                     prefs.edit().clear().commit()
                     WebStorage.getInstance().deleteAllData()
                     CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush()

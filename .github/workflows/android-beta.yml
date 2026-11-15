@@ -2,7 +2,7 @@ name: Android beta — build remoto
 on:
   push:
     branches: ["codex/farol-android-beta-20261115"]
-    paths: ["android/**", ".github/workflows/android-beta.yml"]
+    paths: ["android/**", "backend/**", ".github/workflows/android-beta.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Testes do gateway de IA
+        run: python3 -m unittest discover -s backend -p 'test_*.py' -v
       - name: Testes de captura e privacidade
         working-directory: android/test-web
         run: npm ci --ignore-scripts && npm test
@@ -44,9 +46,10 @@ jobs:
       - name: Registrar hash do APK
         run: |
           mkdir -p android/artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk android/artifacts/Farol-0.1.1-beta.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/artifacts/Farol-0.2.0-beta.apk
+          cp android/fixture/build/outputs/apk/debug/fixture-debug.apk android/artifacts/Farol-Exercicio.apk
           cd android/artifacts
-          sha256sum Farol-0.1.1-beta.apk > SHA256SUMS
+          sha256sum Farol-0.2.0-beta.apk Farol-Exercicio.apk > SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
