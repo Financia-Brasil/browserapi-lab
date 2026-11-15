@@ -8,7 +8,7 @@ Limites: esta versão não implementa o MVP inteiro da especificação. Ainda n�
 
 ## Compilação remota
 
-Build validado: [GitHub Actions — Farol Beta 0.1.1](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/43734503508). Código na branch independente `codex/farol-android-beta-20261115` de `Financia-Brasil/browserapi-lab`.
+Build validado: [GitHub Actions — Farol Beta 0.2.0](https://github.com/Financia-Brasil/browserapi-lab/actions/runs/43742516591). Código na branch independente `codex/farol-android-beta-20261115` de `Financia-Brasil/browserapi-lab`.
 
 Toolchain: Java 17, Gradle 8.11.1, SDK 35, AGP 8.9.2 e Kotlin 2.1.20. O workflow `.github/workflows/android-beta.yml` executa testes Python do gateway, 22 testes JavaScript, 21 testes JUnit, lint e assembleDebug, e publica o Farol e o aplicativo separado de exercício com SHA256 e relatórios. A chave do provedor fica exclusivamente no gateway; o APK recebe apenas um token de pareamento revogável.
 
@@ -22,7 +22,7 @@ Pacote de teste: `com.ifpa.iassistente.beta`. Nome no aparelho: **Farol Beta**. 
 
 ```bash
 adb devices -l
-adb -s SERIAL install -r artifacts/Farol-0.1.1-beta.apk
+adb -s SERIAL install -r artifacts/Farol-0.2.0-beta.apk
 python3 tests/device_test.py --reset --serial SERIAL --out ../evidencia/android-2026-11-15
 python3 tests/extended_test.py --serial SERIAL --out ../evidencia/android-2026-11-15
 ```
