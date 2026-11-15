@@ -1,0 +1,23 @@
+<resources>
+    <style name="FarolTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#1351B4</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#04183F</item>
+        <item name="android:navigationBarColor">#04183F</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#F0F3F7</item>
+    </style>
+    <item name="onboarding_accept" type="id"/><item name="onboarding_refuse" type="id"/>
+    <item name="start_practice" type="id"/><item name="open_browser" type="id"/>
+    <item name="open_settings" type="id"/><item name="open_skills" type="id"/>
+    <item name="browser_web" type="id"/><item name="browser_address" type="id"/>
+    <item name="browser_go" type="id"/><item name="browser_back" type="id"/>
+    <item name="guidance_text" type="id"/><item name="guidance_state" type="id"/>
+    <item name="guidance_explain" type="id"/><item name="guidance_repeat" type="id"/>
+    <item name="guidance_pause" type="id"/><item name="guidance_rephrase" type="id"/>
+    <item name="settings_voice" type="id"/><item name="settings_speed" type="id"/>
+    <item name="settings_test" type="id"/><item name="settings_delete" type="id"/>
+    <item name="home_button" type="id"/><item name="save_flow" type="id"/>
+    <item name="settings_envelope" type="id"/>
+</resources>

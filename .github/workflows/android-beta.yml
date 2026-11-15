@@ -1,0 +1,55 @@
+name: Android beta — build remoto
+on:
+  push:
+    branches: ["codex/farol-android-beta-20261115"]
+    paths: ["android/**", ".github/workflows/android-beta.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-beta-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: farol-beta-signing-v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Testes de captura e privacidade
+        working-directory: android/test-web
+        run: npm ci --ignore-scripts && npm test
+      - name: Testes Kotlin, lint e APK
+        working-directory: android
+        run: gradle --no-daemon --max-workers=2 testDebugUnitTest lintDebug assembleDebug
+      - name: Registrar hash do APK
+        run: |
+          mkdir -p android/artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/artifacts/Farol-0.1.1-beta.apk
+          cd android/artifacts
+          sha256sum Farol-0.1.1-beta.apk > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: farol-beta-${{ github.sha }}
+          path: |
+            android/artifacts/
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 14
+          if-no-files-found: warn
