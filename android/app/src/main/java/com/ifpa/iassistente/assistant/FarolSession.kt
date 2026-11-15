@@ -174,7 +174,7 @@ class FarolSession(private val ctx: Context) : VoiceInteractionSession(ctx) {
                     if(!active || request!=generation)return@post
                     explain.isEnabled=true;state.text="Orientação da OpenAI";message.text=result.instruction
                     mark(result.target?.let { snap.bounds[it] });speak(result.instruction)
-                    if(BuildConfig.DEBUG)File(ctx.filesDir,"last-ai-result.json").writeText(JSONObject().put("provider",result.provider).put("model",result.model).put("instruction",result.instruction).put("target_id",result.target ?: JSONObject.NULL).toString())
+                    if(BuildConfig.DEBUG)File(ctx.filesDir,"last-ai-result.json").writeText(JSONObject().put("provider",result.provider).put("model",result.model).put("request_id",result.requestId).put("instruction",result.instruction).put("target_id",result.target ?: JSONObject.NULL).toString())
                 }
             }catch(error:Exception) {
                 ui.post {

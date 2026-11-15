@@ -12,7 +12,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class AiUnavailable(val code: String): Exception(code)
-data class AiAdvice(val instruction: String,val detail: String,val target: Int?,val provider: String,val model: String)
+data class AiAdvice(val instruction: String,val detail: String,val target: Int?,val provider: String,val model: String,val requestId: String)
 
 object AiClient {
     private fun limited(input: InputStream, limit: Int): ByteArray {
@@ -56,7 +56,7 @@ object AiClient {
             val target=if(body.isNull("target_id")) null else body.getInt("target_id")
             val ids=payload.getJSONArray("nodes").let { ns -> (0 until ns.length()).map { ns.getJSONObject(it).getInt("id") } }
             if(target!=null && target !in ids)throw AiUnavailable("invalid_target")
-            return AiAdvice(Privacy.clean(instruction,240),Privacy.clean(detail,400),target,provider,body.getString("model"))
+            return AiAdvice(Privacy.clean(instruction,240),Privacy.clean(detail,400),target,provider,body.getString("model"),body.optString("request_id"))
         } finally { conn.disconnect() }
     }
 }
