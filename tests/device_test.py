@@ -33,7 +33,9 @@ def tap(rid=None,text=None,scroll=True):
         found=node(rid,text)
         if found:
             n,b=found;adb("shell","input","tap",str((b[0]+b[2])//2),str((b[1]+b[3])//2));time.sleep(.5);return
-        adb("shell","input","swipe","540","1900","540","700","300");time.sleep(.3)
+        dimensions=re.findall(r"(?:Physical|Override) size:\s*(\d+)x(\d+)",adb("shell","wm","size"))
+        width,height=map(int,dimensions[-1])
+        adb("shell","input","swipe",str(width//2),str(int(height*.8)),str(width//2),str(int(height*.35)),"300");time.sleep(.3)
     raise AssertionError("Controle não encontrado: "+str(rid or text))
 def screenshot(name):
     (OUT/(name+".png")).write_bytes(adb("exec-out","screencap","-p",binary=True))
@@ -63,7 +65,7 @@ class CDP:
     def __init__(self):
         pid=adb("shell","pidof",PACKAGE).split()[0]
         adb("forward","tcp:9222","localabstract:webview_devtools_remote_"+pid)
-        deadline=time.monotonic()+12
+        deadline=time.monotonic()+25
         while True:
             try:
                 pages=json.load(urllib.request.urlopen("http://127.0.0.1:9222/json",timeout=3))
@@ -124,11 +126,14 @@ try:
     click_dom("#try-again")
     fill("12345678901")
     check("campo preenchido avança indicação ao botão",lambda:wait_native("Quando estiver pronto"))
-    cdp.eval("window.__farol.force=true")
     script=Path(__file__).parents[1].joinpath("android/app/src/main/assets/capture.js").read_text()
-    snapshot=cdp.eval(script)
+    snapshot=cdp.eval("if(window.__farol)window.__farol.force=true;\n"+script)
     (OUT/"captura-saneada.json").write_text(json.dumps(snapshot,ensure_ascii=False,indent=2))
-    check("captura do aparelho exclui valor digitado",lambda:truth("12345678901" not in json.dumps(snapshot),"CPF vazou na captura"))
+    def verify_snapshot():
+        truth(isinstance(snapshot,dict) and bool(snapshot.get("nodes")),"Captura vazia não comprova o saneamento")
+        truth(any(n.get("role")=="textbox" and n.get("filled") for n in snapshot["nodes"]),"A captura não contém o campo preenchido")
+        truth("12345678901" not in json.dumps(snapshot),"CPF vazou na captura")
+    check("captura do aparelho exclui valor digitado",verify_snapshot)
     time.sleep(1.2)
     check("preencher não envia formulário automaticamente",lambda:truth(cdp.eval("!document.querySelector('#form').hidden"),"Formulário avançou sozinho"))
     tap(rid="guidance_pause")

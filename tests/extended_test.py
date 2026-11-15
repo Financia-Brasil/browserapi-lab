@@ -33,7 +33,9 @@ def tap(rid=None,text=None,scroll=True):
         found=node(rid,text)
         if found:
             n,b=found;adb("shell","input","tap",str((b[0]+b[2])//2),str((b[1]+b[3])//2));time.sleep(.5);return
-        adb("shell","input","swipe","540","1900","540","700","300");time.sleep(.3)
+        dimensions=re.findall(r"(?:Physical|Override) size:\s*(\d+)x(\d+)",adb("shell","wm","size"))
+        width,height=map(int,dimensions[-1])
+        adb("shell","input","swipe",str(width//2),str(int(height*.8)),str(width//2),str(int(height*.35)),"300");time.sleep(.3)
     raise AssertionError("Controle não encontrado: "+str(rid or text))
 def screenshot(name):
     (OUT/(name+".png")).write_bytes(adb("exec-out","screencap","-p",binary=True))
@@ -63,7 +65,7 @@ class CDP:
     def __init__(self):
         pid=adb("shell","pidof",PACKAGE).split()[0]
         adb("forward","tcp:9222","localabstract:webview_devtools_remote_"+pid)
-        deadline=time.monotonic()+12
+        deadline=time.monotonic()+25
         while True:
             try:
                 pages=json.load(urllib.request.urlopen("http://127.0.0.1:9222/json",timeout=3))
@@ -124,9 +126,13 @@ try:
         tap(rid="android:id/button1")
     address_to("https://farol-offline-check.invalid/")
     check("falha de rede recebe mensagem recuperável",lambda:wait_native("Não foi possível carregar"))
+    check("endereço com falha continua visível",lambda:truth("farol-offline-check.invalid" in node("browser_address")[0].get("text",""),"Endereço da falha foi substituído"))
     screenshot("13-falha-rede")
     time.sleep(3)
     check("erro de rede não entra em loop de orientação",lambda:truth("Não foi possível carregar" in guide(),"Mensagem de falha foi substituída por guia incorreto"))
+    tap(rid="guidance_explain")
+    check("repetir após falha tenta o endereço solicitado",lambda:wait_native("Não foi possível carregar"))
+    check("repetição não volta ao portal anterior",lambda:truth("farol-offline-check.invalid" in node("browser_address")[0].get("text",""),"Repetição voltou ao portal anterior"))
     done();cdp=None
     tap(rid="home_button");tap(rid="start_practice")
     cdp=CDP();time.sleep(1)
@@ -135,17 +141,20 @@ try:
     done();cdp=None
     adb("shell","settings","put","system","accelerometer_rotation","0")
     adb("shell","settings","put","system","user_rotation","1");time.sleep(2)
+    wait_native("Farol",timeout=30)
     cdp=CDP()
     check("rotação mantém o treino aberto",lambda:truth(cdp.eval("location.pathname").endswith("practice.html"),"Rotação perdeu o treino"))
     screenshot("14-paisagem")
     done();cdp=None
     adb("shell","settings","put","system","user_rotation","0");time.sleep(1.5)
     adb("shell","wm","size","891x1987");time.sleep(2)
+    wait_native("Farol",timeout=30)
     cdp=CDP()
     check("375px não cria overflow horizontal no treino",lambda:truth(cdp.eval("document.documentElement.scrollWidth<=innerWidth"),"Overflow horizontal em 375px"))
     screenshot("15-375px")
     done();cdp=None
     adb("shell","settings","put","system","font_scale","2.0");time.sleep(2)
+    wait_native("Farol",timeout=30)
     cdp=CDP()
     check("fonte ampliada preserva formulário sem overflow",lambda:truth(cdp.eval("document.documentElement.scrollWidth<=innerWidth"),"Overflow com fonte ampliada"))
     check("fonte ampliada mantém campo disponível",lambda:truth(cdp.eval("document.querySelector('#cpf')!==null"),"Campo perdido ao ampliar fonte"))
