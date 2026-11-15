@@ -219,7 +219,7 @@ class MainActivity : Activity() {
                     showConsent()
                 }.show()
         })
-        addText(body,"Versão 0.1.0-beta · IFPA Bragança\nNavegador WebView para prova de conceito. Portais com CAPTCHA, confirmação facial ou app externo podem exigir continuidade fora deste teste.",16f)
+        addText(body,"Versão "+BuildConfig.VERSION_NAME+" · IFPA Bragança\nNavegador WebView para prova de conceito. Portais com CAPTCHA, confirmação facial ou app externo podem exigir continuidade fora deste teste.",16f)
     }
 
     private fun flowArray(): JSONArray = try { JSONArray(prefs.getString("flows","[]")) } catch (_: Exception) { JSONArray() }
