@@ -28,10 +28,14 @@ jobs:
           packages: "platform-tools"
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: farol-beta-signing-v1
+      - name: Restaurar assinatura estável de teste
+        env:
+          FAROL_TEST_KEYSTORE_BASE64: ${{ secrets.FAROL_TEST_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$FAROL_TEST_KEYSTORE_BASE64"
+          mkdir -p "$HOME/.android"
+          printf '%s' "$FAROL_TEST_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

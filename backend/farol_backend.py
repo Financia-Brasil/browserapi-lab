@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
-import hashlib
 import hmac
 import json
 import os
@@ -57,7 +56,7 @@ def clean(text: str, limit: int = 180) -> str:
 def validate_request(data: object) -> dict:
     if not isinstance(data, dict) or set(data) != {"version", "application", "question", "nodes", "consent"}:
         raise GatewayError(400, "invalid_envelope")
-    if data["version"] != 1 or data["consent"] != "cloud-v1":
+    if type(data["version"]) is not int or data["version"] != 1 or data["consent"] != "cloud-v1":
         raise GatewayError(400, "consent_required")
     if not isinstance(data["application"], str) or not re.fullmatch(r"[A-Za-z0-9_.]{1,180}", data["application"]):
         raise GatewayError(400, "invalid_application")
@@ -72,7 +71,7 @@ def validate_request(data: object) -> dict:
         idx = node["id"]
         if type(idx) is not int or idx < 0 or idx > 899 or idx in seen:
             raise GatewayError(400, "invalid_target")
-        if node["role"] not in SAFE_ROLES or not isinstance(node["label"], str) or len(node["label"]) > 180 or type(node["filled"]) is not bool:
+        if not isinstance(node["role"], str) or node["role"] not in SAFE_ROLES or not isinstance(node["label"], str) or len(node["label"]) > 180 or type(node["filled"]) is not bool:
             raise GatewayError(400, "invalid_node")
         seen.add(idx)
         nodes.append({"id": idx, "role": node["role"], "label": clean(node["label"]), "filled": node["filled"]})
@@ -116,7 +115,9 @@ def call_openai(data: dict) -> dict:
                 raise GatewayError(502, "provider_response_too_large")
             result = json.loads(raw)
     except urllib.error.HTTPError as exc:
-        raise GatewayError(503 if exc.code in (401, 402, 403, 429) else 502, "provider_" + str(exc.code)) from None
+        status = exc.code
+        exc.close()
+        raise GatewayError(503 if status in (401, 402, 403, 429) else 502, "provider_" + str(status)) from None
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
         raise GatewayError(504, "provider_unavailable") from None
     if result.get("status") != "completed":
@@ -226,12 +227,14 @@ def load_env(path: str):
 
 
 def main():
+    global MODEL
     parser = argparse.ArgumentParser()
     parser.add_argument("--env")
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
     if args.env:
         load_env(args.env)
+    MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna")
     server = Gateway((args.host, int(os.getenv("FAROL_PORT", "8765"))), os.getenv("FAROL_DEVICE_TOKEN", ""))
     print(json.dumps({"service": "farol", "port": server.server_port, "model": MODEL, "provider_configured": bool(os.getenv("OPENAI_API_KEY"))}), flush=True)
     server.serve_forever()
